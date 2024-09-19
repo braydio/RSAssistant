@@ -11,12 +11,6 @@ config = load_config()
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 
-# Global variable to store incomplete Chase orders
-incomplete_chase_orders = {}
-
-import re
-import logging
-
 # Global variable to store incomplete Chase and Schwab orders
 incomplete_orders = {}
 
@@ -93,15 +87,18 @@ def handle_complete_order(match, broker):
         action = 'buy'
     elif broker == 'webull_sell':
         broker, quantity, stock, account_number = match.groups()[:4]
-        action = 'sell'
+        # Convert to 'buy' if quantity is 99 or 999
+        if float(quantity) in [99.0, 999.0]:
+            action = 'buy'
+        else:
+            action = 'sell'
     elif broker == 'fennel' or broker == 'public':
         broker, action, quantity, stock, account_number = match.groups()[:5]
 
     save_order_to_csv(broker, account_number, action, quantity, stock)
     print(f"{broker}, Account {account_number}, {action.capitalize()} {quantity} of {stock}")
 
-
-    # Function to parse holdings from an embed message
+# Function to parse holdings from an embed message
 def parse_embed_message(embed, holdings_data):
     broker_name = embed.title.split(" Holdings")[0]
     existing_holdings = read_holdings_log()
