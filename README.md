@@ -2,7 +2,7 @@
 
 ## Overview
 
-OrderFlowbot is a tracking system designed to run in the same discord channel as [auto-rsa by Nelson Dane](main/program_function_flow.md) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides detailed account summaries, tracks stock movements, and makes monitoring way the heck easier.
+OrderFlowbot is a tracking system designed to run in the same discord channel as [auto-rsa by Nelson Dane](main/program_function_flow.md) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks within your different brokerage accounts, and makes monitoring way the heck easier.
 
 ## Setup
 
