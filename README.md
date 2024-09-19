@@ -32,4 +32,4 @@ To (hopefully) better understand the flow of the program and how functions are c
 
 This project relies on [auto-rsa by Nelson Dane](main/program_function_flow.md) for key stock-related data processing and order flow management. Make sure to set up and run the auto-rsa bot as described in its repository before using RSAssistant.
 
-For more details, visit the [auto-rsa repository]([main/program_function_flow.md](https://github.com/NelsonDane/auto-rsa/blob/main/README.md).
+For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/auto-rsa/blob/main/README.md)
