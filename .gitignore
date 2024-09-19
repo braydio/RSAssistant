@@ -1,0 +1,9 @@
+.venv/
+utils/__pycache__
+excel/ReverseSplitLog.xlsx
+test*
+*venv/
+.vscode/
+*.zip
+config/settings.yaml
+config/account_mapping.json

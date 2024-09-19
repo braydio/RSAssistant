@@ -1,0 +1,52 @@
+
+
+# ----SETTINGS SETUP -----
+# MAKE ANY UPDATES AND RE-SAVE AS
+# settings.yaml
+# -------------------------------
+# Filepath:
+# config/settings.yaml
+
+# General settings
+app_name: OrderFlowbot
+
+# Paths for logs and other files
+paths:
+  orders_log: "logs/orders_log.csv"         # Log file for orders
+  holdings_log: "logs/holdings_log.csv"     # Log file for holdings
+  account_mapping: "config/account_mapping.json" # File that stores broker account nicknames
+  excel_log: "excel/ReverseSplitLog.xlsx"   # Excel file for tracking reverse split logs
+  watch_list: "utils/watch_list.json"       # JSON file for watch list data
+  manual_orders: "manual_order_entry.txt"   # Enter order confirmation messages to send to discord
+  holdings_data: "logs/holdings_data.csv"   # Not implemented
+
+# Discord ID's
+discord_ids:
+  channel_id: ID_OF_YOUR_DISCORD_CHANNEL
+  target_bot: ID_OF_AUTO-RSA_BOT
+  my_id: YOUR_DISCORD_ID
+
+# Discord bot settings
+discord:
+  token: "ID_OF_YOUR_NEW_BOT"
+  prefix: ".."
+  intents:
+    message_content: true
+    guilds: true
+    members: true
+
+# Broker settings
+#
+
+# Watch list settings
+
+watch_list:
+  auto_update: true  # Automatically update watchlist every interval
+  notification_interval: 3600  # Time between notifications in seconds (1 hour)
+
+# Logging settings
+logging:
+  level: "INFO"            # Logging level, can be DEBUG, INFO, WARNING, ERROR
+  file: "logs/app.log"      # Log file location
+  max_size: 10MB           # Maximum size before log rotation
+  backup_count: 5          # Number of old log files to retain

@@ -1,0 +1,19 @@
+
+Copy / Paste FROM below TO manual_order_entry.txt and run ..todiscord
+This file is just for notes, building orders, saving prices etc.
+
+' Tested so far for Excel auto-update: 
+    ' Robinhood, Fennel, Webull, Public
+=====================================================================
+Robinhood 1: buy 1.0 of GDHG in xxxx4130: Success
+Robinhood 1: buy 1.0 of GDHG in xxxxx1076: Success
+Robinhood 1: buy 1.0 of GDHG in xxxxx7076: Success
+Robinhood 2: buying 1.0 of GDHG
+Robinhood 2: buy 1.0 of GDHG in xxxx0725: Success
+Robinhood 2: buy 1.0 of GDHG in xxxxx1188: Success
+Robinhood 2: buy 1.0 of GDHG in xxxxx9604: Success
+Robinhood 3: buying 1.0 of GDHG
+Robinhood 3: buy 1.0 of GDHG in xxxxx8081: Success
+Robinhood 3: buy 1.0 of GDHG in xxxxx0529: Success
+All commands complete in all brokers
+Robinhood 3: buy 1.0 of GDHG in xxxxx7867: Success
