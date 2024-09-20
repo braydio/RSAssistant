@@ -39,7 +39,7 @@ def add_stock_to_excel_log(ticker, excel_file_path):
         last_filled_column = ws.max_column
         for col in range(3, ws.max_column + 1):  # Start checking from B onwards
             if ws.cell(row=stock_row, column=col).value is None:
-                last_filled_column = col - 2
+                last_filled_column = col - 1
                 break
         print(f"Last filled column: {last_filled_column}")
 
@@ -52,29 +52,31 @@ def add_stock_to_excel_log(ticker, excel_file_path):
         print(f"Bottom filled row: {bottom_row}")
 
         start_col = last_filled_column
-        start_row = date_row
-        end_col = start_col + 2
-        end_row = bottom_row
-        # Copy the previous two columns to the new ones
-        copy_column(ws, start_col, end_col)
-        copy_column(ws, start_col + 1, end_col + 1)
-
-        # Next two columns to be filled (one for ticker, one for "ratio")
-        next_ticker_col = last_filled_column + 2
+        # start_row = date_row
+        next_ticker_col = start_col + 1
         next_split_ratio_col = next_ticker_col + 1
-        print(f"{next_ticker_col} for ticker, {next_split_ratio_col} for ratio")
+        # end_row = bottom_row
+        # Copy the previous two columns to the new ones
+        print(f"Copying column {start_col} to column {next_ticker_col}")
+        print(f"Copying column {start_col} to column {next_ticker_col + 1}")
+        copy_column(ws, start_col, next_ticker_col)
+        copy_column(ws, start_col, next_ticker_col + 1)
+
+        print(f"Inserting ticker in column {next_ticker_col} and placeholder S:S in column {next_split_ratio_col}")
+        # Set the stock ticker in the next available cell
+        ws.cell(row=stock_row, column=next_ticker_col).value = ticker
+        # Set placeholder "S:S" in the next column
+        ws.cell(row=stock_row, column=next_split_ratio_col).value = "S:S"
+        print("Added ticker and split ratio")
 
         # Insert the current date one row above the stock ticker
         current_date = datetime.now().strftime("%Y-%m-%d")
         ws.cell(row=date_row, column=next_ticker_col).value = current_date
-        print(f"Inserted date {current_date} at {date_row}, column {next_ticker_col}")
+        print(f"Inserted date {current_date} at row {date_row}, column {next_ticker_col}")
 
-        # Set the stock ticker in the next available cell
-        ws.cell(row=stock_row, column=next_ticker_col).value = ticker
 
-        # Set placeholder "ratio" in the next column
-        ws.cell(row=stock_row, column=next_split_ratio_col).value = "S:S"
-        print("Added ticker and split ratio")
+
+
 
         # Save the workbook with updated log
         wb.save(excel_file_path)
