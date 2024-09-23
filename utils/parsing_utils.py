@@ -22,10 +22,11 @@ patterns = {
     'webull_sell': r'(Webull)\s\d+:\ssell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\w+):\s(Success|Failed)',
     'chase_buy_sell': r'(Chase)\s\d+:\s(buying|selling)\s(\d+\.?\d*)\sof\s(\w+)\s@\s(LIMIT|MARKET)',
     'chase_verification': r'(Chase)\s\d+\saccount\s(\d+):\sThe order verification was successful',
-    'fennel': r'(Fennel)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)',
+    'fennel': r'(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)',
     'public': r'(Public)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
-    'schwab_buy': r'(Schwab)\s\d+\sbuying\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
-    'schwab_verification': r'(Schwab)\s\d+\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful'
+    'schwab_order': r'(Schwab)\s\d+\sbuying\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
+    'schwab_verification': r'(Schwab)\s\d+\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
+    'bbae': r'(BBAE)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
 }
 
 def parse_order_message(content):
@@ -49,20 +50,26 @@ def handle_incomplete_order(match):
     """Handles incomplete buy/sell orders for Chase and Schwab."""
     if 'schwab' in match.group(1).lower():
         # Schwab has 4 groups: broker, action, quantity, stock
-        broker, action, quantity, stock = match.groups()[:4]
-        order_type = "market"  # Default to market since Schwab doesn't specify
+        broker, action, stock, order_type = match.groups()[:4]
+        print(f"Schwab order detected - Quantity: {quantity}, Stock: {stock}")
+        # order_type = "market"  # Default to market since Schwab doesn't specify
     else:
         # Chase has 5 groups: broker, action, quantity, stock, order_type
         broker, action, quantity, stock, order_type = match.groups()[:5]
-
-    incomplete_orders[stock] = {
-        'broker': broker,
-        'action': action,
-        'quantity': quantity,
-        'stock': stock,
-        'order_type': order_type
-    }
-    print(f"{broker}, {action.capitalize()} {quantity} of {stock} @ {order_type}")
+    
+    try:
+        # Debugging print statement
+        print(f"Handling incomplete order - {broker}, {action}, {quantity} {stock} @ {order_type}")
+        
+        incomplete_orders[stock] = {
+            'broker': broker,
+            'action': action,
+            'quantity': quantity,
+            'stock': stock,
+            'order_type': order_type
+        }
+    except Exception as e:
+        logging.error(f"Error handling incomplete order: {e}")
 
 def handle_verification(match):
     """Handles order verification and completes the order for Chase and Schwab."""
@@ -76,7 +83,7 @@ def handle_verification(match):
             return
 
 def handle_complete_order(match, broker):
-    """Handles complete orders (Robinhood, Fidelity, Webull, Fennel, Public)."""
+    """Handles complete orders (Robinhood, Fidelity, Webull, Fennel, Public, BBAE)."""
     if broker == 'robinhood':
         broker, action, quantity, stock, account_number = match.groups()[:5]
     elif broker == 'fidelity':
@@ -87,12 +94,15 @@ def handle_complete_order(match, broker):
         action = 'buy'
     elif broker == 'webull_sell':
         broker, quantity, stock, account_number = match.groups()[:4]
-        # Convert to 'buy' if quantity is 99 or 999
         if float(quantity) in [99.0, 999.0]:
             action = 'buy'
         else:
             action = 'sell'
-    elif broker == 'fennel' or broker == 'public':
+    elif broker == 'fennel':
+        broker, group_number, action, quantity, stock, account_number = match.groups()[:6]
+        account_number = f"{group_number}{account_number}"  # Prepend group number to account number
+        print(broker, action, quantity, stock, account_number)
+    elif broker == 'bbae':
         broker, action, quantity, stock, account_number = match.groups()[:5]
 
     save_order_to_csv(broker, account_number, action, quantity, stock)
