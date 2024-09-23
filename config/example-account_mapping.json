@@ -1,0 +1,55 @@
+{
+    "Vanguard": {
+        "xxxx1234" : "Cash Account"
+        }, 
+    "Webull": { 
+        "1234": "Margin Account",
+        "2345": "Cash Account",
+        "NNO1": "IRA",
+        "NNON": "Roth IRA"
+        },
+    "Robinhood": {
+        "1234" : "(B) - Cash Account",
+        "2234" : "(B) - Roth IRA",
+        "3234" : "(B) - IRA",
+        "1235" : "(L) - Cash Account",
+        "2235" : "(L) - Roth IRA",
+        "3235" : "(L) - IRA",
+        "4234" : "(D) - Cash Account",
+        "4235" : "(D) - IRA",
+        "4236" : "(D) - Roth IRA"
+        },
+    "Public": {
+        "1234" : "Cash Account",
+        "2345" : "Margin Account"
+        },
+    "BBAE": {
+        "1 (xxxx1234)" : "Cash Account"
+        },
+    "Schwab": {
+        "1 (xxxx1234)" : "Cash Account 1",
+        "1 (xxxx2345)" : "Cash Account 2",
+        "1 (xxxx3456)" : "Cash Account 3"
+        },
+    "Fidelity": {
+        "1234" : "Cash Account 1",
+        "2345" : "Cash Account 2",
+        "3456" : "Margin Account",
+        "3234" : "IRA",
+        "4234" : "Roth IRA"
+        },
+    "Chase": {
+        "1234" : "Cash Account 1",
+        "2345" :  "Cash Account 2",
+        "3456" : "IRA"
+    }, 
+    "Fennel" : {
+        "11" : "Fennel 1 Cash Account 1",
+        "12" : "Fennel 1 Cash Account 2",
+        "13" : "Fennel 1 Cash Account 3",
+        "14" : "Fennel 1 Cash Account 4",
+        "15" : "Fennel 1 Cash Account 5",
+        "21" : "Fennel 2 Cash Account 1",
+        "22" : "Fennel 2 Cash Account 2"
+    } 
+}
