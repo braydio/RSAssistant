@@ -71,7 +71,7 @@ For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/
 ## Program Flow and Structure
 
 References *(these are quite outdated)*:
-- [Program Function Flow](main/program_function_flow.md) - Detailed flow of how *(some of)* the program works internally *(I might finish this)*
-- [Program Map](main/program_map.txt) - A hierarchical structure outlining the modules and functions in the project. *(See note above ^)*
+- [Program Function Flow](program_function_flow.md) - Detailed flow of how *(some of)* the program works internally *(I might finish this)*
+- [Program Map](program_map.txt) - A hierarchical structure outlining the modules and functions in the project. *(See note above ^)*
 
 
