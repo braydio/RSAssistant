@@ -1,8 +1,5 @@
 # RSAssistant / OrderFlowbot
 
--- todo
-  - print headers to orders_log.csv / holdings_log.csv
-
 ## Overview
 
 RSAssistant / OrderFlowbot is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
@@ -12,8 +9,12 @@ RSAssistant / OrderFlowbot is a tracking system designed to run in a discord cha
 Hopefully add more helpful setup instructions soon but for now: 
 
 1. Copy/paste and rename any file with 'example-' prefix
-2. Create a copy of [example-settings.yaml](https://github.com/braydio/RSAssistant/blob/master/config/example-settings.yaml) and remove the prefix 'example-'
-3. The only changes you will need to make here are to the 4 settings below:
+2. Follow [the instructions per this guide to set up a discord bot](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) where it can see the output from the auto-rsa script, ideally as a live feed from your auto-rsa discord bot. 
+3. Create a copy of [example-settings.yaml](https://github.com/braydio/RSAssistant/blob/master/config/example-settings.yaml) and remove the prefix 'example-'
+4. Save your discord channel ID, RSA bot ID, and your discord ID per per below
+
+>[!NOTE]
+>The field `ID_OF_YOUR_NEW_BOT` will be the *token* for your new bot (not actually the ID) <sup>it's okay to be confused  <sup>I am too</sup></sup>
 
 ```
 # Discord ID's
@@ -25,17 +26,23 @@ discord_ids:
 # Discord bot settings
 discord:
   token: "ID_OF_YOUR_NEW_BOT"
+  token: "ID_OF_YOUR_NEW_BOT"
 ```
- - Change the 3 discord_ids to your discord channel ID, your auto-rsa bot discord ID, your discord ID. Your discord bot token needs to be in quotes.
+Once the settings are setting'ed and the bot is ready to start doing the work of a small team of interns,
 
-4. Once the settings are setting'ed and the bot is ready to start doing the work of a small team of interns:   
-   `python -m venv venv`   
-   `venv/Scripts/activate`   
-   `pip install -r requirements.txt`   
-   and THEN
-   start the robit with:   
-   `python orderFlowbot.py discord`   
-5. I probably missed some stuff so DM me if you have questions 
+  |> Set up and initialize a venv
+
+  |>> Install the required packages with pip install
+   
+  |>>> Start the robit as detailed in the next few lines:
+
+```   
+python -m venv venv
+venv/Scripts/activate
+pip install -r requirements.txt
+python orderFlowbot.py discord
+```
+7(?) I probably missed some stuff but feel free to DM me if you have questions 
 
 
 ## Features
