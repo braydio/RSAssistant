@@ -2,6 +2,7 @@ import re
 import csv
 import logging
 import json
+import numpy as np
 from discord import embeds
 from datetime import datetime
 from utils.csv_utils import save_order_to_csv, save_holdings_to_csv, read_holdings_log, get_holdings_for_summary
@@ -16,7 +17,6 @@ ORDERS_CSV_FILE = config['paths']['orders_log']
 ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
 HOLDINGS_HEADERS = ['Key', 'Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
 
-
 # Global variable to store incomplete Chase and Schwab orders
 incomplete_orders = {}
 
@@ -26,119 +26,85 @@ patterns = {
     'fidelity': r'(Fidelity)\s\d+\s(?:xxxxx|xxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
     'webull_buy': r'(Webull)\s\d+:\sbuying\s(\d+\.?\d*)\sof\s(\w+)',
     'webull_sell': r'(Webull)\s\d+:\ssell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\w+):\s(Success|Failed)',
-    'chase_buy_sell': r'(Chase)\s\d+:\s(buying|selling)\s(\d+\.?\d*)\sof\s(\w+)\s@\s(LIMIT|MARKET)',
-    'chase_verification': r'(Chase)\s\d+\saccount\s(\d+):\sThe order verification was successful',
     'fennel': r'(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)',
     'public': r'(Public)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
     'schwab_order': r'(Schwab)\s\d+\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
+    'chase_buy_sell': r'(Chase)\s\d+\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)',
     'schwab_verification': r'(Schwab)\s\d+\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
+    'chase_verification': r'(Chase)\s\d+\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
     'bbae': r'(?i)(BBAE)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
 }
 
 def parse_order_message(content):
     """Parses an order message and extracts relevant details based on broker formats."""
-   
-    # Try to match each broker pattern
     for broker, pattern in patterns.items():
         match = re.match(pattern, content)
         if match:
-            if broker == 'schwab_order' or broker == 'chase_buy_sell':  # Updated to 'schwab_order'
-                handle_incomplete_order(match)
-            elif broker == 'schwab_verification' or broker == 'chase_verification':
-                handle_verification(match)
+            if broker in ['schwab_order', 'chase_buy_sell']:
+                handle_incomplete_order(match, broker)
+            elif broker in ['schwab_verification', 'chase_verification']:
+                handle_verification(match, broker)
             else:
                 handle_complete_order(match, broker)
             return
-    
-    print(f"Failed to parse order message: {content}") 
+    print(f"Failed to parse order message: {content}")
 
-def handle_incomplete_order(match):
-    
-    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-
+def handle_incomplete_order(match, broker):
     """Handles incomplete buy/sell orders for Chase and Schwab."""
-    broker, action, quantity, stock, order_type = match.groups()[:5]
+    action, quantity, stock, order_type = match.groups()[1:5]
+    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
     
-    if 'schwab' in broker.lower():
-        schwab_accounts = account_mapping.get('Schwab', [])
-        for account in schwab_accounts:
-            # Add incomplete order for each account
-            incomplete_orders[stock] = {
-                'broker': broker,
-                'action': action,
-                'quantity': quantity,
-                'stock': stock,
-                'order_type': order_type
+    if broker == 'schwab_order':
+        # Handle Schwab orders
+        for account in account_mapping.get('Schwab', []):
+            incomplete_orders[(stock, account)] = {
+                'broker': 'Schwab', 'action': action, 'quantity': quantity, 'stock': stock, 'order_type': order_type
             }
-            print(f"Handling incomplete order for Schwab account {account} - {action} {quantity} {stock} @ {order_type}")
+            save_order_to_csv('Schwab', account, order_type, quantity, stock)
     else:
-        incomplete_orders[stock] = {
-            'broker': broker,
-            'action': action,
-            'quantity': quantity,
-            'stock': stock,
-            'order_type': order_type
-        }
-        print(f"Handling incomplete order - {broker}, {action}, {quantity} {stock} @ {order_type}")
+        # Handle Chase orders
+        for account in account_mapping.get('Chase', []):
+            incomplete_orders[(stock, account)] = {
+                'broker': 'Chase', 'action': action, 'quantity': quantity, 'stock': stock, 'order_type': order_type
+            }
+            save_order_to_csv('Chase', account, order_type, quantity, stock)
 
-def handle_verification(match):
-    """Handles order verification and completes the order for Chase and Schwab."""
-    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)  # Load once at the start
-    
-    broker, account_number = match.groups()[:2]
-    
-    if broker.lower() == 'schwab':
-        schwab_accounts = account_mapping.get('Schwab', [])
-        for account in schwab_accounts:
-            for stock, order in incomplete_orders.items():
-                if order['broker'] == broker:
-                    save_order_to_csv(order['broker'], account, order['action'], order['quantity'], stock)
-                    print(f"{broker}, Account {account}, Order verification successful for {stock}")
-                    del incomplete_orders[stock]
-                    return
-    else:
-        for stock, order in incomplete_orders.items():
-            if order['broker'] == broker:
-                save_order_to_csv(order['broker'], account_number, order['action'], order['quantity'], stock)
-                print(f"{broker}, Account {account_number}, Order verification successful for {stock}")
-                del incomplete_orders[stock]
-                return
+def handle_verification(match, broker):
+    """Processes order verification for Chase and Schwab."""
+    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
+    account_number = match.group(2)
+    if broker == 'schwab_verification':
+        process_verified_orders('Schwab', account_number, account_mapping.get('Schwab', []))
+    elif broker == 'chase_verification':
+        process_verified_orders('Chase', account_number, account_mapping.get('Chase', []))
+
+
+def process_verified_orders(broker, account_number, account_list):
+    """Processes verified orders for the specified broker."""
+    for (stock, account), order in list(incomplete_orders.items()):
+        if order['broker'] == broker and account in account_list:
+            save_order_to_csv(broker, account_number, order['action'], order['quantity'], stock)
+            del incomplete_orders[(stock, account)]
 
 def handle_complete_order(match, broker):
-    """Handles complete orders (Robinhood, Fidelity, Webull, Fennel, Public, BBAE)."""
+    """Handles complete orders for brokers other than Schwab and Chase."""
     try:
-        if broker == 'robinhood':
+        account_number = None
+        if broker in ['robinhood', 'fidelity', 'public', 'bbae']:
             broker, action, quantity, stock, account_number = match.groups()[:5]
-            
-        elif broker == 'fidelity':
-            broker, account_number, action, quantity, stock = match.groups()[:5]
-            
         elif broker == 'webull_buy':
             broker, quantity, stock = match.groups()[:3]
-            account_number = 'N/A'  
+            account_number = 'N/A'
             action = 'buy'
-            
         elif broker == 'webull_sell':
             broker, quantity, stock, account_number = match.groups()[:4]
-            if float(quantity) in [99.0, 999.0]:  # Specific check for Webull
-                action = 'buy'
-            else:
-                action = 'sell'
-                
+            action = 'sell'
         elif broker == 'fennel':
             broker, group_number, action, quantity, stock, account_number = match.groups()[:6]
-            account_number = f"{group_number}{account_number}"  # Prepend group number to account number
-            
-        elif broker == 'public': 
-            broker, action, quantity, stock, account_number = match.groups()[:5]  # This ensures account_number is extracted
-            
-        elif broker == 'bbae':
-            broker, action, quantity, stock, account_number = match.groups()[:5]
-
-        # Save the order details
+            account_number = f"{group_number}{account_number}"
+        
         save_order_to_csv(broker, account_number, action, quantity, stock)
         print(f"{broker}, Account {account_number}, {action.capitalize()} {quantity} of {stock}")
-
     except Exception as e:
         print(f"Error handling complete order: {e}")
 
