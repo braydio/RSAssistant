@@ -30,7 +30,8 @@ bot = commands.Bot(command_prefix=config['discord']['prefix'], intents=intents)
 
 # Channel ID and bot IDs
 TARGET_CHANNEL_ID = config['discord_ids']['channel_id']  
-PERSONAL_USER_ID = config['discord_ids']['my_id']  
+PERSONAL_USER_ID = config['discord_ids']['my_id']
+TARGET_BOT_ID = config['discord_ids']['target_bot']  
 
 # Ensure the logs folder exists
 LOGS_FOLDER = 'logs'
@@ -48,16 +49,17 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     if message.channel.id == TARGET_CHANNEL_ID:
-
+            #  and message.author.id == TARGET_BOT_ID
         # Handle text-based messages
         if message.content:
-            print(message.content)
             parse_order_message(message.content)
 
         # Handle embedded messages (updates holdings)
         if message.embeds:
             embed = message.embeds[0]
-            parse_embed_message(embed, holdings_data)
+            print("Embeds here:")
+            print(embed)
+            parse_embed_message(embed, HOLDINGS_LOG_CSV)
             print(f"Holdings data saved to CSV for broker {embed.title.split(' Holdings')[0]}.")
 
     await bot.process_commands(message)
