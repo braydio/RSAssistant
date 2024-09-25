@@ -74,10 +74,6 @@ def add_stock_to_excel_log(ticker, excel_file_path):
         ws.cell(row=date_row, column=next_ticker_col).value = current_date
         print(f"Inserted date {current_date} at row {date_row}, column {next_ticker_col}")
 
-
-
-
-
         # Save the workbook with updated log
         wb.save(excel_file_path)
         wb.close()
@@ -132,7 +128,7 @@ def update_excel_log(orders, order_type, excel_file_path):
             # Get the account nickname based on the broker and account pair
             mapped_name = get_account_nickname(broker_name, account)
             account_nickname = f"{broker_name} {mapped_name}"
-            print(f"Mapped account name as: {account_nickname}.")
+            print(f"Mapped Broker|Account Number: {broker_name}|{account}  to nickname: {account_nickname}.")
             print(f"Processing {order_type} order for account: {account_nickname}, stock: {stock}, price: {price}")
 
             # Find the row for the account nickname in Column B

@@ -31,22 +31,25 @@ def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
     """Saves order information to the orders CSV and updates holdings accordingly."""
     print("Parsed new order, getting quantity, timestamp, price to save for excel log.")
     try:
+        # Check if quantity is valid before conversion
+        print(f"Saving order: Broker - {broker_name}, Account - {account_number}, Type - {order_type}, Quantity - {quantity}, Stock - {stock}")
+        
         quantity = abs(float(quantity))  # Ensure quantity is positive
         current_time = datetime.now().strftime('%Y-%m-%d')
         price = get_last_stock_price(stock)
-        print("Price from Last: ", price)
 
         # Save the order to the orders log
         with open(ORDERS_CSV_FILE, mode='a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow([broker_name, account_number, order_type.capitalize(), stock, quantity, current_time])
         
-            # Update the Excel log based on the order type
-            update_excel_log([[broker_name, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), EXCEL_XLSX_FILE)
+        # Update the Excel log based on the order type
+        update_excel_log([[broker_name, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), EXCEL_XLSX_FILE)
 
+    except ValueError as ve:
+        logging.error(f"Error saving order due to value error: {ve}. Check quantity or stock.")
     except Exception as e:
         logging.error(f"Error saving order: {e}")
-
 
 def update_holdings_data(order_type, broker_name, account_number, stock, quantity, price):
     """
@@ -110,7 +113,6 @@ def get_last_stock_price(stock):
         stock_info = ticker.history(period="1d")
         if not stock_info.empty:
             last_price = stock_info['Close'].iloc[-1]
-            print(round(last_price, 2))
             return round(last_price, 2)  # Round to 2 decimal places for simplicity
             
         else:

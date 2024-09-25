@@ -7,3 +7,6 @@ test*
 *.zip
 config/settings.yaml
 config/account_mapping.json
+logs/
+utils/watch_list.json
+manual_order_entry.txt

@@ -1,5 +1,9 @@
 # OrderFlowbot
 
+-- todo
+  - print headers to orders_log.csv / holdings_log.csv
+  - finish Schwab, Chase parsing order confirms
+
 ## Overview
 
 OrderFlowbot is a tracking system designed to run in the same discord channel as [auto-rsa by Nelson Dane](main/program_function_flow.md) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks within your different brokerage accounts, and makes monitoring way the heck easier.
@@ -37,27 +41,20 @@ discord:
 
 ## Features
 
+- **Watchlist Management for Active R/S Position**:
+  - Add, remove specific tickers for the bot to track. This should be done *before* sending any orders for new r/s stocks.
+  - To add/remove: ..watch/watched *ticker*
+    
 - **Bot Commands from within Discord Channel**:
   - Enter the bot commands to the same channel that the auto-rsa bot is in.
   - Command prefix is '..' so not to conflict with '!rsa' prefix
-    - Eg: '..watch rivn' adds ticker RIVN to begin watching
+    - Eg: '..brokerwith arqq' lists all brokers with position in ARQQ
   - Can use '..help' to list all commands
   -   *all commands listed do not all work all the way yet, please enjoy responsibly* :)
 
-- **Watchlist Management for Active R/S Position**:
-  - Add, remove specific tickers for the bot to track. This should be done *before* sending any orders for new r/s stocks.
-  - Retrieve the status of each ticker being watch (e.g., not purchased, not in Y, sold / completed) *Currently bit of a WIP but mostly works*
-    
-- **Broker Summary**:
-  - Generate summaries for each broker with total holdings / total rs holdings / account values.
-  - Get a summary across all holdings for each broker.
-  *Somehow I broke this today, hoping to get a fix in soon.*
-
 **AND** *drumroll*
 - **Excel Log with Automatic Updates**:
-  - Seamlessly (not really, it is currently full of seams) update and log holdings data.
-  - Track progress for stocks as they move through different accounts *(This also just broke lol)*
-  
+  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, working on Schwab, Chase  
 
 ## Program Flow and Structure
 
