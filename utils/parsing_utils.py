@@ -2,22 +2,22 @@ import re
 import csv
 import logging
 import json
-import numpy as np
 from discord import embeds
 from datetime import datetime
 from utils.csv_utils import save_order_to_csv, save_holdings_to_csv, read_holdings_log, get_holdings_for_summary
 from utils.config_utils import load_config, get_account_nickname, load_account_mappings
 
+# Load configuration
 config = load_config()
-
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ORDERS_CSV_FILE = config['paths']['orders_log']
 
+# Order headers
 ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
 HOLDINGS_HEADERS = ['Key', 'Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
 
-# Global variable to store incomplete Chase and Schwab orders
+# Store incomplete orders
 incomplete_orders = {}
 
 # Regex patterns for various brokers
@@ -52,6 +52,10 @@ def parse_order_message(content):
 def handle_incomplete_order(match, broker):
     """Handles incomplete buy/sell orders for Chase and Schwab."""
     action, quantity, stock, order_type = match.groups()[1:5]
+    if action == 'selling':
+        action = 'sell'
+    elif action == 'buying':
+        action = 'buy'
     account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
     
     if broker == 'schwab_order':
@@ -60,14 +64,15 @@ def handle_incomplete_order(match, broker):
             incomplete_orders[(stock, account)] = {
                 'broker': 'Schwab', 'action': action, 'quantity': quantity, 'stock': stock, 'order_type': order_type
             }
-            save_order_to_csv('Schwab', account, order_type, quantity, stock)
+            print(account, order_type)
+            save_order_to_csv('Schwab', account, action, quantity, stock)
     else:
         # Handle Chase orders
         for account in account_mapping.get('Chase', []):
             incomplete_orders[(stock, account)] = {
                 'broker': 'Chase', 'action': action, 'quantity': quantity, 'stock': stock, 'order_type': order_type
             }
-            save_order_to_csv('Chase', account, order_type, quantity, stock)
+            save_order_to_csv('Chase', account, action, quantity, stock)
 
 def handle_verification(match, broker):
     """Processes order verification for Chase and Schwab."""
@@ -90,12 +95,14 @@ def handle_complete_order(match, broker):
     """Handles complete orders for brokers other than Schwab and Chase."""
     try:
         account_number = None
-        if broker in ['robinhood', 'fidelity', 'public', 'bbae']:
+        if broker in ['robinhood', 'public', 'bbae']:
             broker, action, quantity, stock, account_number = match.groups()[:5]
         elif broker == 'webull_buy':
             broker, quantity, stock = match.groups()[:3]
             account_number = 'N/A'
             action = 'buy'
+        elif broker == 'fidelity':
+            broker, account_number, action, quantity, stock = match.groups()[:5]
         elif broker == 'webull_sell':
             broker, quantity, stock, account_number = match.groups()[:4]
             action = 'sell'
@@ -240,26 +247,26 @@ async def track_ticker_summary(ctx, ticker, show_details=False, holding_logs_fil
                 else:
                     no_holdings[broker_name].add(account)
 
-        message = f"**{ticker} Holdings - All Brokerages**\n=============================\n"
+        message = f"**{ticker} Holdings - All Brokerages**\n**=============================**\n"
         for broker, accounts in account_mapping.items():
             total = len(accounts)
             held_accounts = len(holdings.get(broker, []))
-            message += f"| {broker} - Position in {held_accounts} of {total} accounts\n"
+            message += f"**| ** {broker} - Position in {held_accounts} of {total} accounts\n"
 
         if show_details:
             message += "\n**Ticker not in the following accounts:**\n"
             for broker, accounts in no_holdings.items():
                 if accounts:
-                    message += f"\n{broker}:\n"
+                    message += f"\n**{broker}**:\n"
                     for account in accounts:
                         account_nickname = get_account_nickname(broker, account)
-                        logging.info()
+                        logging.info(account_nickname)
                         # Check for matching orders in orders_log.csv
                         order_details = get_order_details(broker, account, ticker)
                         if order_details:
-                            message += f"  {account_nickname} - Found transaction data: \n | {order_details}\n"
+                            message += f" **| <> ** {account_nickname} :  Found transaction data: \n   <-> *{order_details}*\n"
                         else:
-                            message += f" {account_nickname} \n"
+                            message += f" **| <> ** {account_nickname}\n"
 
         await send_large_message_chunks(ctx, message)
 
@@ -273,6 +280,7 @@ async def track_ticker_summary(ctx, ticker, show_details=False, holding_logs_fil
 def get_order_details(broker, account_number, ticker):
     """Search orders_log.csv for matching broker, account, and stock ticker."""
     try:
+        print(broker, ticker, account_number)
         with open(ORDERS_CSV_FILE, mode='r') as file:
             csv_reader = csv.DictReader(file)
             for row in csv_reader:
@@ -295,10 +303,24 @@ def get_order_details(broker, account_number, ticker):
 
 async def send_large_message_chunks(ctx, message):
     # Discord messages have a max character limit of 2000
-    if len(message) > 2000:
-        # Split long messages into chunks
-        chunks = [message[i:i+2000] for i in range(0, len(message), 2000)]
-        for chunk in chunks:
-            await ctx.send(chunk)
-    else:
-        await ctx.send(message)
+    max_length = 2000
+
+    # Split the message by line breaks
+    lines = message.split('\n')
+    
+    current_chunk = ""
+    for line in lines:
+        # Check if adding the next line would exceed the character limit
+        if len(current_chunk) + len(line) + 1 > max_length:  # +1 for the added newline character
+            await ctx.send(current_chunk)  # Send the current chunk
+            current_chunk = ""  # Reset the chunk
+        
+        # Add the line to the current chunk
+        if current_chunk:
+            current_chunk += "\n" + line
+        else:
+            current_chunk = line
+
+    # Send any remaining text in the current chunk
+    if current_chunk:
+        await ctx.send(current_chunk)

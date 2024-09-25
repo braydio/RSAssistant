@@ -136,6 +136,7 @@ def update_excel_log(orders, order_type, excel_file_path):
             for row in range(account_start_row, ws.max_row + 1):
                 if ws[f'B{row}'].value == account_nickname:
                     account_row = row
+                    print(f"Account row: {account_row}")
                     break
 
             if account_row:
@@ -143,9 +144,18 @@ def update_excel_log(orders, order_type, excel_file_path):
                 stock_col = None
                 for col in range(3, ws.max_column + 1, 2):  # Every other column for stocks
                     if ws.cell(row=stock_row, column=col).value == stock:
-                        stock_col = col + 1 if order_type.lower() == 'sell' else col
-                        print(f"Updated Excel log for: {account_nickname}, {stock}")
-                        break
+                        print(order_type)
+                        if order_type == 'market':
+                            print("Breaking.")
+                            break
+                        elif order_type == 'LIMIT':
+                            print("Breaking Limit")
+                            break
+                        else:
+                            stock_col = col + 1 if order_type.lower() == 'sell' else col
+                            print(f"Updated Excel log for: {account_nickname}, {stock}")
+                            print(f"Column number {stock_col} and {order_type}")
+                            break
 
                 if stock_col:
                     # Update the price in the appropriate cell for the account
