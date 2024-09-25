@@ -1,12 +1,11 @@
-# OrderFlowbot
+# RSAssistant / OrderFlowbot
 
 -- todo
   - print headers to orders_log.csv / holdings_log.csv
-  - finish Schwab, Chase parsing order confirms
 
 ## Overview
 
-OrderFlowbot is a tracking system designed to run in the same discord channel as [auto-rsa by Nelson Dane](main/program_function_flow.md) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks within your different brokerage accounts, and makes monitoring way the heck easier.
+RSAssistant / OrderFlowbot is a tracking system designed to run in a discord channel alongside as [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
 
 ## Setup
 
@@ -41,30 +40,31 @@ discord:
 
 ## Features
 
-- **Watchlist Management for Active R/S Position**:
+- **Watchlist Management for Active R/S Positions**:
   - Add, remove specific tickers for the bot to track. This should be done *before* sending any orders for new r/s stocks.
-  - To add/remove: ..watch/watched *ticker*
+  -  `..watch ticker` starts watching a ticker  |  `..watched ticker` to stop watching
     
 - **Bot Commands from within Discord Channel**:
   - Enter the bot commands to the same channel that the auto-rsa bot is in.
-  - Command prefix is '..' so not to conflict with '!rsa' prefix
-    - Eg: '..brokerwith arqq' lists all brokers with position in ARQQ
-  - Can use '..help' to list all commands
+  - Command prefix is `..`
+    - Eg: *`..brokerwith arqq`* lists all brokers with position in ARQQ
+  - List all commands with *`..help`*
   -   *all commands listed do not all work all the way yet, please enjoy responsibly* :)
 
-**AND** *drumroll*
 - **Excel Log with Automatic Updates**:
-  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, working on Schwab, Chase  
-
-## Program Flow and Structure
-
-To (hopefully) better understand the flow of the program and how functions are called or passed, refer to the following *(slightly outdated and rather incomplete)* resources:
-
-- [Program Function Flow](main/program_function_flow.md) - Detailed flow of how *(some of)* the program works internally *(I might finish this)*
-- [Program Map](main/program_map.txt) - A hierarchical structure outlining the modules and functions in the project. *(See note above ^)*
+  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase.
+  - Setup instructions per excel file  
 
 ## Dependencies
 
 This project relies on [auto-rsa by Nelson Dane](main/program_function_flow.md) for key stock-related data processing and order flow management. Make sure to set up and run the auto-rsa bot as described in its repository before using RSAssistant.
 
 For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/auto-rsa/blob/main/README.md)
+
+## Program Flow and Structure
+
+References *(these are quite outdated)*:
+- [Program Function Flow](main/program_function_flow.md) - Detailed flow of how *(some of)* the program works internally *(I might finish this)*
+- [Program Map](main/program_map.txt) - A hierarchical structure outlining the modules and functions in the project. *(See note above ^)*
+
+

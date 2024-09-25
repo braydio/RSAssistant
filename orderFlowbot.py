@@ -48,8 +48,7 @@ async def on_ready():
 # Event triggered when a message is received
 @bot.event
 async def on_message(message):
-    if message.channel.id == TARGET_CHANNEL_ID:
-            #  and message.author.id == TARGET_BOT_ID
+    if message.channel.id == TARGET_CHANNEL_ID and message.author.id == TARGET_BOT_ID:
         # Handle text-based messages
         if message.content:
             parse_order_message(message.content)
