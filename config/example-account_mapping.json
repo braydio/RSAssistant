@@ -1,110 +1,53 @@
-<<<<<<< HEAD
 {
     "VANGUARD": {
-        "1234" : "Cash Account"
-        }, 
+        "1234" : "Account Nickname"
+    }, 
     "Webull": { 
-        "1234": "Margin Account",
-        "2345": "Cash Account",
-        "NNO1": "IRA",
-        "NNON": "Roth IRA"
-        },
-    "Robinhood": {
-        "1234" : "(B) - Cash Account",
-        "2234" : "(B) - Roth IRA",
-        "3234" : "(B) - IRA",
-        "1235" : "(L) - Cash Account",
-        "2235" : "(L) - Roth IRA",
-        "3235" : "(L) - IRA",
-        "4234" : "(D) - Cash Account",
-        "4235" : "(D) - IRA",
-        "4236" : "(D) - Roth IRA"
-        },
+        "1234": "Margin Account Nickname",
+        "2345": "Account Nickname",
+        "NNO1": "IRA Nickname",
+        "NNON": "Roth IRA Nickname"
+    },
     "Public": {
-        "1234" : "Cash Account",
-        "2345" : "Margin Account"
-        },
+        "1234" : "Account Nickname",
+        "2345" : "Margin Account Nickname"
+    },
     "BBAE": {
-        "1234" : "Cash Account"
-        },
+        "1234" : "Account Nickname"
+    },
     "Schwab": {
-        "1234" : "Cash Account 1",
-        "2345" : "Cash Account 2"
-        },
+        "1234" : "Account Nickname 1",
+        "2345" : "Account Nickname 2"
+    },
     "Fidelity": {
-        "1234" : "Cash Account 1",
-        "2345" : "Cash Account 2",
-        "3456" : "Margin Account",
-        "3234" : "IRA",
-        "4234" : "Roth IRA"
-        },
+        "1234" : "Account Nickname 1",
+        "2345" : "Account Nickname 2",
+        "3456" : "Margin Account Nickname",
+        "3234" : "IRA Nickname",
+        "4234" : "Roth IRA Nickname"
+    },
     "Chase": {
-        "1234" : "Cash Account 1",
-        "2345" :  "Cash Account 2",
-        "3456" : "IRA"
+        "1234" : "Account Nickname 1",
+        "2345" : "Account Nickname 2",
+        "3456" : "IRA Nickname"
     }, 
     "Fennel" : {
-        "11" : "Fennel 1 Cash Account 1",
-        "12" : "Fennel 1 Cash Account 2",
-        "13" : "Fennel 1 Cash Account 3",
-        "21" : "Fennel 2 Cash Account 1",
-        "22" : "Fennel 2 Cash Account 2",
-        "23" : "Fennel 2 Cash Account 3"
-    } 
-=======
-{
-    "Vanguard": {
-        "xxxx1234" : "Cash Account"
-        }, 
-    "Webull": { 
-        "1234": "Margin Account",
-        "2345": "Cash Account",
-        "NNO1": "IRA",
-        "NNON": "Roth IRA"
-        },
+        "11" : " Account Nickname 1",
+        "12" : " Account Nickname 2",
+        "13" : " Account Nickname 3",
+        "21" : "Fennel 2 Account Nickname 1",
+        "22" : "Fennel 2 Account Nickname 2",
+        "23" : "Fennel 2 Account Nickname 3"
+    },
+    "Tradier": {
+        "1234" : "Account Nickname"
+    },
     "Robinhood": {
-        "1234" : "(B) - Cash Account",
-        "2234" : "(B) - Roth IRA",
-        "3234" : "(B) - IRA",
-        "1235" : "(L) - Cash Account",
-        "2235" : "(L) - Roth IRA",
-        "3235" : "(L) - IRA",
-        "4234" : "(D) - Cash Account",
-        "4235" : "(D) - IRA",
-        "4236" : "(D) - Roth IRA"
-        },
-    "Public": {
-        "1234" : "Cash Account",
-        "2345" : "Margin Account"
-        },
-    "BBAE": {
-        "1 (xxxx1234)" : "Cash Account"
-        },
-    "Schwab": {
-        "1 (xxxx1234)" : "Cash Account 1",
-        "1 (xxxx2345)" : "Cash Account 2",
-        "1 (xxxx3456)" : "Cash Account 3"
-        },
-    "Fidelity": {
-        "1234" : "Cash Account 1",
-        "2345" : "Cash Account 2",
-        "3456" : "Margin Account",
-        "3234" : "IRA",
-        "4234" : "Roth IRA"
-        },
-    "Chase": {
-        "1234" : "Cash Account 1",
-        "2345" :  "Cash Account 2",
-        "3456" : "IRA"
-    }, 
-    "Fennel" : {
-        "11" : "Fennel 1 Cash Account 1",
-        "12" : "Fennel 1 Cash Account 2",
-        "13" : "Fennel 1 Cash Account 3",
-        "14" : "Fennel 1 Cash Account 4",
-        "15" : "Fennel 1 Cash Account 5",
-        "21" : "Fennel 2 Cash Account 1",
-        "22" : "Fennel 2 Cash Account 2"
-    } 
->>>>>>> ff7c01ccdc5af23e99858fa6f25da1f2547d87ed
+        "1234" : "RH 1 - Account Nickname",
+        "2234" : "RH 1 - Roth IRA Nickname",
+        "3234" : "RH 1 - IRA Nickname",
+        "1235" : "RH 2 - Account Nickname",
+        "2235" : "RH 2 - Roth IRA Nickname",
+        "3235" : "RH 2 - IRA Nickname"
+    }
 }
