@@ -1,12 +1,6 @@
-Robinhood 1: buy 1.0 of GDHG in xxxx4130: Success
-Robinhood 1: buy 1.0 of GDHG in xxxxx1076: Success
-Robinhood 1: buy 1.0 of GDHG in xxxxx7076: Success
-Robinhood 2: buying 1.0 of GDHG
-Robinhood 2: buy 1.0 of GDHG in xxxx0725: Success
-Robinhood 2: buy 1.0 of GDHG in xxxxx1188: Success
-Robinhood 2: buy 1.0 of GDHG in xxxxx9604: Success
-Robinhood 3: buying 1.0 of GDHG
-Robinhood 3: buy 1.0 of GDHG in xxxxx8081: Success
-Robinhood 3: buy 1.0 of GDHG in xxxxx0529: Success
-All commands complete in all brokers
-Robinhood 3: buy 1.0 of GDHG in xxxxx7867: Success
+# Use the following format to manually save orders to the excel log
+# This is helpful for Wells Fargo since the orders are not handled yet in the RSA bot.
+# It is simple to download your broker history, open in excel, get the orders into the below format
+# and paste them directly to this file. 
+# Then run ..todiscord to have this message sent to chat, updating with the below details:
+manual	Wellstrade 1234	Buy	ADTX	0.18
