@@ -92,7 +92,8 @@ Fennel (having not account numbers) is parsed into psuedo-account numbers with B
 
 - **Excel Log with Automatic Updates**:
   - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase.
-  - Setup instructions per excel file  
+  - Setup instructions per excel file
+  - Can also send order details in bulk by saving order details down in manual_order_entry.txt in the provided format and run command '..todiscord'  
 
 ## Dependencies
 
