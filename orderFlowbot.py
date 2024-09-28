@@ -11,8 +11,8 @@ from utils.watch_utils import (
     get_watch_status, list_watched_tickers, stop_watching
 )
 from utils.csv_utils import save_holdings_to_csv, read_holdings_log
-from utils.parsing_utils import parse_order_message, parse_embed_message, track_ticker_summary, profile
-
+from utils.parsing_utils import parse_order_message, parse_embed_message, parse_manual_order_message, track_ticker_summary, profile
+from utils.excel_utils import update_excel_log
 # Load configuration and holdings data
 config = load_config()
 holdings_data = read_holdings_log()
@@ -48,9 +48,25 @@ async def on_ready():
 # Event triggered when a message is received
 @bot.event
 async def on_message(message):
-    if message.channel.id == TARGET_CHANNEL_ID and message.author.id == TARGET_BOT_ID:
-        # Handle text-based messages
-        if message.content:
+    if message.channel.id == TARGET_CHANNEL_ID: #and message.author.id == TARGET_BOT_ID:
+        # Check for 'manual' keyword to handle manual order updates
+        if message.content.lower().startswith("manual"):
+            # Parse the manual order details
+            order_details = parse_manual_order_message(message.content)
+            if order_details:
+                # Prepare the order tuple and update Excel
+                orders = [(
+                    order_details['broker_name'],
+                    order_details['account'],
+                    order_details['order_type'],
+                    order_details['stock'],
+                    None,  # quantity not needed
+                    None,  # date not needed
+                    order_details['price']
+                )]
+                update_excel_log(orders, order_details['order_type'], "path_to_excel_file.xlsx")
+        else:
+            # Call the regular order parsing function for non-manual messages
             parse_order_message(message.content)
 
         # Handle embedded messages (updates holdings)
