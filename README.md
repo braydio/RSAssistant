@@ -69,13 +69,6 @@ Fennel (having not account numbers) is parsed into psuedo-account numbers with B
 - Fennel 1 Account 1 will be mapped as Fennel 11
 - Fennel 2 Account 3 will be Fennel 23 
 - Fennel 3 etc. 3 etc. Fennel 33 <sub>and so on in this fashion <sub>forever and ever and ever...</sub></sub>
-```
-    "Webull": { 
-        "1234": "Margin Account Nickname",
-        "2345": "Account Nickname",
-        "NNO1": "IRA Nickname",
-        "NNON": "Roth IRA Nickname"
-```
 
 ## Features
 
