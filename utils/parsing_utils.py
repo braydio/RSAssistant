@@ -115,6 +115,25 @@ def handle_complete_order(match, broker):
     except Exception as e:
         print(f"Error handling complete order: {e}")
 
+def parse_manual_order_message(content):
+    """Parses a manual order message. Expected format: 'manual Broker Account OrderType Stock Price'"""
+    try:
+        parts = content.split()
+        if len(parts) != 6:
+            raise ValueError("Invalid format. Expected 'manual Broker Account OrderType Stock Price'.")
+        
+        return {
+            'broker_name': parts[1],
+            'account': parts[2],
+            'order_type': parts[3],
+            'stock': parts[4],
+            'price': float(parts[5])
+        }
+    except Exception as e:
+        print(f"Error parsing manual order: {e}")
+        return None
+
+
 def parse_embed_message(embed, holdings_log_file):
     broker_name = embed.title.split(" Holdings")[0]
 

@@ -8,6 +8,7 @@ from utils.config_utils import load_config, get_account_nickname
 
 # Load configuration and mappings
 config = load_config()
+EXCEL_FILE_PATH = config['paths']['excel_log']
 ORDERS_CSV_FILE = config['paths']['orders_log']
 ACCOUNT_MAPPING = config['paths']['account_mapping']
 
@@ -109,66 +110,53 @@ def clear_column_values(worksheet, column):
 def update_excel_log(orders, order_type, excel_file_path):
     """Update the Excel log with the buy or sell orders."""
     print(orders)  # Debugging: Print the orders to verify they are correct
+    
     # Load the Excel workbook
-    wb = load_excel_log(excel_file_path)
+    wb = load_excel_log(EXCEL_FILE_PATH)
     if not wb:
         return
     ws = wb.active  # Assuming the relevant sheet is the active one
 
     # Define the row and column offsets
     account_start_row = 8  # Accounts start at row 8 (B8)
-    stock_row = 7         # Tickers are listed starting row 7 (B7)
+    stock_row = 7          # Tickers are listed starting row 7 (B7)
 
-    # Iterate over orders and update the Excel sheet
     for order in orders:
-        # Unpack the order tuple (ensure it has the required elements)
         try:
-            broker_name, account, order_type, stock, quantity, date, price = order
+            broker_name, account, order_type, stock, _, _, price = order
 
             # Get the account nickname based on the broker and account pair
             mapped_name = get_account_nickname(broker_name, account)
             account_nickname = f"{broker_name} {mapped_name}"
-            print(f"Mapped Broker|Account Number: {broker_name}|{account}  to nickname: {account_nickname}.")
-            print(f"Processing {order_type} order for account: {account_nickname}, stock: {stock}, price: {price}")
+            print(f"Processing {order_type} order for {account_nickname}, stock: {stock}, price: {price}")
 
-            # Find the row for the account nickname in Column B
+            # Find the row for the account in Column B
             account_row = None
             for row in range(account_start_row, ws.max_row + 1):
                 if ws[f'B{row}'].value == account_nickname:
                     account_row = row
-                    print(f"Account row: {account_row}")
                     break
 
             if account_row:
-                # Find the stock column in Row 7 (tickers start from Column 3 onwards, skipping every other column)
+                # Find the stock column in Row 7
                 stock_col = None
-                for col in range(3, ws.max_column + 1, 2):  # Every other column for stocks
+                for col in range(3, ws.max_column + 1, 2):
                     if ws.cell(row=stock_row, column=col).value == stock:
-                        print(order_type)
-                        if order_type == 'market':
-                            print("Breaking.")
-                            break
-                        elif order_type == 'LIMIT':
-                            print("Breaking Limit")
-                            break
-                        else:
-                            stock_col = col + 1 if order_type.lower() == 'sell' else col
-                            print(f"Updated Excel log for: {account_nickname}, {stock}")
-                            print(f"Column number {stock_col} and {order_type}")
-                            break
+                        stock_col = col + 1 if order_type.lower() == 'sell' else col
+                        break
 
                 if stock_col:
-                    # Update the price in the appropriate cell for the account
+                    # Update the price in the appropriate cell
                     ws.cell(row=account_row, column=stock_col).value = price
-                    logging.info(f"Updated {order_type} price for {account_nickname} - {stock} in Excel.")
+                    print(f"Updated {order_type} price for {account_nickname} - {stock} in Excel.")
                 else:
-                    logging.warning(f"Stock {stock} not found in Excel for account {account_nickname}.")
+                    print(f"Stock {stock} not found for account {account_nickname}.")
             else:
-                logging.warning(f"Account {account_nickname} not found in Excel.")
+                print(f"Account {account_nickname} not found in Excel.")
 
         except ValueError as e:
-            logging.error(f"Error unpacking {order_type} order {order}: {e}")
-            continue  # Skip the problematic order
+            print(f"Error processing order {order}: {e}")
+            continue
 
     # Save changes to the Excel file
     wb.save(excel_file_path)
