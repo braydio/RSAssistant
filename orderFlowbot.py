@@ -120,7 +120,12 @@ async def broker_has(ctx, ticker: str, *args):
 
 # Command to watch a stock
 @bot.command(name='watch', help='Adds a ticker to the watchlist for tracking.')
-async def watch(ctx, ticker: str, split_date: str):
+async def watch(ctx, ticker: str, split_date: str = None):
+    # Check if the split date is provided
+    if not split_date:
+        await ctx.send("Please include split date. (Format: MM/DD, MM/DD/YYYY, YYYY-MM-DD)")
+        return
+    
     await watch_ticker(ctx, ticker, split_date)
 
 # Command to display the progress of a watched ticker
