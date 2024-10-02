@@ -6,13 +6,15 @@ import asyncio
 
 # Import utility functions
 from utils.config_utils import load_config, all_brokers
+from utils.utility_utils import print_to_discord, track_ticker_summary, profile
 from utils.watch_utils import (
-    load_watch_list, watch_ticker, watch_ticker_status, 
-    get_watch_status, list_watched_tickers, stop_watching
+    load_watch_list, watch_ticker, check_watchlist_positions, 
+    watch_ticker_status, list_watched_tickers, stop_watching, list_watched_tickers_embed
 )
 from utils.csv_utils import save_holdings_to_csv, read_holdings_log
-from utils.parsing_utils import parse_order_message, parse_embed_message, parse_manual_order_message, track_ticker_summary, profile
+from utils.parsing_utils import parse_order_message, parse_embed_message, parse_manual_order_message
 from utils.excel_utils import update_excel_log
+
 # Load configuration and holdings data
 config = load_config()
 holdings_data = read_holdings_log()
@@ -45,6 +47,18 @@ load_watch_list()
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
 
+async def periodic_check():
+    """Checks watchlist against saved holdings for stock purchases."""
+    while True:
+        await check_watchlist_positions()
+        await asyncio.sleep(86400)  # Check daily
+
+# Command to display which accounts need to buy a watched ticker
+@bot.command(name='remindme', help='Checks for brokers, accounts with / without stock in holdings.')
+async def check_for_ticker(ctx, *args):
+    show_accounts = "details" in args
+    await check_watchlist_positions(ctx, show_accounts)
+      
 # Event triggered when a message is received
 @bot.event
 async def on_message(message):
@@ -104,54 +118,38 @@ async def broker_has(ctx, ticker: str, *args):
     # Check if "details" argument is passed
     await track_ticker_summary(ctx, ticker, show_details)
 
-# Command to watch a stock ticker
+# Command to watch a stock
 @bot.command(name='watch', help='Adds a ticker to the watchlist for tracking.')
-async def watch(ctx, ticker: str):
-    await watch_ticker(ctx, ticker)
+async def watch(ctx, ticker: str, split_date: str):
+    await watch_ticker(ctx, ticker, split_date)
 
 # Command to display the progress of a watched ticker
 @bot.command(name='watching', help='Displays a summary for a watched ticker.')
 async def track(ctx, ticker: str):
     await watch_ticker_status(ctx, ticker)
 
-# Command to get the status of a specific ticker
+
+""" # Command to get the status of a specific ticker
 @bot.command(name='watchstatus', help='Displays a broker-level summary for a ticker.')
 async def watchstatus(ctx, ticker: str):
     await get_watch_status(ctx, ticker)
-
+ """
 # Command to list all watched tickers
 @bot.command(name='watchlist', help='Lists all tickers currently being watched.')
 async def allwatching(ctx):
     await list_watched_tickers(ctx)
+
+# Command to list all watched tickers as embed message
+@bot.command(name='cleanlist', help='Lists all tickers currently being watched.')
+async def allwatching(ctx):
+    await list_watched_tickers_embed(ctx)
 
 # Command to stop watching a stock ticker
 @bot.command(name='watched', help='Removes a ticker from the watchlist.')
 async def watched_ticker(ctx, ticker: str):
     await stop_watching(ctx, ticker)
 
-# Function to print lines from a file to Discord
-async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_TXT, delay=1):
-    """
-    Reads a file line by line and sends each line as a message to Discord.
-    Args:
-        ctx: The context of the Discord command.
-        file_path: The file to read and print to Discord.
-        delay: The time (in seconds) to wait between sending each line.
-    """
-    try:
-        # Open the file
-        with open(file_path, 'r') as file:
-            # Read the file line by line
-            for line in file:
-                # Send each line to Discord
-                await ctx.send(line.strip())
-                
-                # Delay between sending lines
-                await asyncio.sleep(delay)
-    except FileNotFoundError:
-        await ctx.send(f"Error: The file {file_path} was not found.")
-    except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
+
 
 # Command to trigger printing a file to Discord one line at a time
 @bot.command(name='todiscord', help='Prints a file one line at a time')

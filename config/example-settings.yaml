@@ -36,7 +36,11 @@ discord:
     members: true
 
 # Broker settings
-#
+excluded_brokers:
+  Fidelity:
+    - "Account Nickname"
+  Additional_Brokers:
+    - "Account Nickname"
 
 # Watch list settings
 
