@@ -1,16 +1,21 @@
 import json
 import os
 import logging
+import pandas as pd
+import discord
 from datetime import datetime
 from collections import defaultdict
-from utils.config_utils import load_config
+from utils.config_utils import load_config, get_account_nickname
 from utils.excel_utils import add_stock_to_excel_log
+from utils.utility_utils import send_large_message_chunks
 
 # Load configuration and paths from settings
 config = load_config()
 WATCH_FILE = config['paths']['watch_list']
 EXCEL_XLSX_FILE = config['paths']['excel_log']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
+HOLDINGS_LOG_CSV = config['paths']['holdings_log']
+excluded_brokers = config.get('excluded_brokers', {})
 
 # Dictionary to track the watch list for specific tickers across accounts
 watch_list = defaultdict(lambda: defaultdict(dict))
@@ -36,7 +41,7 @@ def update_watchlist_with_stock(ticker):
     """Adds a stock ticker to the Excel log."""
     ticker = ticker.upper()
     try:
-        add_stock_to_excel_log(ticker, EXCEL_XLSX_FILE)
+        
         logging.info(f"Successfully added {ticker} to the watchlist and Excel log.")
     except Exception as e:
         logging.error(f"Error updating watchlist: {e}")
@@ -55,40 +60,96 @@ def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
         return {}
 
 # Main functions
-async def watch_ticker(ctx, ticker: str):
-    """Add a stock ticker to the watch list."""
+async def watch_ticker(ctx, ticker: str, split_date: str):
+    """Add a stock ticker with a split date to the watch list."""
     ticker = ticker.upper()
+    
     if ticker not in watch_list:
-        watch_list[ticker] = defaultdict(dict)
-        update_watchlist_with_stock(ticker)
-    await ctx.send(f"Watching {ticker} across all accounts.")
+        watch_list[ticker] = {
+            'split_date': split_date,
+            'reminder_sent': False,
+            'brokers': defaultdict(lambda: {
+                'state': 'initial',  
+                'last_updated': None
+            })
+        }
+        add_stock_to_excel_log(ticker, EXCEL_XLSX_FILE)
+        logging.info("Added stock to watchlist and passed to excel utils.")
+    await ctx.send(f"Watching {ticker} with a reverse split date on {split_date}.")
     save_watch_list()
 
-def update_watch_list(broker, account_number, stock, action):
-    """Update the status of a stock ticker based on an action (buy, hold, sell)."""
-    stock = stock.upper()
+def update_watchlist(broker_name, account_nickname, stock):
+    # Check if the stock is in the watchlist
+    if stock.upper() in watch_list:
+        # Access the watchlist entry for this ticker
+        watchlist_entry = watch_list[stock.upper()]
+
+        # Update the 'brokers' section with the broker and account
+        if broker_name not in watchlist_entry['brokers']:
+            watchlist_entry['brokers'][broker_name] = {}
+
+        watchlist_entry['brokers'][broker_name][account_nickname] = {
+            'state': 'has position',
+            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+        print(f"Updated watchlist for {stock.upper()} with broker {broker_name} for account {account_nickname}.")
+        save_watch_list()
+
+def should_skip(broker, account_nickname):
+    """Returns True if the broker and account_nickname should be skipped."""
+    if broker in excluded_brokers and account_nickname in excluded_brokers[broker]:
+        return True
+    return False
+
+async def check_watchlist_positions(ctx, show_accounts=False):
+    """Check which brokers or accounts still need to purchase watchlist tickers."""
+    today = datetime.now().strftime('%Y-%m-%d')
     account_mapping = load_account_mappings()
-    broker_name = broker.capitalize()
-    account_nickname = account_mapping.get(broker_name, {}).get(account_number, account_number)
 
-    if stock not in watch_list:
-        return
+    reminders = []  # Store reminder messages
+    for ticker, data in watch_list.items():
+        split_date = data.get('split_date')
+        split_date = datetime.strptime(split_date, '%m/%d').replace(year=datetime.now().year).strftime('%Y-%m-%d')
 
-    account_data = watch_list[stock].setdefault(broker_name, {}).setdefault(account_number, {
-        'account': account_nickname,
-        'state': 'waiting',
-        'steps_completed': 0,
-        'last_updated': None
-    })
+        if split_date >= today:
+            ticker_reminders = []  # Stores details per ticker
+            print(f"Checking ticker {ticker} with split date {split_date}")
 
-    action_mapping = {'buy': 1, 'holding': 2, 'sold': 3}
-    if action in action_mapping and account_data['steps_completed'] < action_mapping[action]:
-        account_data['state'] = action
-        account_data['steps_completed'] = action_mapping[action]
-        account_data['last_updated'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            for broker, accounts in account_mapping.items():
+                watchlist_broker_accounts = data.get('brokers', {}).get(broker, {})
+                print(f"Broker in watchlist: {broker}, Accounts in watchlist for broker: {watchlist_broker_accounts}")
 
-    save_watch_list()
-    logging.info(f"Updated {stock} for {broker_name}: {account_data}")
+                account_reminders = []
+                for account in accounts:
+                    account_nickname = get_account_nickname(broker, account)
+
+                    # Skip accounts in the excluded list
+                    if should_skip(broker, account_nickname):
+                        continue
+
+                    account_data = watchlist_broker_accounts.get(account_nickname, {})
+                    account_state = account_data.get('state', 'waiting')
+
+                    if account_state == 'waiting':
+                        account_reminders.append(account_nickname)
+
+                if account_reminders:
+                    if show_accounts:
+                        account_list = ", ".join(account_reminders)
+                        ticker_reminders.append(f"Broker: {broker} | Accounts: {account_list}")
+                    else:
+                        ticker_reminders.append(f"Broker: {broker}")
+
+            if ticker_reminders:
+                reminders.append(f"Yet to purchase {ticker}:\n" + "\n".join(ticker_reminders))
+
+    if reminders:
+        reminder_message = "\n\n".join(reminders)
+        await send_large_message_chunks(ctx, reminder_message)
+    else:
+        await ctx.send("All accounts have purchased the necessary stocks.")
+
 
 async def get_watch_status(ctx, ticker: str):
     """Get the status of a specific stock ticker across all accounts."""
@@ -102,7 +163,7 @@ async def get_watch_status(ctx, ticker: str):
             holding_count = sum(1 for acc_number in broker_accounts if watch_list[ticker][broker_name].get(acc_number, {}).get('steps_completed', 0) >= 2)
 
             if holding_count > 0:
-                status += f"{broker_name}: Positionn in {holding_count} of {total_accounts} accounts\n"
+                status += f"{broker_name}: Position in {holding_count} of {total_accounts} accounts\n"
             else:
                 status += f"{broker_name}: No position in {total_accounts} accounts\n"
 
@@ -111,57 +172,39 @@ async def get_watch_status(ctx, ticker: str):
         await ctx.send(f"{ticker} is not being watched.")
 
 async def list_watched_tickers(ctx):
-    """List all currently watched stock tickers."""
+    """List all currently watched stock tickers with their split dates in a nicely formatted table."""
     if not watch_list:
         await ctx.send("No tickers are being watched.")
     else:
-        tickers = ", ".join(watch_list.keys())
-        await ctx.send(f"Currently watching: {tickers}")
+        # Header
+        message = "```\n"  # Use code block for monospace formatting
+        message += "Ticker   | Split Date\n"
+        message += "---------|------------\n"
+        
+        # Rows of tickers and split dates
+        for ticker, data in watch_list.items():
+            split_date = data.get('split_date', 'N/A')
+            message += f"{ticker:<8} | {split_date}\n"
+        
+        message += "```"  # End code block
+        await ctx.send(message)
 
-async def watch_ticker_status(ctx, ticker: str):
-    """Track the progress of a given ticker across all accounts."""
-    ticker = ticker.upper()
-
-    if ticker not in watch_list:
-        await ctx.send(f"{ticker} is not being watched.")
-        return
-
-    total_accounts = sum(len(accounts) for accounts in watch_list[ticker].values())
-    buy_count = sum(1 for accounts in watch_list[ticker].values() for acc in accounts.values() if acc['steps_completed'] >= 1)
-    holding_count = sum(1 for accounts in watch_list[ticker].values() for acc in accounts.values() if acc['steps_completed'] >= 2)
-    sold_count = sum(1 for accounts in watch_list[ticker].values() for acc in accounts.values() if acc['steps_completed'] == 3)
-
-    progress_message = (
-        f"**Progress for {ticker}:**\n"
-        f"Accounts bought: {buy_count}/{total_accounts}\n"
-        f"Accounts holding: {holding_count}/{total_accounts}\n"
-        f"Accounts sold: {sold_count}/{total_accounts}"
-    )
-
-    await ctx.send(progress_message)
-
-async def all_watching(ctx):
-    """Get the status of all currently watched tickers."""
+async def list_watched_tickers_embed(ctx):
+    """List all currently watched stock tickers with their split dates using an embed."""
     if not watch_list:
         await ctx.send("No tickers are being watched.")
-        return
-
-    status_message = "**Current Watchlist Status**\n"
-
-    for ticker, accounts in watch_list.items():
-        total_accounts = sum(len(accounts) for accounts in accounts.values())
-        bought_count = sum(1 for acc in accounts.values() for a in acc.values() if a.get('steps_completed', 0) >= 1)
-        holding_count = sum(1 for acc in accounts.values() for a in acc.values() if a.get('steps_completed', 0) >= 2)
-        sold_count = sum(1 for acc in accounts.values() for a in acc.values() if a.get('steps_completed', 0) == 3)
-
-        status_message += (
-            f"Ticker: **{ticker}**\n"
-            f"  - Bought: {bought_count}/{total_accounts}\n"
-            f"  - Holding: {holding_count}/{total_accounts}\n"
-            f"  - Sold: {sold_count}/{total_accounts}\n\n"
+    else:
+        embed = discord.Embed(
+            title="Watchlist",
+            description="Stocks being watched and their split dates",
+            color=discord.Color.blue()
         )
-
-    await send_chunked_message(ctx, status_message)
+        
+        for ticker, data in watch_list.items():
+            split_date = data.get('split_date', 'N/A')
+            embed.add_field(name=f"{ticker}", value=f"Split Date: {split_date}", inline=False)
+        
+        await ctx.send(embed=embed)
 
 async def stop_watching(ctx, ticker: str):
     """Stop watching a stock ticker across all accounts."""
@@ -185,3 +228,23 @@ async def send_chunked_message(ctx, message):
             await ctx.send(chunk)
     else:
         await ctx.send(message)
+
+# In progress:
+
+async def watch_ticker_status(ctx, ticker: str):
+    """Track the progress of a ticker across all accounts."""
+    ticker = ticker.upper()
+
+    if ticker not in watch_list:
+        await ctx.send(f"{ticker} is not being watched.")
+        return
+
+    total_accounts = sum(len(accounts) for accounts in watch_list[ticker]['brokers'].values())
+    buy_count = sum(1 for accounts in watch_list[ticker]['brokers'].values() for acc in accounts.values() if acc['steps_completed'] >= 1)
+
+    progress_message = (
+        f"**Progress for {ticker}:**\n"
+        f"Accounts bought: {buy_count}/{total_accounts}\n"
+        f"Split date: {watch_list[ticker]['split_date']}\n"
+    )
+    await ctx.send(progress_message)

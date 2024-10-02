@@ -3,7 +3,6 @@ import os
 import logging
 import yfinance as yf
 from datetime import datetime, timedelta
-from utils.watch_utils import update_watch_list
 from utils.config_utils import load_config, get_account_nickname
 from utils.excel_utils import update_excel_log
 from collections import defaultdict
