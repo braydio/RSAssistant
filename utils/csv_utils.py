@@ -27,22 +27,63 @@ def ensure_csv_file_exists(file_path, headers):
             writer.writerow(headers)
 
 def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
-    """Saves order information to the orders CSV and updates holdings accordingly."""
-    print("Parsed new order, getting quantity, timestamp, price to save for excel log.")
+    """Saves order information to the orders CSV, removes duplicates, and removes stale orders."""
+    print("Processing new order, checking for duplicates and stale entries.")
+        
     try:
-        # Check if quantity is valid before conversion
-        print(f"Saving order: Broker - {broker_name}, Account - {account_number}, Type - {order_type}, Quantity - {quantity}, Stock - {stock}")
-        
-        quantity = abs(float(quantity))  # Ensure quantity is positive
-        current_time = datetime.now().strftime('%Y-%m-%d')
-        price = get_last_stock_price(stock)
+        # Load existing orders from the CSV
+        existing_orders = []
+        if os.path.exists(ORDERS_CSV_FILE):
+            with open(ORDERS_CSV_FILE, mode='r', newline='') as file:
+                reader = csv.DictReader(file)
+                existing_orders = list(reader)
 
-        # Save the order to the orders log
-        with open(ORDERS_CSV_FILE, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([broker_name, account_number, order_type.capitalize(), stock, quantity, current_time])
-        
-        # Update the Excel log based on the order type
+        # Define the cutoff for stale orders (e.g., 30 days)
+        cutoff_date = datetime.now() - timedelta(days=30)
+
+        # Remove duplicates and stale orders
+        updated_orders = []
+        new_order_key = (broker_name, account_number, order_type.lower(), stock.upper())
+
+        for order in existing_orders:
+            order_date = datetime.strptime(order['Date'], '%Y-%m-%d')
+            order_key = (order['Broker Name'], order['Account Number'], order['Order Type'].lower(), order['Stock'].upper())
+
+            if order_date < cutoff_date:
+                # Skip stale orders
+                continue
+
+            if order_key == new_order_key:
+                # Skip duplicates (keep the latest order, which will be added below)
+                continue
+
+            updated_orders.append(order)
+
+        # Add the new order to the list
+        current_time = datetime.now().strftime('%Y-%m-%d')
+        new_order = {
+            'Broker Name': broker_name,
+            'Account Number': account_number,
+            'Order Type': order_type.capitalize(),
+            'Stock': stock.upper(),
+            'Quantity': abs(float(quantity)),  # Ensure quantity is positive
+            'Date': current_time
+        }
+        updated_orders.append(new_order)
+
+        # Write the updated orders list back to the CSV
+        with open(ORDERS_CSV_FILE, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=existing_orders[0].keys())
+            writer.writeheader()
+            writer.writerows(updated_orders)
+
+        print(f"Order saved: {new_order}")
+        price = get_last_stock_price(new_order['Stock'])
+        print(price)
+
+        account_nickname = get_account_nickname(broker_name, account_number)
+        print(f"Updating excel log for {broker_name}, {account_nickname}, with order {order_type} {quantity} of {stock} at {price} on {current_time}")
+
         update_excel_log([[broker_name, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), EXCEL_XLSX_FILE)
 
     except ValueError as ve:
@@ -57,7 +98,7 @@ def update_holdings_data(order_type, broker_name, account_number, stock, quantit
     try:
         holdings_data = read_holdings_log()  # Read the current holdings
         key = (broker_name, account_number, stock)
-        print(holdings_data)
+
         # Handle buy orders
         if order_type.lower() == 'buy':
             if key in holdings_data:

@@ -3,9 +3,10 @@ import os
 import logging
 import pandas as pd
 import discord
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta
 from collections import defaultdict
-from utils.config_utils import load_config, get_account_nickname
+from utils.config_utils import load_config, get_account_nickname, load_account_mappings
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import send_large_message_chunks
 
@@ -15,6 +16,7 @@ WATCH_FILE = config['paths']['watch_list']
 EXCEL_XLSX_FILE = config['paths']['excel_log']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
+TARGET_CHANNEL_ID = config['discord_ids']['channel_id']  # change to ['discord_ids']['reminder_channel_id']
 excluded_brokers = config.get('excluded_brokers', {})
 
 # Dictionary to track the watch list for specific tickers across accounts
@@ -46,19 +48,6 @@ def update_watchlist_with_stock(ticker):
     except Exception as e:
         logging.error(f"Error updating watchlist: {e}")
 
-def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
-    """Load account mappings from a JSON file."""
-    if os.path.exists(filename):
-        try:
-            with open(filename, 'r') as file:
-                return json.load(file)
-        except json.JSONDecodeError as e:
-            logging.error(f"Error decoding JSON from {filename}: {e}")
-            return {}
-    else:
-        logging.error(f"Account mapping file {filename} not found.")
-        return {}
-
 # Main functions
 async def watch_ticker(ctx, ticker: str, split_date: str):
     """Add a stock ticker with a split date to the watch list."""
@@ -78,23 +67,47 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
     await ctx.send(f"Watching {ticker} with a reverse split date on {split_date}.")
     save_watch_list()
 
-def update_watchlist(broker_name, account_nickname, stock):
-    # Check if the stock is in the watchlist
-    if stock.upper() in watch_list:
-        # Access the watchlist entry for this ticker
-        watchlist_entry = watch_list[stock.upper()]
+def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=None):
+    """Updates the watchlist based on holdings data and order type."""
+    stock = stock.upper()
+    quantity = float(quantity)
+    if stock in watch_list:
+        watchlist_entry = watch_list[stock]
 
-        # Update the 'brokers' section with the broker and account
         if broker_name not in watchlist_entry['brokers']:
             watchlist_entry['brokers'][broker_name] = {}
 
-        watchlist_entry['brokers'][broker_name][account_nickname] = {
-            'state': 'has position',
-            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
+        if quantity > 0:
+            # If the account has a positive quantity, mark it as "has position"
+            watchlist_entry['brokers'][broker_name][account_nickname] = {
+                'state': 'has position',
+                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        elif order_type == 'sell':
+            # If it's a sell order, mark it as "completed"
+            watchlist_entry['brokers'][broker_name][account_nickname] = {
+                'state': 'completed',  # Marking as completed instead of removing
+                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            print(f"Account {account_nickname} marked as completed for {stock}.")
+        elif order_type == 'finalize_closure':
+            # If we are finalizing the closure, remove the account from the watchlist
+            if account_nickname in watchlist_entry['brokers'][broker_name]:
+                del watchlist_entry['brokers'][broker_name][account_nickname]
+                print(f"Account {account_nickname} closed out position for {stock}.")
 
-        print(f"Updated watchlist for {stock.upper()} with broker {broker_name} for account {account_nickname}.")
+            if not watchlist_entry['brokers'][broker_name]:
+                del watchlist_entry['brokers'][broker_name]
+                print(f"Broker {broker_name} removed from watchlist for {stock}.")
+
+            if not watchlist_entry['brokers']:
+                del watch_list[stock]
+                print(f"Stock {stock} fully closed across all accounts. Removed from watchlist.")
+
         save_watch_list()
+
+    else:
+        print(f"{stock} is not in the watchlist.")
 
 def should_skip(broker, account_nickname):
     """Returns True if the broker and account_nickname should be skipped."""
@@ -124,14 +137,15 @@ async def check_watchlist_positions(ctx, show_accounts=False):
                 for account in accounts:
                     account_nickname = get_account_nickname(broker, account)
 
-                    # Skip accounts in the excluded list
+                    # Skip accounts in the excluded list or completed state
                     if should_skip(broker, account_nickname):
                         continue
 
                     account_data = watchlist_broker_accounts.get(account_nickname, {})
                     account_state = account_data.get('state', 'waiting')
 
-                    if account_state == 'waiting':
+                    # Only add to reminders if the state is "waiting" or "has position"
+                    if account_state == 'waiting' or account_state == 'has position':
                         account_reminders.append(account_nickname)
 
                 if account_reminders:
@@ -149,7 +163,6 @@ async def check_watchlist_positions(ctx, show_accounts=False):
         await send_large_message_chunks(ctx, reminder_message)
     else:
         await ctx.send("All accounts have purchased the necessary stocks.")
-
 
 async def get_watch_status(ctx, ticker: str):
     """Get the status of a specific stock ticker across all accounts."""
@@ -172,39 +185,151 @@ async def get_watch_status(ctx, ticker: str):
         await ctx.send(f"{ticker} is not being watched.")
 
 async def list_watched_tickers(ctx):
-    """List all currently watched stock tickers with their split dates in a nicely formatted table."""
-    if not watch_list:
-        await ctx.send("No tickers are being watched.")
-    else:
-        # Header
-        message = "```\n"  # Use code block for monospace formatting
-        message += "Ticker   | Split Date\n"
-        message += "---------|------------\n"
-        
-        # Rows of tickers and split dates
-        for ticker, data in watch_list.items():
-            split_date = data.get('split_date', 'N/A')
-            message += f"{ticker:<8} | {split_date}\n"
-        
-        message += "```"  # End code block
-        await ctx.send(message)
-
-async def list_watched_tickers_embed(ctx):
     """List all currently watched stock tickers with their split dates using an embed."""
     if not watch_list:
         await ctx.send("No tickers are being watched.")
     else:
         embed = discord.Embed(
             title="Watchlist",
-            description="Stocks being watched and their split dates",
+            description="All tickers and split dates:",
             color=discord.Color.blue()
         )
         
         for ticker, data in watch_list.items():
             split_date = data.get('split_date', 'N/A')
-            embed.add_field(name=f"{ticker}", value=f"Split Date: {split_date}", inline=False)
+            embed.add_field(name=f" **|** {ticker}", value=f" **|** Split Date: {split_date} \n", inline=True)
         
         await ctx.send(embed=embed)
+
+async def send_reminder_message_embed(ctx):
+    # --- Message content: 
+    embed = discord.Embed(
+    title="**Watchlist - Upcoming Split Dates: **",
+    description=" ",
+    color=discord.Color.blue()
+    )
+    
+    # Prepare a list to store tickers and their days left until the split
+    sorted_tickers = []
+
+    # Add each ticker and its days left as a field in the embed
+    for ticker, data in watch_list.items():
+        split_date_str = data['split_date']
+        days_left = calculate_days_left(split_date_str)
+
+        # Only include stocks with split dates within 21 days
+        if days_left <= 21:
+            sorted_tickers.append((days_left, ticker, split_date_str))
+
+    # Sort the list by days_left (first element of the tuple)
+    sorted_tickers.sort(key=lambda x: x[0])
+
+    # Add the sorted tickers to the embed
+    for days_left, ticker, split_date_str in sorted_tickers:
+        embed.add_field(
+            name=f"**| {ticker}** - Effective on {split_date_str}",
+            value=f"*|>* Must purchase within **{days_left}** day(s).\n",
+            inline=False
+        )
+      
+    embed.set_footer(text="Automated message will repeat.")
+    # --- End message content
+    # Replace with your bot channel
+
+    await ctx.send(embed=embed)
+
+async def send_reminder_message(bot):
+    # reminders = []
+
+    # reminders.append(f"**Upcoming split dates from watchlist: **\n")
+    
+    # for ticker, data in watch_list.items():
+    #     split_date_str = data['split_date']
+    #     days_left = calculate_days_left(split_date_str)  # No need to await
+
+    #     if days_left <= 21:
+    #         reminders.append(f"** | {ticker}** - Effective on {split_date_str}\n *|>* Purchase within {days_left} day(s).")
+    
+    # reminder_message = "\n".join(reminders)
+    # --
+    embed = discord.Embed(
+    title="**Watchlist - Upcoming Split Dates: **",
+    description=" ",
+    color=discord.Color.blue()  # You can customize the color
+    )
+    
+    # Prepare a list to store tickers and their days left until the split
+    sorted_tickers = []
+
+    # Add each ticker and its days left as a field in the embed
+    for ticker, data in watch_list.items():
+        split_date_str = data['split_date']
+        days_left = calculate_days_left(split_date_str)
+
+        # Only include stocks with split dates within 21 days
+        if days_left <= 21:
+            sorted_tickers.append((days_left, ticker, split_date_str))
+
+    # Sort the list by days_left (first element of the tuple)
+    sorted_tickers.sort(key=lambda x: x[0])
+
+    # Add the sorted tickers to the embed
+    for days_left, ticker, split_date_str in sorted_tickers:
+        embed.add_field(
+            name=f"**| {ticker}** - Effective on {split_date_str}",
+            value=f"*|>* Must purchase within **{days_left}** day(s).\n",
+            inline=False
+        )
+    
+    embed.set_footer(text="Automated message will repeat.")
+    
+    # Replace with your bot channel
+    channel = bot.get_channel(TARGET_CHANNEL_ID)  # Replace with correct channel ID
+    if channel:
+        await channel.send(embed=embed)
+    else:
+        print("Channel not found")
+
+def get_seconds_until_next_reminder(target_hour, target_minute):
+    """Calculate the number of seconds until the next occurrence of a specific time (HH:MM)."""
+    now = datetime.now()
+    target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+    
+    if now > target_time:
+        # If the target time has already passed today, schedule it for tomorrow
+        target_time += timedelta(days=1)
+    
+    return (target_time - now).total_seconds()
+
+async def periodic_check(bot):
+    """Checks watchlist and sends reminders at 9:15 AM and 3:45 PM."""
+    while True:
+        now = datetime.now()
+        
+        # Wait until 9:15 AM for the first reminder
+        if now.hour < 9 or (now.hour == 9 and now.minute < 15):
+            seconds_until_915 = get_seconds_until_next_reminder(9, 15)
+            await asyncio.sleep(seconds_until_915)
+            await send_reminder_message(bot)
+        
+        # Wait until 3:45 PM for the next reminder
+        seconds_until_345 = get_seconds_until_next_reminder(16, 15)
+        # seconds_until_345 = get_seconds_until_next_reminder(15, 45)
+        await asyncio.sleep(seconds_until_345)
+        await send_reminder_message(bot)
+        
+        # After 3:45 PM, calculate how long until 9:15 AM the next day
+        seconds_until_next_day = get_seconds_until_next_reminder(9, 15)
+        await asyncio.sleep(seconds_until_next_day)
+
+def calculate_days_left(split_date_str):
+    # Regular function, no await needed
+    today = datetime.now().date()
+    split_date = datetime.strptime(split_date_str, '%m/%d').replace(year=today.year).date()
+    if split_date < today:
+        split_date = split_date.replace(year=today.year + 1)
+    days_left = (split_date - today).days
+    return days_left
 
 async def stop_watching(ctx, ticker: str):
     """Stop watching a stock ticker across all accounts."""
@@ -219,7 +344,6 @@ async def stop_watching(ctx, ticker: str):
         await ctx.send(f"{ticker} is not being watched.")
         logging.info(f"{ticker} was not being watched.")
 
-# Utility function to send messages in chunks if too long for Discord
 async def send_chunked_message(ctx, message):
     """Send messages in chunks to avoid exceeding Discord's message length limit."""
     if len(message) > 2000:
@@ -228,8 +352,6 @@ async def send_chunked_message(ctx, message):
             await ctx.send(chunk)
     else:
         await ctx.send(message)
-
-# In progress:
 
 async def watch_ticker_status(ctx, ticker: str):
     """Track the progress of a ticker across all accounts."""

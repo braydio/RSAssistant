@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-import re
+from datetime import datetime, timedelta
 import csv
 import os
 from utils.config_utils import load_config, load_account_mappings, get_account_nickname
@@ -138,20 +138,21 @@ def get_order_details(broker, account_number, ticker):
             for row in csv_reader:
                 # Handle Fennel specific account number parsing
                 if broker.lower() == 'fennel':
-                    account_in_csv = get_fennel_account_number(row['Account number'])
+                    account_in_csv = get_fennel_account_number(row['Account Number'])
                 else:
-                    account_in_csv = row['Account number'][-4:]  # Last 4 digits for non-Fennel accounts
+                    account_in_csv = row['Account Number'][-4:]  # Last 4 digits for non-Fennel accounts
 
-                if row['Broker'] == broker and account_in_csv == account_number and row['Stock'].upper() == ticker:
-                    action = row['action'].capitalize()
-                    quantity = row['quantity']
-                    timestamp = row['timestamp']
+                if row['Broker Name'] == broker and account_in_csv == account_number and row['Stock'].upper() == ticker:
+                    action = row['Order Type'].capitalize()
+                    quantity = row['Quantity']
+                    timestamp = row['Date']
                     return f"{action} {quantity} {ticker} {timestamp}"
         return None
     except FileNotFoundError:
         return None
     except KeyError as e:
         raise KeyError(f"Missing expected column in orders_log.csv: {e}")
+
 
 # Function to print lines from a file to Discord
 async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_TXT, delay=1):

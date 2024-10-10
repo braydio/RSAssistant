@@ -42,7 +42,7 @@ def add_stock_to_excel_log(ticker, excel_file_path):
             if ws.cell(row=stock_row, column=col).value is None:
                 last_filled_column = col - 1
                 break
-        print(f"Last filled column: {last_filled_column}")
+        # print(f"Last filled column: {last_filled_column}")
 
         # Find bottom filled row in the last filled column
         bottom_row = ws.max_row
@@ -50,7 +50,7 @@ def add_stock_to_excel_log(ticker, excel_file_path):
             if ws.cell(row=row, column=last_filled_column).value is None:
                 bottom_row = row - 1
                 break
-        print(f"Bottom filled row: {bottom_row}")
+        # print(f"Bottom filled row: {bottom_row}")
 
         start_col = last_filled_column
         # start_row = date_row
@@ -124,11 +124,15 @@ def update_excel_log(orders, order_type, excel_file_path):
     for order in orders:
         try:
             broker_name, account, order_type, stock, _, _, price = order
+            if order_type == 'selling':
+                order_type = 'sell'
+            if order_type == 'buying':
+                order_type = 'buy'
 
             # Get the account nickname based on the broker and account pair
             mapped_name = get_account_nickname(broker_name, account)
             account_nickname = f"{broker_name} {mapped_name}"
-            print(f"Processing {order_type} order for {account_nickname}, stock: {stock}, price: {price}")
+            print(f"Excel - processing {order_type} order for {account_nickname}, stock: {stock}, price: {price}")
 
             # Find the row for the account in Column B
             account_row = None
@@ -148,7 +152,8 @@ def update_excel_log(orders, order_type, excel_file_path):
                 if stock_col:
                     # Update the price in the appropriate cell
                     ws.cell(row=account_row, column=stock_col).value = price
-                    print(f"Updated {order_type} price for {account_nickname} - {stock} in Excel.")
+                    print(f"Column for {account_nickname} number {col} entering {price} as {order_type} for {stock}")
+                    # print(f"Updated {order_type} price for {account_nickname} - {stock} in Excel.")
                 else:
                     print(f"Stock {stock} not found for account {account_nickname}.")
             else:
@@ -160,4 +165,5 @@ def update_excel_log(orders, order_type, excel_file_path):
 
     # Save changes to the Excel file
     wb.save(excel_file_path)
+    print(f"Saved excel {excel_file_path}")
     wb.close()

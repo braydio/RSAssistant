@@ -58,6 +58,54 @@ def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
     else:
         logging.error(f"Account mapping file {filename} not found.")
         return {}
+    
+def save_account_mappings(mappings):
+    """Save the account mappings to the JSON file."""
+    with open(ACCOUNT_MAPPING_FILE, 'w') as f:
+        json.dump(mappings, f, indent=4)
+
+def add_account(broker, account_number, account_nickname):
+    """
+    Add an account to a broker.
+    
+    Parameters:
+    - broker: The broker to which the account belongs.
+    - account_number: The 4-character account number.
+    - account_nickname: A nickname for the account.
+    
+    Returns:
+    - A success or error message.
+    """
+    # Ensure account number is exactly 4 characters long
+    if len(account_number) != 4:
+        return "Please check that the account number was entered correctly."
+
+    mappings = load_account_mappings()
+
+    # Check if the broker exists
+    if broker not in mappings:
+        return f"Broker '{broker}' not found. Available brokers: {all_brokers()}"
+
+    # If broker exists, append the account details
+    if 'accounts' not in mappings[broker]:
+        mappings[broker]['accounts'] = []
+
+    # Check if the account number already exists
+    for account in mappings[broker]['accounts']:
+        if account['account_number'] == account_number:
+            return f"Account '{account_number}' already exists for broker '{broker}'."
+
+    # Add the new account
+    new_account = {
+        "account_number": account_number,
+        "nickname": account_nickname
+    }
+    mappings[broker]['accounts'].append(new_account)
+
+    # Save the updated mappings
+    save_account_mappings(mappings)
+
+    return f"Account '{account_nickname}' for broker '{broker}' added successfully."
 
 def all_brokers(filename=ACCOUNT_MAPPING_FILE):
     """
@@ -78,3 +126,67 @@ def all_brokers(filename=ACCOUNT_MAPPING_FILE):
     except json.JSONDecodeError:
         print(f"Error: Failed to decode JSON from {filename}.")
         return []
+    
+def all_broker_accounts(broker):
+    """
+    Retrieve all accounts (nicknames and numbers) for a given broker.
+    
+    Parameters:
+    - broker: The broker for which to retrieve accounts.
+    
+    Returns:
+    - A list of account dictionaries or an error message if the broker is not found.
+    """
+    mappings = load_account_mappings()
+
+    # Check if the broker exists
+    if broker not in mappings:
+        return f"Broker '{broker}' not found. Available brokers: {all_brokers()}"
+    
+    # Get the accounts for the broker
+    accounts = mappings[broker].get('accounts', [])
+    
+    if not accounts:
+        return f"No accounts found for broker '{broker}'."
+    
+    return accounts
+
+def all_account_nicknames(broker):
+    """
+    Retrieve all account nicknames for a given broker.
+    
+    Parameters:
+    - broker: The broker for which to retrieve account nicknames.
+    
+    Returns:
+    - A list of nicknames or an error message if the broker is not found.
+    """
+    accounts = all_broker_accounts(broker)
+    
+    # If accounts is a string, it's an error message
+    if isinstance(accounts, str):
+        return accounts
+    
+    # Return the nicknames
+    nicknames = [account['nickname'] for account in accounts]
+    return nicknames if nicknames else f"No account nicknames found for broker '{broker}'."
+
+def all_account_numbers(broker):
+    """
+    Retrieve all account numbers for a given broker.
+    
+    Parameters:
+    - broker: The broker for which to retrieve account numbers.
+    
+    Returns:
+    - A list of account numbers or an error message if the broker is not found.
+    """
+    accounts = all_broker_accounts(broker)
+    
+    # If accounts is a string, it's an error message
+    if isinstance(accounts, str):
+        return accounts
+    
+    # Return the account numbers
+    account_numbers = [account['account_number'] for account in accounts]
+    return account_numbers if account_numbers else f"No account numbers found for broker '{broker}'."
