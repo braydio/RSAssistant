@@ -71,10 +71,10 @@ def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
         }
         updated_orders.append(new_order)
 
-        # Write the updated orders list back to the CSV
+        # Write the updated orders list back to the CSV with headers
         with open(ORDERS_CSV_FILE, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=existing_orders[0].keys())
-            writer.writeheader()
+            writer = csv.DictWriter(file, fieldnames=ORDERS_HEADERS)
+            writer.writeheader()  # Ensure headers are written
             writer.writerows(updated_orders)
 
         print(f"Order saved: {new_order}")
