@@ -88,8 +88,7 @@ def handle_incomplete_order(match, broker):
         elif broker == 'chase_buy_sell':
             action, quantity, stock = match.groups()[1:4]
         elif broker == 'firstrade_order':
-            # Firstrade returns the correct number of groups, no need to slice
-            action, quantity, stock = match.groups()  # No need for [1:4] slicing here
+            action, quantity, stock = match.groups()[1:4]  # No need for [1:4] slicing here
         
         # Add fallback in case any of the variables are None
         if not action or not quantity or not stock:
@@ -163,10 +162,11 @@ def process_verified_orders(broker, account_number, account_list, status=None):
     print("Verifying orders...")
     for (stock, account), order in list(incomplete_orders.items()):
         if order['broker'] == broker and account in account_list:
-            del incomplete_orders[(stock, account)]
             print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker} {account_number}")
+            del incomplete_orders[(stock, account)]
+            print(f"Removed {order['action']} order for {broker} {account_number}")
             save_order_to_csv(broker, account_number, order['action'], order['quantity'], stock)
-            print(f"List: {list(incomplete_orders.items())}")
+            # print(f"List: {list(incomplete_orders.items())}")
             break    
 
 def handle_complete_order(match, broker):

@@ -159,33 +159,24 @@ async def brokerlist(ctx, broker: str = None, account_info: str = None):
     try:
         # If no broker is provided, list all brokers
         if broker is None:
-            brokers = all_brokers()
-            await ctx.send(f"Available brokers: {brokers}")
-            return
+            await all_brokers(ctx)
+            # await ctx.send(f"Available brokers: {brokers}")
+            # return
         
         # If broker and 'accounts' is provided, list account nicknames or numbers
-        if account_info == "accounts":
-            nicknames = all_account_nicknames(broker)
-            if isinstance(nicknames, list):
-                await ctx.send(f"Account nicknames for broker '{broker}': {', '.join(nicknames)}")
-            else:
-                await ctx.send(nicknames)  # Sends error message if broker is invalid
-            return
+        else:
+            await all_account_nicknames(ctx, broker)
         
-        if account_info == "accounts numbers":
-            account_numbers = all_account_numbers(broker)
-            if isinstance(account_numbers, list):
-                await ctx.send(f"Account numbers for broker '{broker}': {', '.join(account_numbers)}")
-            else:
-                await ctx.send(account_numbers)  # Sends error message if broker is invalid
-            return
-
         # If the command is invalid, send an error message
-        await ctx.send("Invalid command. Use '..brokerlist', '..brokerlist accounts', or '..brokerlist accounts numbers'.")
-    
+            
     except Exception as e:
         # Handle any unexpected errors
         await ctx.send(f"An error occurred: {str(e)}")
+
+# Command to show the summary for a broker
+@bot.command(name='accountlist', help='List all accounts with a broker')
+async def accountslist(ctx, broker: str = None):
+    await all_account_nicknames(ctx, broker)
 
 # Command to show the summary for a broker
 @bot.command(name='broker', help='Summary totals for a broker')
@@ -199,6 +190,8 @@ async def broker_has(ctx, ticker: str, *args):
     # Check if "details" argument is passed
     await track_ticker_summary(ctx, ticker, show_details)
 
+
+
 # Command to watch a stock
 @bot.command(name='watch', help='Adds a ticker to the watchlist for tracking.')
 async def watch(ctx, ticker: str, split_date: str = None):
@@ -209,17 +202,6 @@ async def watch(ctx, ticker: str, split_date: str = None):
     
     await watch_ticker(ctx, ticker, split_date)
 
-""" # Command to display the progress of a watched ticker
-@bot.command(name='watching', help='Displays a summary for a watched ticker.')
-async def track(ctx, ticker: str):
-    await watch_ticker_status(ctx, ticker) """
-
-
-""" # Command to get the status of a specific ticker
-@bot.command(name='watchstatus', help='Displays a broker-level summary for a ticker.')
-async def watchstatus(ctx, ticker: str):
-    await get_watch_status(ctx, ticker)
- """
 # Command to list all watched tickers
 @bot.command(name='watchlist', help='Lists all tickers currently being watched.')
 async def allwatching(ctx):
@@ -230,11 +212,24 @@ async def allwatching(ctx):
 async def watched_ticker(ctx, ticker: str):
     await stop_watching(ctx, ticker)
 
-# Command to trigger printing a file to Discord one line at a time
-@bot.command(name='todiscord', help='Prints a file one line at a time')
+# Command to trigger printing a file to Discord one line at a time, useful for manual orders
+@bot.command(name='todiscord', help='Prints text file one line at a time')
 async def print_by_line(ctx):
     # Call the function to print the file to Discord
     await print_to_discord(ctx)
+
+# WIP Commands: 
+
+""" # Command to display the progress of a watched ticker
+@bot.command(name='watching', help='Displays a summary for a watched ticker.')
+async def track(ctx, ticker: str):
+    await watch_ticker_status(ctx, ticker) """
+
+""" # Command to get the status of a specific ticker
+@bot.command(name='watchstatus', help='Displays a broker-level summary for a ticker.')
+async def watchstatus(ctx, ticker: str):
+    await get_watch_status(ctx, ticker)
+ """
 
 # Start the bot with the token from the config
 if __name__ == "__main__":

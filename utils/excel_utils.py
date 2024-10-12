@@ -152,7 +152,7 @@ def update_excel_log(orders, order_type, excel_file_path):
                 if stock_col:
                     # Update the price in the appropriate cell
                     ws.cell(row=account_row, column=stock_col).value = price
-                    print(f"Column for {account_nickname} number {col} entering {price} as {order_type} for {stock}")
+                    print(f"{account_nickname} column number {col} row {row} entering {price} as {order_type} for {stock}")
                     # print(f"Updated {order_type} price for {account_nickname} - {stock} in Excel.")
                 else:
                     print(f"Stock {stock} not found for account {account_nickname}.")
