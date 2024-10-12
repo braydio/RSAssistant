@@ -46,6 +46,7 @@ config = load_config()
 holdings_data = read_holdings_log()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 MANUAL_ORDER_ENTRY_TXT = config['paths']['manual_orders']
+EXCEL_FILE_PATH = config['paths']['excel_log']
 
 # Set up the bot intents
 intents = discord.Intents.default()
@@ -123,7 +124,7 @@ async def on_message(message):
                     None,  # date not needed
                     order_details['price']
                 )]
-                update_excel_log(orders, order_details['order_type'], "path_to_excel_file.xlsx")
+                update_excel_log(orders, order_details['order_type'], EXCEL_FILE_PATH)
         elif message.content.lower().startswith("**"):
             print("No ")
         else:
