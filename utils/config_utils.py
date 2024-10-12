@@ -2,6 +2,7 @@ import yaml
 import os
 import json
 import logging
+import discord
 
 CONFIG_PATH = 'config/settings.yaml'
 
@@ -76,15 +77,24 @@ def add_account(broker, account_number, account_nickname):
     Returns:
     - A success or error message.
     """
+    broker_name = broker_name.lower()
+    account_number = account_number.lower()
+
     # Ensure account number is exactly 4 characters long
     if len(account_number) != 4:
         return "Please check that the account number was entered correctly."
-
+        
+    # Get brokers, case insensitive    
     mappings = load_account_mappings()
+    normalized_mapping = {key.lower(): value for key, value in mappings.items()}
 
     # Check if the broker exists
     if broker not in mappings:
-        return f"Broker '{broker}' not found. Available brokers: {all_brokers()}"
+        return (f"Broker '{broker}' not found. Available brokers: {all_brokers()}")
+        
+    # Check if the broker exists in the normalized mapping
+    if broker_name not in normalized_mapping:
+        raise ValueError(f"Broker '{broker}' not found. Available brokers: {all_brokers()}")
 
     # If broker exists, append the account details
     if 'accounts' not in mappings[broker]:
@@ -107,26 +117,41 @@ def add_account(broker, account_number, account_nickname):
 
     return f"Account '{account_nickname}' for broker '{broker}' added successfully."
 
-def all_brokers(filename=ACCOUNT_MAPPING_FILE):
+async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
     """
     Returns a list of active brokers based on the account mapping file.
     """
-    try:
-        # Load the account mappings from the file
-        with open(filename, 'r') as f:
-            account_mapping = json.load(f)
-        
-        # Get the list of active brokers (keys of the account_mapping dictionary)
+    with open(filename, 'r') as f:
+        account_mapping = json.load(f)
+
         active_brokers = list(account_mapping.keys())
-        
-        return active_brokers
-    except FileNotFoundError:
-        print(f"Error: The file {filename} was not found.")
-        return []
-    except json.JSONDecodeError:
-        print(f"Error: Failed to decode JSON from {filename}.")
-        return []
-    
+
+        embed = discord.Embed(
+            title="**All Active Brokers**",
+            description="",
+            color=discord.Color.blue()
+        )
+
+        # Loop through active brokers and add them as fields in the embed
+        for broker in active_brokers:
+            account_count = len(account_mapping[broker])
+            if account_count == 1:
+                plural_check = "account"
+            else:
+                plural_check = "accounts"
+
+            embed.add_field(
+                name=broker,
+                value=(f"{account_count} {plural_check}"),
+                inline=True
+            )
+
+        footer = f"'..brokerwith <*broker*>' "
+
+        embed.set_footer(text="Try: '..brokerlist <broker>' to list accounts.")
+
+        await ctx.send(embed=embed)
+
 def all_broker_accounts(broker):
     """
     Retrieve all accounts (nicknames and numbers) for a given broker.
@@ -151,7 +176,7 @@ def all_broker_accounts(broker):
     
     return accounts
 
-def all_account_nicknames(broker):
+async def all_account_nicknames(ctx, broker):
     """
     Retrieve all account nicknames for a given broker.
     
@@ -161,15 +186,38 @@ def all_account_nicknames(broker):
     Returns:
     - A list of nicknames or an error message if the broker is not found.
     """
-    accounts = all_broker_accounts(broker)
+    mappings = load_account_mappings()
+    normalized_mappings = {key.lower(): key for key in mappings}
+
+    broker_lower = broker.lower()
+
+    # Check if the broker exists
+    if broker_lower not in normalized_mappings:
+        available_brokers = ', '.join(mappings.keys())
+        await ctx.send(f"Broker {broker} not found. Available brokers:{available_brokers} | {all_brokers()}")
+        return
     
-    # If accounts is a string, it's an error message
-    if isinstance(accounts, str):
-        return accounts
-    
-    # Return the nicknames
-    nicknames = [account['nickname'] for account in accounts]
-    return nicknames if nicknames else f"No account nicknames found for broker '{broker}'."
+    original_broker = normalized_mappings[broker_lower]
+
+    accounts = mappings[original_broker]
+    nicknames = accounts.values()
+
+    # Prepare the embed message
+    embed = discord.Embed(
+        title=f"**{original_broker}**",
+        description="All active accounts:",
+        color=discord.Color.blue()
+    )
+
+    # Add each account nickname to the embed
+    for nickname in nicknames:
+        embed.add_field(
+            name=nickname,
+            value="This will display the total value.",
+            inline=True
+        )
+
+    await ctx.send(embed=embed)
 
 def all_account_numbers(broker):
     """
