@@ -1,5 +1,10 @@
 # RSAssistant / OrderFlowbot
 
+# ToDo
+  - Parse Broker Group No. into account_mappings.json to further distinguish accounts (like how fennel)
+  - Clean up all the non-working code from (mainly watch_utils.py)
+  - Debug discord command ..brokerlist *broker* to see where this robot learned to count
+
 ## Overview
 
 RSAssistant / OrderFlowbot is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
