@@ -39,7 +39,7 @@ Once the settings are setting'ed and the bot is ready to start doing the work of
 
   |>> Install the required packages with pip install
    
-  |>>> Start the robit as detailed in the next few lines:
+  |>>> Start the robit as in the next few lines:
 
 ```   
 python -m venv venv
@@ -51,23 +51,30 @@ python orderFlowbot.py discord
 
 ## Account Names
 
-Account names are set in config/account_mapping.json. 
+Account names are set in config/account_mapping.json.
+
+>[!NOTE]
+>If account nickname is not specified, the account is saved as '(Broker) (Group #) (Account #)' eg 'Webull 1 1234'
+
 The names listed on the 
 ```
     LEFT SIDE     |     RIGHT SIDE
 is the OUTPUT     |     ARE CUSTOM NAMES
 FROM auto-rsa     |     which can be modified
 
-          "Webull": { 
+        "Webull 1": { 
             "1234": "Margin Account Nickname",
             "2345": "Account Nickname",
             "NNO1": "IRA Nickname",
             "NNON": "Roth IRA Nickname"
+            },
+
 ```
 To set your custom nicknames, change the 4 digits (eg. 1234) to the actual last 4 for each respective account.
 Set the names on the right side to whatever you would like. 
+
 >[!NOTE]
->If the names on the right side of the mapping match the names set in the excel log, the bot with update the excel log automatically.
+>Set your custom names to match the names set in the excel log, the bot updates the excel log automatically.
 
 Fennel (having not account numbers) is parsed into psuedo-account numbers with Broker Group Number + Account
 
