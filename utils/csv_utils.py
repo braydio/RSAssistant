@@ -18,6 +18,7 @@ ACCOUNT_MAPPING = config['paths']['account_mapping']
 
 ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
 HOLDINGS_HEADERS = ['Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Total Value', 'Account Total']
+EXCLUDED_BROKERS = config.get('excluded_brokers', {})
 
 # Ensure CSV files exist
 def ensure_csv_file_exists(file_path, headers):
@@ -98,8 +99,13 @@ def update_holdings_data(order_type, broker_name, account_number, stock, quantit
     try:
         holdings_data = read_holdings_log()  # Read the current holdings
         key = (broker_name, account_number, stock)
+        account_nickname = get_account_nickname(broker_name, account_number)
 
         # Handle buy orders
+        if account_nickname in EXCLUDED_BROKERS:
+            broker_name = 'EXCLUDED BROKER {broker_name}'
+            account_number = 'EXCLUDED ACCOUNT {account_number}'
+            print(broker_name, account_number)
         if order_type.lower() == 'buy':
             if key in holdings_data:
                 # Update the quantity and price of an existing holding
@@ -112,6 +118,7 @@ def update_holdings_data(order_type, broker_name, account_number, stock, quantit
                 # Add a new holding if it doesn't exist
                 total_value = quantity * price
                 holdings_data[key] = [broker_name, account_number, stock, quantity, price, total_value, None]
+
         
         # Handle sell orders
         elif order_type.lower() == 'sell':

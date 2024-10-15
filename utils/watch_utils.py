@@ -6,7 +6,7 @@ import discord
 import asyncio
 from datetime import datetime, timedelta
 from collections import defaultdict
-from utils.config_utils import load_config, get_account_nickname, load_account_mappings
+from utils.config_utils import load_config, get_account_nickname, load_account_mappings, should_skip
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import send_large_message_chunks
 
@@ -109,11 +109,7 @@ def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=
     else:
         print(f"{stock} is not in the watchlist.")
 
-def should_skip(broker, account_nickname):
-    """Returns True if the broker and account_nickname should be skipped."""
-    if broker in excluded_brokers and account_nickname in excluded_brokers[broker]:
-        return True
-    return False
+
 
 async def check_watchlist_positions(ctx, show_accounts=False):
     """Check which brokers or accounts still need to purchase watchlist tickers."""

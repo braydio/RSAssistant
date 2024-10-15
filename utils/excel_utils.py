@@ -107,12 +107,14 @@ def clear_column_values(worksheet, column):
     for row in range(1, worksheet.max_row + 1):
         worksheet.cell(row=row, column=column).value = None
     
-def update_excel_log(orders, order_type, excel_file_path):
-    """Update the Excel log with the buy or sell orders."""
+import datetime
+
+def update_excel_log(orders, order_type, excel_file_path, error_log_file="error_log.txt"):
+    """Update the Excel log with the buy or sell orders. If the Excel log can't be updated, write to a text log."""
     print(orders)  # Debugging: Print the orders to verify they are correct
     
     # Load the Excel workbook
-    wb = load_excel_log(EXCEL_FILE_PATH)
+    wb = load_excel_log(excel_file_path)
     if not wb:
         return
     ws = wb.active  # Assuming the relevant sheet is the active one
@@ -120,6 +122,8 @@ def update_excel_log(orders, order_type, excel_file_path):
     # Define the row and column offsets
     account_start_row = 8  # Accounts start at row 8 (B8)
     stock_row = 7          # Tickers are listed starting row 7 (B7)
+
+    log_entries = []  # To store entries for writing to the log file later
 
     for order in orders:
         try:
@@ -132,6 +136,7 @@ def update_excel_log(orders, order_type, excel_file_path):
             # Get the account nickname based on the broker and account pair
             mapped_name = get_account_nickname(broker_name, account)
             account_nickname = f"{broker_name} {mapped_name}"
+            error_order = f"manual {broker_name} {account} {order_type} {stock} {price}"
             print(f"Excel - processing {order_type} order for {account_nickname}, stock: {stock}, price: {price}")
 
             # Find the row for the account in Column B
@@ -153,17 +158,46 @@ def update_excel_log(orders, order_type, excel_file_path):
                     # Update the price in the appropriate cell
                     ws.cell(row=account_row, column=stock_col).value = price
                     print(f"{account_nickname} column number {col} row {row} entering {price} as {order_type} for {stock}")
-                    # print(f"Updated {order_type} price for {account_nickname} - {stock} in Excel.")
                 else:
-                    print(f"Stock {stock} not found for account {account_nickname}.")
+                    error_message = f"Stock {stock} not found for account {account_nickname}."
+                    print(error_message)
+                    log_entries.append(error_message)
+                    log_entries.append(error_order)
             else:
-                print(f"Account {account_nickname} not found in Excel.")
+                # manual	Wellsfargo	3523	buy	NVVE	4.992
+                error_message = f"Account {account_nickname} not found in Excel."
+                # error_order = f"manual {broker_name} {account} {order_type} {price}"
+                print(error_message)
+                log_entries.append(error_order)
 
         except ValueError as e:
-            print(f"Error processing order {order}: {e}")
+            error_message = f"Error processing order {order}: {e}"
+            # error_order = f"manual {broker_name} {account} {order_type} {stock} {price}"
+            print(error_message)
+            log_entries.append(error_message)
+            log_entries.append(error_order)
             continue
 
     # Save changes to the Excel file
-    wb.save(excel_file_path)
-    print(f"Saved excel {excel_file_path}")
+    try:
+        wb.save(excel_file_path)
+        print(f"Saved Excel file: {excel_file_path}")
+    except Exception as e:
+        error_message = f"Failed to save Excel file: {excel_file_path}. Error: {e}"
+        print(error_message)
+        log_entries.append(error_message)
+
     wb.close()
+
+    # If there were any log entries, write them to the log file
+    if log_entries:
+        write_to_log_file(log_entries, error_log_file)
+
+def write_to_log_file(log_entries, error_log_file):
+    """Writes log entries to a text file."""
+    with open(error_log_file, 'a') as log_file:
+        log_file.write(f"\n--- Log entries at {datetime.datetime.now()} ---\n")
+        for entry in log_entries:
+            log_file.write(entry + '\n')
+        log_file.write("\n")
+    print(f"Written to log file: {error_log_file}")
