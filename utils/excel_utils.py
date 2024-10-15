@@ -109,6 +109,8 @@ def clear_column_values(worksheet, column):
     
 import datetime
 
+import datetime
+
 def update_excel_log(orders, order_type, excel_file_path, error_log_file="error_log.txt"):
     """Update the Excel log with the buy or sell orders. If the Excel log can't be updated, write to a text log."""
     print(orders)  # Debugging: Print the orders to verify they are correct
@@ -122,8 +124,6 @@ def update_excel_log(orders, order_type, excel_file_path, error_log_file="error_
     # Define the row and column offsets
     account_start_row = 8  # Accounts start at row 8 (B8)
     stock_row = 7          # Tickers are listed starting row 7 (B7)
-
-    log_entries = []  # To store entries for writing to the log file later
 
     for order in orders:
         try:
@@ -160,44 +160,33 @@ def update_excel_log(orders, order_type, excel_file_path, error_log_file="error_
                     print(f"{account_nickname} column number {col} row {row} entering {price} as {order_type} for {stock}")
                 else:
                     error_message = f"Stock {stock} not found for account {account_nickname}."
-                    print(error_message)
-                    log_entries.append(error_message)
-                    log_entries.append(error_order)
+                    log_error_message(error_message, error_order, error_log_file)
             else:
-                # manual	Wellsfargo	3523	buy	NVVE	4.992
                 error_message = f"Account {account_nickname} not found in Excel."
-                # error_order = f"manual {broker_name} {account} {order_type} {price}"
                 print(error_message)
-                log_entries.append(error_order)
+                log_error_message(error_message, error_order, error_log_file)
 
         except ValueError as e:
-            error_message = f"Error processing order {order}: {e}"
-            # error_order = f"manual {broker_name} {account} {order_type} {stock} {price}"
-            print(error_message)
-            log_entries.append(error_message)
-            log_entries.append(error_order)
-            continue
+            error_message = f"ValueError: {str(e)}"
+            log_error_message(error_message, error_order, error_log_file)
+            return None
 
     # Save changes to the Excel file
     try:
         wb.save(excel_file_path)
         print(f"Saved Excel file: {excel_file_path}")
     except Exception as e:
-        error_message = f"Failed to save Excel file: {excel_file_path}. Error: {e}"
+        error_message = f"Failed to save Excel file: {excel_file_path}. Error: {str(e)}"
         print(error_message)
-        log_entries.append(error_message)
+        log_error_message(error_message, "Excel save error", error_log_file)
 
     wb.close()
 
-    # If there were any log entries, write them to the log file
-    if log_entries:
-        write_to_log_file(log_entries, error_log_file)
-
-def write_to_log_file(log_entries, error_log_file):
-    """Writes log entries to a text file."""
+def log_error_message(error_message, order_details, error_log_file):
+    """Appends the error message and order details to a log file."""
     with open(error_log_file, 'a') as log_file:
-        log_file.write(f"\n--- Log entries at {datetime.datetime.now()} ---\n")
-        for entry in log_entries:
-            log_file.write(entry + '\n')
-        log_file.write("\n")
+        log_file.write(f"--- Error at {datetime.datetime.now()} ---\n")
+        log_file.write(f"Error Message: {error_message}\n")
+        log_file.write(f"Manual Order Details: \n{order_details}\n\n")
     print(f"Written to log file: {error_log_file}")
+
