@@ -9,4 +9,5 @@ config/settings.yaml
 config/account_mapping.json
 logs/
 utils/watch_list.json
+utils/parsing_utils_testing_groupno.py
 manual_order_entry.txt

@@ -30,7 +30,7 @@ from discord import Embed
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 # Imports from local utility modules
-from utils.config_utils import load_config, all_brokers
+from utils.config_utils import load_config, all_brokers, all_brokers_groups
 from utils.utility_utils import print_to_discord, track_ticker_summary, profile
 from utils.watch_utils import (
     send_reminder_message_embed, load_watch_list, watch_ticker, 
@@ -147,14 +147,13 @@ async def show_message(ctx):
     await send_reminder_message_embed(ctx)
 
 # Command to show the summary for a broker
-@bot.command(name='brokerlist', help='List all active brokers')
+@bot.command(name='brokerlist', help='List all active brokers. Optional arg: Broker ')
 async def brokerlist(ctx, broker: str = None, account_info: str = None):
     """
     Command to list all brokers or the accounts for a specific broker.
     Usage:
     - ..brokerlist: Lists all brokers.
-    - ..brokerlist 'broker' accounts: Lists the account nicknames for the broker.
-    - ..brokerlist 'broker' accounts numbers: Lists the account numbers for the broker.
+    - ..brokerlist 'broker' : Lists the accounts for broker.
     """
     try:
         # If no broker is provided, list all brokers
@@ -174,9 +173,9 @@ async def brokerlist(ctx, broker: str = None, account_info: str = None):
         await ctx.send(f"An error occurred: {str(e)}")
 
 # Command to show the summary for a broker
-@bot.command(name='accountlist', help='List all accounts with a broker')
-async def accountslist(ctx, broker: str = None):
-    await all_account_nicknames(ctx, broker)
+@bot.command(name='grouplist', help='Shows daily reminder')
+async def brokers_groups(ctx):
+    await all_brokers_groups(ctx)
 
 # Command to show the summary for a broker
 @bot.command(name='broker', help='Summary totals for a broker')
@@ -189,8 +188,6 @@ async def broker_has(ctx, ticker: str, *args):
     show_details = "details" in args
     # Check if "details" argument is passed
     await track_ticker_summary(ctx, ticker, show_details)
-
-
 
 # Command to watch a stock
 @bot.command(name='watch', help='Adds a ticker to the watchlist for tracking.')

@@ -127,6 +127,10 @@ def get_fennel_account_number(account_str):
         newpart = parts[3].split(")")[0]
         account_number = parts[1] + newpart
         return account_number
+    elif len(parts) >= 4 and parts[0].lower == "fidelity":
+        newpart = parts[3].split(")")[0]
+        account_number = parts[1] + newpart
+        return account_number
     return account_str  # Default behavior for non-Fennel accounts
 
 def get_order_details(broker, account_number, ticker):
@@ -136,9 +140,13 @@ def get_order_details(broker, account_number, ticker):
         with open(ORDERS_CSV_FILE, mode='r') as file:
             csv_reader = csv.DictReader(file)
             for row in csv_reader:
+
+
                 # Handle Fennel specific account number parsing
                 if broker.lower() == 'fennel':
                     account_in_csv = get_fennel_account_number(row['Account Number'])
+                elif broker.lower() == 'fidelity':
+                    fidelity_account = get_fennel_account_number(row['Account Number'])
                 else:
                     account_in_csv = row['Account Number'][-4:]  # Last 4 digits for non-Fennel accounts
 

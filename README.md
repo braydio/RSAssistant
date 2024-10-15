@@ -1,9 +1,11 @@
 # RSAssistant / OrderFlowbot
 
-# ToDo
-  - Parse Broker Group No. into account_mappings.json to further distinguish accounts (like how fennel)
-  - Clean up all the non-working code from (mainly watch_utils.py)
-  - Debug discord command ..brokerlist *broker* to see where this robot learned to count
+# Updates:
+  - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
+    - Webull 1 xxxxNUMB will be mapped to Webull 1 {"NUMB": "Cash Account"}
+  - Errors in updating excel log will me logged to error_log.txt
+    - Includes order in 'manual' format, can copy/paste to manual_order_entry.txt and run ..todiscord to re-process order
+  - I forget the other changes  
 
 ## Overview
 
@@ -70,17 +72,12 @@ FROM auto-rsa     |     which can be modified
             },
 
 ```
-To set your custom nicknames, change the 4 digits (eg. 1234) to the actual last 4 for each respective account.
+To set your custom nicknames, change the 4 digits (eg. 1234) to the actual last 4 for each respective broker / account pair.
 Set the names on the right side to whatever you would like. 
 
 >[!NOTE]
 >Set your custom names to match the names set in the excel log, the bot updates the excel log automatically.
 
-Fennel (having not account numbers) is parsed into psuedo-account numbers with Broker Group Number + Account
-
-- Fennel 1 Account 1 will be mapped as Fennel 11
-- Fennel 2 Account 3 will be Fennel 23 
-- Fennel 3 etc. 3 etc. Fennel 33 <sub>and so on in this fashion <sub>forever and ever and ever...</sub></sub>
 
 ## Features
 
@@ -99,6 +96,13 @@ Fennel (having not account numbers) is parsed into psuedo-account numbers with B
   - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase.
   - Setup instructions per excel file
   - Can also send order details in bulk by saving order details down in manual_order_entry.txt in the provided format and run command '..todiscord'  
+
+# ToDo
+  - (Done) Parse Broker Group No. into account_mappings.json to further distinguish accounts (like how fennel)
+  - Update excel.example for new mappings
+  - Reformat account summary commands to not be such a massive text wall
+  - Clean up all the non-working code from (mainly watch_utils.py)
+  - Debug discord command ..brokerlist *broker* to see where this robot learned to count
 
 ## Dependencies
 

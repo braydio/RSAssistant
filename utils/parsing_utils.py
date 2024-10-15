@@ -38,23 +38,24 @@ incomplete_orders = {}
 
 # Regex patterns for various brokers
 patterns = {
-    'robinhood': r'(Robinhood)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
-    'fidelity': r'(Fidelity)\s\d+\saccount\s(?:xxxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
-    'tradier': r'(Tradier)\saccount\s(?:xxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+):\s(ok|failed)',
-    'webull_buy': r'(Webull)\s\d+:\sbuying\s(\d+\.?\d*)\sof\s(\w+)',
-    'wellsfargo': r'(WELLSFARGO)\s\d+\s\*\*\*(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
-    'webull_sell': r'(Webull)\s\d+:\ssell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\w+):\s(Success|Failed)',
-    'fennel': r'(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)',
-    'public': r'(Public)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
-    'schwab_order': r'(Schwab)\s\d+\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
-    'chase_buy_sell': r'(Chase)\s\d+\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)',
-    'schwab_verification': r'(Schwab)\s\d+\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
-    'schwab_failure': r"Schwab \d+ account (\w+): The order verification produced the following messages:",
-    'chase_verification': r'(Chase)\s\d+\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
-    'firstrade_order': r"Firstrade \d+ (buying|selling) (\d+\.?\d*) ([A-Z]+) @ market",
-    'firstrade_verification': r"Firstrade \d+ account\sxxxx(\d{4}):\sThe order verification was (successful|unsuccessful)",
-    'firstrade_failure': r"Firstrade \d+ account (\w+): The order verification produced the following messages:",
-    'bbae': r'(?i)(BBAE)\s\d+:\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
+    'robinhood': r'(Robinhood\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
+    'fidelity': r'(Fidelity\s\d+)\saccount\s(?:xxxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
+    'tradier_verification': r'(Tradier)\saccount\s(?:xxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+):\s(ok|failed)',
+    'webull_buy': r'(Webull\s\d+):\sbuying\s(\d+\.?\d*)\sof\s(\w+)',
+    'wellsfargo': r'(WELLSFARGO\s\d+)\s\*\*\*(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
+    'webull_sell': r'(Webull\s\d+):\ssell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\w+):\s(Success|Failed)',
+    'fennel': r'(Fennel\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)',
+    'public': r'(Public\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
+    'schwab_order': r'(Schwab\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
+    'tradier_order': r'(Tradier\s\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s(\w+)',
+    'chase_order': r'(Chase\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)',
+    'schwab_verification': r'(Schwab\s\d+)\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
+    'schwab_failure': r"Schwab\s\d+\saccount\s(\w+):\sThe order verification produced the following messages:",
+    'chase_verification': r'(Chase\s\d+)\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
+    'firstrade_order': r"(Firstrade\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s([A-Z]+)\s@\s(market|limit)",
+    'firstrade_verification': r"(Firstrade\s\d+)\saccount\sxxxx(\d{4}):\sThe order verification was\s(successful|unsuccessful)",
+    'firstrade_failure': r"Firstrade\s\d+\saccount\s(\w+):\sThe order verification produced the following messages:",
+    'bbae': r'(?i)(BBAE\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
 }
 
 def parse_order_message(content):
@@ -62,10 +63,10 @@ def parse_order_message(content):
     for broker, pattern in patterns.items():
         match = re.match(pattern, content)
         if match:
-            if broker in ['schwab_order', 'chase_buy_sell', 'firstrade_order']:
+            if broker in ['schwab_order', 'chase_buy_sell', 'firstrade_order', 'tradier_order']:
                 print(broker)
                 handle_incomplete_order(match, broker)
-            elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification']:
+            elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification', 'tradier_verification']:
                 print("Recieved verification message, handling...")
                 handle_verification(match, broker)
             elif broker in  ['schwab_failure', 'firstrade_failure']:
@@ -76,98 +77,93 @@ def parse_order_message(content):
             return
     print(f"Failed to parse order message: {content}")
 
-def handle_incomplete_order(match, broker):
+def handle_incomplete_order(match, broker_order):
     """Handles incomplete buy/sell orders for Chase, Schwab, and Firstrade."""
     try:
         # Print matched groups for debugging
-        print(f"Matched groups for {broker}: {match.groups()}")
+        print(f"Matched groups for {broker_order}: {match.groups()[0:4]}")
 
         # Handle brokers based on the expected groups
-        if broker == 'schwab_order':
-            action, quantity, stock = match.groups()[1:4]
-        elif broker == 'chase_buy_sell':
-            action, quantity, stock = match.groups()[1:4]
-        elif broker == 'firstrade_order':
-            action, quantity, stock = match.groups()[1:4]  # No need for [1:4] slicing here
+        if broker_order in ('schwab_order', 'tradier_order', 'chase_order', 'firstrade_order'):
+            broker, action, quantity, stock = match.groups()[0:4]
+            print(f"incomplete_orders as {broker} {action} {quantity} {stock}")
+
+            # Add fallback in case any of the variables are None
+            if not action or not quantity or not stock:
+                raise ValueError(f"Missing values: action={action}, quantity={quantity}, stock={stock}")
+
+            # Account mapping logic
+            account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
         
-        # Add fallback in case any of the variables are None
-        if not action or not quantity or not stock:
-            raise ValueError(f"Missing values: action={action}, quantity={quantity}, stock={stock}")
+            if broker in account_mapping:
+                # Debug: Print account_mapping for the current broker
+                print(f"Account mapping for {broker}: {account_mapping[broker]}")
 
-        # Account mapping logic
-        account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-        
-        if broker == 'schwab_order':
-            for account in account_mapping.get('Schwab', []):
-                incomplete_orders[(stock, account)] = {
-                    'broker': 'Schwab', 'action': action, 'quantity': quantity, 'stock': stock
-                }
-                print(f"Saved account {account} order {action} {quantity} of {stock} as pending for {broker}")                    
+                for account in account_mapping.get(broker, []):
+                    # Debug: Check if account is valid
+                    print(f"Checking account: {account}")
 
-        elif broker == 'chase_buy_sell':
-            for account in account_mapping.get('Chase', []):
-                incomplete_orders[(stock, account)] = {
-                    'broker': 'Chase', 'action': action, 'quantity': quantity, 'stock': stock
-                }        
-                print(f"Saved account {account} order {action} {quantity} of {stock} as pending for {broker}")
+                    # Populate incomplete_orders
+                    incomplete_orders[(stock, account)] = {
+                        'broker': broker, 'action': action, 'quantity': quantity, 'stock': stock
+                    }
+                    print(f"Saved order for account {account}: {incomplete_orders[(stock, account)]}")
 
-        elif broker == 'firstrade_order':
-            for account in account_mapping.get('Firstrade', []):
-                incomplete_orders[(stock, account)] = {
-                    'broker': 'Firstrade', 'action': action, 'quantity': quantity, 'stock': stock,
-                    'account_number': 'Pending'  # Mark the account as pending
-                }
-                if account == 'Pending':
-                    print(f"Saved account {account} order {action} {quantity} of {stock} as pending for {broker}")
-                    
-                else:
-                    print(f"Account {account} pending order {action} {quantity} of {stock} for {broker}")
+            else:
+                print(f"Broker {broker} not found in account mapping.")
 
     except ValueError as e:
+        print(f"Error in handle_incomplete_order: {e}")
+
         print(f"Error in handle_incomplete_order: {e}")
 
 def handle_verification(match, broker):
     """Processes order verification for Chase, Schwab, and Firstrade."""
     print(match, broker)
     account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-    account_number = match.groups()[0]
-    print(account_number)
     
-    if broker == 'schwab_verification':
+    if broker in ['schwab_verification', 'chase_verification', 'firstrade_verification']:
         account_number = match.groups()[1]
-        print(account_number)
-
-        broker = 'Schwab'
-        print(f"Verifying {broker}, account number: {account_number}, mapped list: {account_mapping.get('Schwab', [])}")
-        process_verified_orders('Schwab', account_number, account_mapping.get('Schwab', []))
+        broker = match.groups()[0]
+        print(f"Received order {broker}, account number: {account_number}, mapped list: {account_mapping.get(broker, [])}")
+        process_verified_orders(broker, account_number, account_mapping.get(broker, []))
     
-    elif broker == 'chase_verification':
+    elif broker == 'tradier_verification':
         account_number = match.groups()[1]
-        print(account_number)
 
-        broker = 'Chase'
-        print(f"Verifying {broker}, account number: {account_number}, mapped list: {account_mapping.get('Chase', [])}")
-        process_verified_orders('Chase', account_number, account_mapping.get('Chase', []))
+        for outer_key, accounts in account_mapping.items():
+            if account_number in accounts:
+                broker = outer_key  # Store the outer key (e.g., "Tradier 1")
+                break
         
-    elif broker == 'firstrade_verification':
-        account_number = match.groups()[0]
-        print(account_number)
-
-        broker = 'Firstrade'
-        print(f"Verifying {broker}, account number: {account_number}, mapped list: {account_mapping.get('Firstrade', [])}")
-        process_verified_orders('Firstrade', account_number, account_mapping.get('Firstrade', []))
+        print(broker)
+        print(f"Received order {broker}, account number: {account_number}, mapped list: {account_mapping.get(account_number, [])}")
+        
+        process_verified_orders(broker, account_number, account_mapping.get(broker, []))
 
 def process_verified_orders(broker, account_number, account_list, status=None):
     """Processes verified orders for the specified broker, including Firstrade."""
-    print("Verifying orders...")
+    print(f"Processing verified orders for {broker}, account number: {account_number}")
+    
+    # Debug: Print incomplete orders
+    print(f"Incomplete orders: {incomplete_orders}")
+    
     for (stock, account), order in list(incomplete_orders.items()):
+        print(f"Checking stock: {stock}, account: {account}, broker in order: {order['broker']}")
+
+        # Check if the broker and account match the incomplete orders
         if order['broker'] == broker and account in account_list:
-            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker} {account_number}")
+            # Remove the verified order from the incomplete orders
             del incomplete_orders[(stock, account)]
-            print(f"Removed {order['action']} order for {broker} {account_number}")
+            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker} {account_number}")
+            
+            # Save the verified order to CSV
             save_order_to_csv(broker, account_number, order['action'], order['quantity'], stock)
-            # print(f"List: {list(incomplete_orders.items())}")
-            break    
+            print("Order successfully saved to CSV")
+            
+            # Debugging output of remaining incomplete orders
+            print(f"Remaining incomplete orders: {list(incomplete_orders.items())}")
+            break
 
 def handle_complete_order(match, broker):
     """Handles complete buy and sell orders."""
@@ -180,16 +176,14 @@ def handle_complete_order(match, broker):
         
         print(f"Processing order for broker: {broker}, match: {match.groups()}")
 
-        if broker in ['robinhood', 'public', 'bbae']:
+        if broker in ['robinhood', 'public', 'bbae', 'fennel']:
             broker, action, quantity, stock, account_number = match.groups()[:5]
+            print(broker)
         elif broker == 'webull_buy':
             broker, quantity, stock = match.groups()[:3]
             account_number = 'N/A'
             action = 'buy'
-        elif broker == 'wellsfargo':
-            broker_allcaps, account_number, action, quantity, stock = match.groups()[:5]
-            broker = 'Wellsfargo'
-        elif broker in ['fidelity', 'tradier']:
+        elif broker in ['fidelity', 'wellsfargo']:
             broker, account_number, action, quantity, stock = match.groups()[:5]
         elif broker == 'webull_sell':
             broker, quantity, stock, account_number = match.groups()[:4]
@@ -204,9 +198,6 @@ def handle_complete_order(match, broker):
             else:
                 print("No quantity found.")
             print(action, quantity)
-        elif broker == 'fennel':
-            broker, group_number, action, quantity, stock, account_number = match.groups()[:6]
-            account_number = f"{group_number}{account_number}"
         else:
             raise ValueError(f"Broker {broker} not recognized in complete order handler.")
     
@@ -240,36 +231,46 @@ def handle_failed_order(match, broker):
 
         
 def parse_manual_order_message(content):
-    """Parses a manual order message. Expected format: 'manual Broker Account OrderType Stock Price'"""
+    """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
     try:
         parts = content.split()
-        if len(parts) != 6:
-            raise ValueError("Invalid format. Expected 'manual Broker Account OrderType Stock Price'.")
+        for part in parts:
+            print(f"Part: {part}")
         
+        # Expected format length check (7 parts now: manual, broker, broker_number, account, order_type, stock, price)
+        if len(parts) != 7:
+            raise ValueError("Invalid format. Expected 'manual Broker BrokerNumber Account OrderType Stock Price'.")
+
+        # Returning the parsed values
         return {
-            'broker_name': parts[1],
-            'account': parts[2],
-            'order_type': parts[3],
-            'stock': parts[4],
-            'price': float(parts[5])
+            'broker_name': parts[1] + ' ' + parts[2],  # Combining Broker and BrokerNumber
+            'account': parts[3],      # Account
+            'order_type': parts[4],   # Order type (e.g., 'buy' or 'sell')
+            'stock': parts[5],        # Stock ticker symbol
+            'price': float(parts[6])  # Price converted to float
         }
     except Exception as e:
         print(f"Error parsing manual order: {e}")
         return None
 
 def parse_embed_message(embed, holdings_log_file):
-    broker_name = standardize_broker_name(embed.title.split(" Holdings")[0])
+    
 
     for field in embed.fields:
+        name_field = field.name
+        embed_split = name_field.split(' (')
+        broker_name = embed_split[0]
+        
         # Extract the account number and remove leading zeros
-        if broker_name == 'WELLSFARGO':
-            broker_name = 'Wellsfargo'
+        #if broker_name == 'WELLSFARGO':
+        #    broker_name = 'Wellsfargo'
         account_number = re.search(r'\((\w+)\)', field.name).group(1).lstrip('x') if re.search(r'\((\w+)\)', field.name) else field.name.lstrip('0')
 
         # Get the account nickname using the helper function
         account_nickname = get_account_nickname(broker_name, account_number)
         mapped_account = broker_name + " " + account_nickname
         account_key = mapped_account
+        print(broker_name)
 
         print(f"Account nickname: {account_nickname}")
 
