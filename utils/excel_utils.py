@@ -183,10 +183,25 @@ def update_excel_log(orders, order_type, excel_file_path, error_log_file="error_
     wb.close()
 
 def log_error_message(error_message, order_details, error_log_file):
-    """Appends the error message and order details to a log file."""
+    """Appends the error message and order details to a log file, avoiding duplicates."""
+    # Read the current contents of the error log file
+    try:
+        with open(error_log_file, 'r') as log_file:
+            log_contents = log_file.read()
+    except FileNotFoundError:
+        # If the log file doesn't exist, we'll create it later
+        log_contents = ""
+
+    # Check if the order details already exist in the log file
+    if order_details in log_contents:
+        print(f"Order details already logged as error: {order_details}")
+        return  # Don't log duplicates
+
+    # Append the error message and order details to the log file
     with open(error_log_file, 'a') as log_file:
         log_file.write(f"--- Error at {datetime.datetime.now()} ---\n")
         log_file.write(f"Error Message: {error_message}\n")
-        log_file.write(f"Manual Order Details: \n{order_details}\n\n")
+        log_file.write(f"Order Details: {order_details}\n\n")
+    
     print(f"Written to log file: {error_log_file}")
 
