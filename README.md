@@ -1,4 +1,4 @@
-# RSAssistant / OrderFlowbot
+# RSAssistant
 
 # Updates:
   - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
@@ -9,7 +9,7 @@
 
 ## Overview
 
-RSAssistant / OrderFlowbot is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
+RSAssistant / RSAssistant is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
 
 ## Setup
 
@@ -47,7 +47,7 @@ Once the settings are setting'ed and the bot is ready to start doing the work of
 python -m venv venv
 venv/Scripts/activate
 pip install -r requirements.txt
-python orderFlowbot.py discord
+python RSAssistant.py discord
 ```
 7(?) I probably missed some stuff but feel free to DM me if you have questions 
 
