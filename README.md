@@ -99,7 +99,7 @@ Set the names on the right side to whatever you would like.
   - Can also send order details in bulk by saving order details down in manual_order_entry.txt in the provided format and run command '..todiscord'  
 
 # ToDo
-  - (Done) Parse Broker Group No. into account_mappings.json to further distinguish accounts (like how fennel)
+  - Link changes in accounts_mapping.json to excel log
   - Update excel.example for new mappings
   - Reformat account summary commands to not be such a massive text wall
   - Clean up all the non-working code from (mainly watch_utils.py)
