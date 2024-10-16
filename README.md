@@ -1,6 +1,7 @@
 # RSAssistant
 
 # Updates:
+  - Changed main script to RSAssistant.py, to start bot run `python RSAssistant.py`
   - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
     - Webull 1 xxxxNUMB will be mapped to Webull 1 {"NUMB": "Cash Account"}
   - Errors in updating excel log will me logged to error_log.txt
