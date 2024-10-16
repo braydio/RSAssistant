@@ -3,4 +3,4 @@
 # It is simple to download your broker history, open in excel, get the orders into the below format
 # and paste them directly to this file. 
 # Then run ..todiscord to have this message sent to chat, updating with the below details:
-manual	Wellstrade 1234	Buy	ADTX	0.18
+manual	Robinhood 1 1234	Buy	ADTX	0.18
