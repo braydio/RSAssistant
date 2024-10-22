@@ -1,29 +1,24 @@
 # RSAssistant
 
-# Updates:
-  - Changed main script to RSAssistant.py, to start bot run `python RSAssistant.py`
-  - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
-    - Webull 1 xxxxNUMB will be mapped to Webull 1 {"NUMB": "Cash Account"}
-  - Errors in updating excel log will me logged to error_log.txt
-    - Includes order in 'manual' format, can copy/paste to manual_order_entry.txt and run ..todiscord to re-process order
-  - I forget the other changes  
+# Updates 10/20:
+  - Accounts can be defined in the shaded columns (A:E) on the Account Details sheet in ReverseSplitLog.xlsx. 
+    ```
+    - (Discord Account Format) |        (Account Details Format)      | (Reverse Split Log Account Format)
+    - Webull 1 xxx4565         | (Webull) (1) (4565) ({Cash Account}) | Webull 1 Cash Account
+    ```
+To update mappings from the excel log run `..updatemappings`
+
 
 ## Overview
 
-RSAssistant is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
+RSAssistant is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. This script reads the output from auto-rsa in the discord channel and saves order activity and holdings information locally for quick recall / reference. Current features include a dynamic watchlist for users to specify upcoming r/s, accounts mapped to custom nicknames with order activity saved to a local excel file. This script does not directly access any of your accounts, so no credentials are needed other than discord bot / channel information.
 
 ## Setup
 
-Hopefully add more helpful setup instructions soon but for now: 
-
-1. Copy/paste and rename any file with 'example-' prefix
-2. Follow [the instructions per this guide to set up a discord bot](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) where it can see the output from the auto-rsa script, ideally as a live feed from your auto-rsa discord bot. 
+1. Rename files with the 'example-' prefix by removing the prefix (e.g., example-settings.yaml to settings.yaml).
+2. Follow [the instructions per this guide to set up a discord bot](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) where it can see the output from the auto-rsa script.
 3. Create a copy of [example-settings.yaml](https://github.com/braydio/RSAssistant/blob/master/config/example-settings.yaml) and remove the prefix 'example-'
-4. Save your discord channel ID, RSA bot ID, and your discord ID per per below
-
->[!NOTE]
->The field `ID_OF_YOUR_NEW_BOT` will be the *token* for your new bot (not actually the ID) <sup>it's okay to be confused  <sup>I am too</sup></sup>
-
+4. Save your discord channel ID, auto-rsa bot ID, and your discord ID per per below along with the token of your new RSAssistant bot
 ```
 # Discord ID's
 discord_ids:
@@ -36,35 +31,26 @@ discord:
   token: "ID_OF_YOUR_NEW_BOT"
   token: "ID_OF_YOUR_NEW_BOT"
 ```
-Once the settings are setting'ed and the bot is ready to start doing the work of a small team of interns,
-
-  |> Set up and initialize a venv
-
-  |>> Install the required packages with pip install
-   
-  |>>> Start the robit as in the next few lines:
-
+Once the settings are set, initialize the bot with the following commands: 
 ```   
 python -m venv venv
 venv/Scripts/activate
 pip install -r requirements.txt
 python RSAssistant.py discord
 ```
-7(?) I probably missed some stuff but feel free to DM me if you have questions 
 
 ## Account Names
 
-Account names are set in config/account_mapping.json.
+Account names are managed in two files:
+
+  - logs/excel/ReverseSplitLog.xlsx (Excel file)
+  - config/account_mapping.json (JSON file)
 
 >[!NOTE]
 >If account nickname is not specified, the account is saved as '(Broker) (Group #) (Account #)' eg 'Webull 1 1234'
 
-The names listed on the 
+Account Mapping in account_mapping.json:
 ```
-    LEFT SIDE     |     RIGHT SIDE
-is the OUTPUT     |     ARE CUSTOM NAMES
-FROM auto-rsa     |     which can be modified
-
         "Webull 1": { 
             "1234": "Margin Account Nickname",
             "2345": "Account Nickname",
@@ -73,11 +59,12 @@ FROM auto-rsa     |     which can be modified
             },
 
 ```
-To set your custom nicknames, change the 4 digits (eg. 1234) to the actual last 4 for each respective broker / account pair.
-Set the names on the right side to whatever you would like. 
+To set custom nicknames from the json file, modify the digits (e.g., 1234) to match the last four digits of the actual account number, and update the nickname accordingly. 
 
 >[!NOTE]
->Set your custom names to match the names set in the excel log, the bot updates the excel log automatically.
+>Ensure the custom names match those in the Excel log, as the bot updates the Excel log automatically.
+
+Initialize the bo
 
 
 ## Features
@@ -86,7 +73,7 @@ Set the names on the right side to whatever you would like.
   - Add, remove specific tickers for the bot to track. This should be done *before* sending any orders for new r/s stocks.
   -  `..watch ticker` starts watching a ticker  |  `..watched ticker` to stop watching
     
-- **Bot Commands from within Discord Channel**:
+- **Other Bot Commands from within Discord Channel**:
   - Enter the bot commands to the same channel that the auto-rsa bot is in.
   - Command prefix is `..`
     - Eg: *`..brokerwith arqq`* lists all brokers with position in ARQQ
@@ -112,9 +99,5 @@ This project relies on [auto-rsa by Nelson Dane](main/program_function_flow.md) 
 For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/auto-rsa/blob/main/README.md)
 
 ## Program Flow and Structure
-
-References *(these are quite outdated)*:
-- [Program Function Flow](program_function_flow) - Detailed flow of how *(some of)* the program works internally *(I might finish this)*
-- [Program Map](program_map.txt) - A hierarchical structure outlining the modules and functions in the project. *(See note above ^)*
-
+wip
 
