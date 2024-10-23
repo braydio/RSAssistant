@@ -56,11 +56,7 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
     if ticker not in watch_list:
         watch_list[ticker] = {
             'split_date': split_date,
-            'reminder_sent': False,
-            'brokers': defaultdict(lambda: {
-                'state': 'initial',  
-                'last_updated': None
-            })
+            'reminder_sent': False
         }
         add_stock_to_excel_log(ticker, EXCEL_XLSX_FILE)
         logging.info("Added stock to watchlist and passed to excel utils.")
@@ -68,47 +64,11 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
     save_watch_list()
 
 def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=None):
-    """Updates the watchlist based on holdings data and order type."""
-    stock = stock.upper()
-    quantity = float(quantity)
-    if stock in watch_list:
-        watchlist_entry = watch_list[stock]
-
-        if broker_name not in watchlist_entry['brokers']:
-            watchlist_entry['brokers'][broker_name] = {}
-
-        if quantity > 0:
-            # If the account has a positive quantity, mark it as "has position"
-            watchlist_entry['brokers'][broker_name][account_nickname] = {
-                'state': 'has position',
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-        elif order_type == 'sell':
-            # If it's a sell order, mark it as "completed"
-            watchlist_entry['brokers'][broker_name][account_nickname] = {
-                'state': 'completed',  # Marking as completed instead of removing
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            print(f"Account {account_nickname} marked as completed for {stock}.")
-        elif order_type == 'finalize_closure':
-            # If we are finalizing the closure, remove the account from the watchlist
-            if account_nickname in watchlist_entry['brokers'][broker_name]:
-                del watchlist_entry['brokers'][broker_name][account_nickname]
-                print(f"Account {account_nickname} closed out position for {stock}.")
-
-            if not watchlist_entry['brokers'][broker_name]:
-                del watchlist_entry['brokers'][broker_name]
-                print(f"Broker {broker_name} removed from watchlist for {stock}.")
-
-            if not watchlist_entry['brokers']:
-                del watch_list[stock]
-                print(f"Stock {stock} fully closed across all accounts. Removed from watchlist.")
-
-        save_watch_list()
-
-    else:
-        print(f"{stock} is not in the watchlist.")
-
+    """This function has been deprecated and no longer updates the watchlist."""
+    print(f"update_watchlist called for stock: {stock}, but this function is deprecated.")
+    # You could even raise a warning to make sure it’s not used inadvertently in the future.
+    # import warnings
+    # warnings.warn("update_watchlist is deprecated and no longer updates the watchlist", DeprecationWarning)
 
 
 async def check_watchlist_positions(ctx, show_accounts=False):

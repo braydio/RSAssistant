@@ -19,6 +19,8 @@ paths:
   watch_list: "utils/watch_list.json"       # JSON file for watch list data
   manual_orders: "manual_order_entry.txt"   # Enter order confirmation messages to send to discord
   holdings_data: "logs/holdings_data.csv"   # Not implemented
+  error_log: "logs/error_log.txt"             # Error log for errors in excel logging
+  error_order: "logs/error_OrderDetails.txt"  # Order details for errors, senformatted for manual order
 
 # Discord ID's
 discord_ids:
@@ -41,6 +43,12 @@ excluded_brokers:
     - "Account Nickname"
   Additional_Brokers:
     - "Account Nickname"
+
+# Excel logging settings and values
+excel_log_settings:
+  stock_row: 1
+  date_row: 2
+  split_ratio_placeholder: "S:S"
 
 # Watch list settings
 
