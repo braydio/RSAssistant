@@ -1,5 +1,6 @@
 # RSAssistant
-
+TODO:
+- Restrict watchlist date values to date values, otherwise the ..watchlist/..reminder commands will break if it tries to parse a non-date
 # Updates:
   - Changed main script to RSAssistant.py, to start bot run `python RSAssistant.py`
   - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
