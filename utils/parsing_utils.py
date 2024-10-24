@@ -67,19 +67,71 @@ def parse_order_message(content):
     for broker, pattern in patterns.items():
         match = re.match(pattern, content)
         if match:
+            # Split the broker into broker_name and broker_number if applicable
+            broker_split = match.group(1).split()  # Use the first matched group (broker) to split
+            broker_name = broker_split[0]  # Extract broker name (e.g., 'Fidelity')
+            broker_number = broker_split[1] if len(broker_split) > 1 else "N/A"  # Extract broker number or set as "N/A"
+
             if broker in ['schwab_order', 'chase_buy_sell', 'firstrade_order', 'tradier_order']:
-                print(broker)
-                handle_incomplete_order(match, broker)
+                print(f"Processing incomplete order for {broker_name}")
+                handle_incomplete_order(match, broker_name, broker_number)
             elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification', 'tradier_verification']:
-                print("Recieved verification message, handling...")
-                handle_verification(match, broker)
-            elif broker in  ['schwab_failure', 'firstrade_failure']:
+                print("Received verification message, handling...")
+                handle_verification(match, broker_name, broker_number)
+            elif broker in ['schwab_failure', 'firstrade_failure']:
                 print("Received failure message, removing failed account...")
-                handle_failed_order(match, broker)
+                handle_failed_order(match, broker_name, broker_number)
             else:
-                handle_complete_order(match, broker)
+                # For complete orders, pass broker_name and broker_number to handle_complete_order
+                handle_complete_order(match, broker_name, broker_number)
             return
     print(f"Failed to parse order message: {content}")
+
+
+def handle_complete_order(match, broker_name, broker_number):
+    """Handles complete buy and sell orders."""
+    try:
+        # Initialize variables with default values
+        account_number = None
+        action = None
+        quantity = None
+        stock = None
+
+        print(f"Processing order for broker: {broker_name} {broker_number}, match: {match.groups()}")
+
+        # Extract data from the match groups based on the broker
+        if broker_name.lower() in ['robinhood', 'public', 'bbae', 'fennel']:
+            # Specific to these brokers
+            action, quantity, stock, account_number = match.groups()[1:5]
+        elif broker_name.lower() == 'webull' and 'buy' in match.groups():
+            # Webull-specific buy
+            quantity, stock = match.groups()[1:3]
+            account_number = 'N/A'
+            action = 'buy'
+        elif broker_name.lower() in ['fidelity', 'wellsfargo']:
+            # Fidelity/Wells Fargo extract account and action
+            account_number, action, quantity, stock = match.groups()[1:5]
+        elif broker_name.lower() == 'webull' and 'sell' in match.groups():
+            # Webull-specific sell
+            quantity, stock, account_number = match.groups()[1:4]
+            if quantity == '1.0':
+                action = 'sell'
+            elif quantity in ['99.0', '999.0']:
+                action = 'buy'
+                quantity = '1'
+        else:
+            raise ValueError(f"Broker {broker_name} not recognized in complete order handler.")
+
+        # If it's a sell order, mark it as pending closure
+        if action == 'sell':
+            update_watchlist(broker_name, account_number, stock, 0, order_type='sell')  # Use quantity=0 for pending closure
+
+        # Save the order with the broker and broker_number
+        save_order_to_csv(broker_name, broker_number, account_number, action, quantity, stock)
+        print(f"{broker_name} {broker_number}, Account {account_number}, {action.capitalize()} {quantity} of {stock}")
+
+    except Exception as e:
+        print(f"Error handling complete order: {e}")
 
 def handle_incomplete_order(match, broker_order):
     """Handles incomplete buy/sell orders for Chase, Schwab, and Firstrade."""
@@ -147,72 +199,39 @@ def handle_verification(match, broker):
 
 def process_verified_orders(broker, account_number, account_list, status=None):
     """Processes verified orders for the specified broker, including Firstrade."""
-    print(f"Processing verified orders for {broker}, account number: {account_number}")
+    
+    # Split broker into broker_name and broker_number if applicable
+    broker_split = broker.split()
+    if len(broker_split) > 1:
+        broker_name = broker_split[0]  # e.g., 'Fidelity'
+        broker_number = broker_split[1]  # e.g., '1'
+    else:
+        broker_name = broker_split[0]
+        broker_number = "N/A"  # Handle cases where no broker number is given
+    
+    print(f"Processing verified orders for {broker_name}, broker number: {broker_number}, account number: {account_number}")
     
     # Debug: Print incomplete orders
     print(f"Incomplete orders: {incomplete_orders}")
     
+    # Iterate through incomplete orders
     for (stock, account), order in list(incomplete_orders.items()):
         print(f"Checking stock: {stock}, account: {account}, broker in order: {order['broker']}")
 
         # Check if the broker and account match the incomplete orders
-        if order['broker'] == broker and account in account_list:
+        if order['broker'] == broker_name and account in account_list:
             # Remove the verified order from the incomplete orders
             del incomplete_orders[(stock, account)]
-            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker} {account_number}")
+            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker_name} {account_number}")
             
-            # Save the verified order to CSV
-            save_order_to_csv(broker, account_number, order['action'], order['quantity'], stock)
+            # Save the verified order to CSV (passing broker_name and broker_number separately)
+            save_order_to_csv(broker_name, broker_number, account_number, order['action'], order['quantity'], stock)
             print("Order successfully saved to CSV")
             
             # Debugging output of remaining incomplete orders
             print(f"Remaining incomplete orders: {list(incomplete_orders.items())}")
             break
 
-def handle_complete_order(match, broker):
-    """Handles complete buy and sell orders."""
-    try:
-        # Initialize the variables with default values
-        account_number = None
-        action = None
-        quantity = None
-        stock = None
-        
-        print(f"Processing order for broker: {broker}, match: {match.groups()}")
-
-        if broker in ['robinhood', 'public', 'bbae', 'fennel']:
-            broker, action, quantity, stock, account_number = match.groups()[:5]
-            print(broker)
-        elif broker == 'webull_buy':
-            broker, quantity, stock = match.groups()[:3]
-            account_number = 'N/A'
-            action = 'buy'
-        elif broker in ['fidelity', 'wellsfargo']:
-            broker, account_number, action, quantity, stock = match.groups()[:5]
-        elif broker == 'webull_sell':
-            broker, quantity, stock, account_number = match.groups()[:4]
-            if quantity == '1.0':
-                action = 'sell'
-            elif quantity == '99.0':
-                action = 'buy'
-                quantity = '1'
-            elif quantity == '999.0':
-                action = 'buy'
-                quantity = '1'
-            else:
-                print("No quantity found.")
-            print(action, quantity)
-        else:
-            raise ValueError(f"Broker {broker} not recognized in complete order handler.")
-    
-        # If it's a sell order, mark it as pending closure
-        if action == 'sell':
-            update_watchlist(broker, account_number, stock, 0, order_type='sell')  # Use quantity=0 for pending closure
-
-        save_order_to_csv(broker, account_number, action, quantity, stock)
-        print(f"{broker}, Account {account_number}, {action.capitalize()} {quantity} of {stock}")
-    except Exception as e:
-        print(f"Error handling complete order: {e}")
 
 def handle_failed_order(match, broker):
     try:
