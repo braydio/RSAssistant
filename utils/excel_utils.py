@@ -1,15 +1,20 @@
-import openpyxl
-from copy import copy
-from openpyxl.utils import get_column_letter
-from datetime import datetime
-import os
+import json
 import logging
-from utils.config_utils import load_config, get_account_nickname
+import os
+from copy import copy
+from datetime import datetime
+
+import openpyxl
+from openpyxl.utils import get_column_letter
+
+from utils.config_utils import (get_account_nickname, load_account_mappings,
+                                load_config, send_large_message_chunks)
 
 # Load configuration and mappings
 config = load_config()
 EXCEL_FILE_PATH = config['paths']['excel_log']
-ORDERS_CSV_FILE = config['paths']['orders_log']
+ORDERS_LOG_CSV = config['paths']['orders_log']
+HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ACCOUNT_MAPPING = config['paths']['account_mapping']
 ERROR_LOG_FILE = config['paths']['error_log']
 ERROR_ORDER_DETAILS_FILE = config['paths']['error_order']
@@ -17,9 +22,16 @@ ERROR_ORDER_DETAILS_FILE = config['paths']['error_order']
 LOGGER_STOCK_ROW = config
 
 ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
-HOLDINGS_HEADERS = ['Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Total Value', 'Account Total']
+HOLDINGS_HEADERS = ['Broker Name', 'Broker Number', 'Account', 'Stock', 'Quantity', 'Price', 'Total Value', 'Account Total']
 
-# Load the Excel workbook and worksheet based on the configured path
+stock_row = config['excel_log_settings']['stock_row']
+date_row = config['excel_log_settings']['date_row']
+account_start_row = config['excel_log_settings']['account_start_row']
+account_start_column = config['excel_log_settings']['account_start_column']
+split_ratio_placeholder = config['excel_log_settings']['split_ratio_placeholder']
+
+# -- Config and Setup
+
 def load_excel_log(file_path):
     if os.path.exists(file_path):
         return openpyxl.load_workbook(file_path)
@@ -102,28 +114,159 @@ def copy_column(worksheet, source_col, target_col):
         target_cell.alignment = copy(source_cell.alignment)
         target_cell.number_format = source_cell.number_format  # Copy number format
 
+# -- Update Account Mappings
 
-import openpyxl
-from copy import copy
-from openpyxl.utils import get_column_letter
-from datetime import datetime
-import os
-import logging
-from utils.config_utils import load_config, get_account_nickname
+async def index_account_details(ctx, excel_file=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING):
+    """Index account details from an Excel file, update account mappings in JSON, and notify about changes."""
+    
+    # Load the Excel workbook and select the 'Account Details' sheet
+    try:
+        wb = openpyxl.load_workbook(excel_file)
+        if 'Account Details' not in wb.sheetnames:
+            await ctx.send("Sheet 'Account Details' not found.")
+            return
+        ws = wb['Account Details']
+    except Exception as e:
+        await ctx.send(f"Error loading Excel file: {e}")
+        return
 
-# Load configuration and mappings
-config = load_config()
-EXCEL_FILE_PATH = config['paths']['excel_log']
-ORDERS_CSV_FILE = config['paths']['orders_log']
-ACCOUNT_MAPPING = config['paths']['account_mapping']
-ERROR_LOG_FILE = config['paths']['error_log']
-ERROR_ORDER_DETAILS_FILE = config['paths']['error_order']
+    # Load the existing account mappings using the function from config_utils
+    account_mappings = load_account_mappings(mapping_file)
+
+    # Keep track of changes
+    changes = []
+
+    # Iterate through the rows of 'Account Details'
+    try:
+        for row in range(2, ws.max_row + 1):  # Start from row 2 (assuming row 1 has headers)
+            broker_name = ws[f'A{row}'].value  # Broker name in column A
+            group_number = ws[f'B{row}'].value  # Group number in column B
+            account_number = str(ws[f'C{row}'].value).zfill(4)  # Account number in column C, padded to 4 digits
+            account_nickname = ws[f'D{row}'].value  # Account nickname in column D
+
+            if not broker_name or not group_number or not account_number or not account_nickname:
+                continue  # Skip rows with missing data
+
+            # Ensure all values are strings
+            group_number = str(group_number)
+
+            # Ensure the broker and group number exist in the JSON structure
+            if broker_name not in account_mappings:
+                account_mappings[broker_name] = {}
+                changes.append(f"Added broker: {broker_name}")
+
+            if group_number not in account_mappings[broker_name]:
+                account_mappings[broker_name][group_number] = {}
+                changes.append(f"Added group: {group_number} under broker {broker_name}")
+
+            # Check if account number is already present and if the nickname has changed
+            old_nickname = account_mappings[broker_name][group_number].get(account_number)
+            if old_nickname != account_nickname:
+                if old_nickname:
+                    changes.append(f"Updated account {account_number} under broker {broker_name}, group {group_number} from '{old_nickname}' to '{account_nickname}'")
+                else:
+                    changes.append(f"Added new account {account_number} under broker {broker_name}, group {group_number} with nickname '{account_nickname}'")
+
+            # Add or update the account details under the broker and group number
+            account_mappings[broker_name][group_number][account_number] = account_nickname
+
+    except Exception as e:
+        await ctx.send(f"Error processing Excel rows: {e}")
+        return
+
+    # If there were any changes, send them via ctx.send
+    if changes:
+        change_message = "\n".join(changes)
+        print(change_message)
+    else:
+        await ctx.send("No changes detected in account mappings.")
+
+    # Save the updated mappings back to the JSON file
+    try:
+        with open(mapping_file, 'w') as f:
+            json.dump(account_mappings, f, indent=4)
+        await ctx.send(f"Updated mappings saved to `{mapping_file}`.")
+        
+    except Exception as e:
+        await ctx.send(f"Error saving JSON file: {e}")
+
+async def map_accounts_in_excel_log(ctx, excel_file=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING):
+    """Update the Reverse Split Log sheet and write account details back to the Account Details sheet."""
+
+    # Load the Excel workbook and both sheets
+    wb = openpyxl.load_workbook(excel_file)
+    reverse_split_log = wb['Reverse Split Log']
+    account_details_ws = wb['Account Details']
+
+    # Load the account mappings from the JSON file
+    with open(mapped_accounts_json, 'r') as f:
+        account_mappings = json.load(f)
+
+    # Settings for starting row/column
+    account_start_row = 4  # Start at row 4 for account details
+    account_start_column = 1  # Column 1 for account details (A)
+    stock_row = 1  # The row where stock tickers are listed
+
+    try:
+        current_row = account_start_row
+
+        # Iterate through brokers, group numbers, and accounts in the mapping
+        for broker, broker_groups in account_mappings.items():
+            if not isinstance(broker_groups, dict):
+                await ctx.send(f"Error: broker_groups is not a dictionary for broker {broker}.")
+                continue  # Skip this broker
+
+            for group_number, accounts in broker_groups.items():
+                if not isinstance(accounts, dict):
+                    await ctx.send(f"Error: accounts is not a dictionary for group {group_number} in broker {broker}.")
+                    continue  # Skip this group
+
+                for account_number, nickname in accounts.items():
+                    # Check if nickname is a string (which it should be)
+                    if not isinstance(nickname, str):
+                        await ctx.send(f"Error: nickname is not a string for account {account_number} in broker {broker}.")
+                        continue
+
+                    # Write the account nickname into the Reverse Split Log instead of the placeholder
+                    reverse_split_log.cell(row=current_row, column=account_start_column, value=f"{broker} {nickname}")
+                    print(f"Updating Reverse Split Log at row {current_row}, column {account_start_column} for {broker} {nickname}")
+
+                    # Capture the cell reference in the Reverse Split Log
+                    cell_reference = f"{reverse_split_log.cell(row=current_row, column=account_start_column).coordinate}"
+
+                    # Update the Account Details sheet starting from the defined start row and column
+                    account_details_ws.cell(row=current_row, column=account_start_column, value=broker)
+                    account_details_ws.cell(row=current_row, column=account_start_column + 7, value=group_number)
+                    account_details_ws.cell(row=current_row, column=account_start_column + 8, value=account_number)
+                    account_details_ws.cell(row=current_row, column=account_start_column + 9, value=nickname)
+
+                    print(f"Updating Account Details at row {current_row}: Broker: {broker}, Group: {group_number}, "
+                          f"Account Number: {account_number}, Nickname: {nickname}")
+
+                    current_row += 1  # Move to the next row for the next account
+
+    except KeyError as e:
+        await ctx.send(f"Missing key in account mappings: {e}")
+        return
+    except Exception as e:
+        await ctx.send(f"Error updating Excel sheet: {e}")
+        return
+
+    # Save the updated workbook
+    try:
+        wb.save(excel_file)
+        await ctx.send(f"Updated {excel_file} with account mappings.")
+    except Exception as e:
+        await ctx.send(f"Error saving Excel file: {e}")
+
+
+# -- Logger Functions and Erroring
 
 def update_excel_log(orders, order_type, excel_file_path=EXCEL_FILE_PATH, error_log_file=ERROR_LOG_FILE):
     """Update the Excel log with the buy or sell orders. If the Excel log can't be updated, write to a text log."""
-    
+    # print(orders)
     wb = None  # Initialize wb to None to avoid UnboundLocalError
-
+        
     try:
         # Use the globally loaded config object to get values like account_start_row and stock_row
         account_start_row = config['excel_log_settings']['account_start_row']  # E.g., '8'
@@ -140,8 +283,9 @@ def update_excel_log(orders, order_type, excel_file_path=EXCEL_FILE_PATH, error_
 
         for order in orders:
             try:
-                broker_name, account, order_type, stock, _, _, price = order
-
+                broker_name, broker_number, account, order_type, stock, _, _, price = order
+                error_order = f"manual {broker_name} {broker_number} {account} {order_type} {stock} {price}"
+                print(error_order)
                 # Normalize order type values
                 if order_type == 'selling':
                     order_type = 'sell'
@@ -149,7 +293,7 @@ def update_excel_log(orders, order_type, excel_file_path=EXCEL_FILE_PATH, error_
                     order_type = 'buy'
 
                 # Get the account nickname based on the broker and account pair
-                mapped_name = get_account_nickname(broker_name, account)
+                mapped_name = get_account_nickname(broker_name, broker_number, account)
                 account_nickname = f"{broker_name} {mapped_name}"
                 error_order = f"manual {broker_name} {account} {order_type} {stock} {price}"
                 
@@ -203,7 +347,6 @@ def update_excel_log(orders, order_type, excel_file_path=EXCEL_FILE_PATH, error_
         if wb:  # Check if wb is not None before closing
             wb.close()
 
-
 def log_error_message(error_message, order_details, error_log_file):
     """Log an error message to the specified log file and avoid duplicate entries."""
     # Read the current contents of the error log file
@@ -229,7 +372,6 @@ def log_error_message(error_message, order_details, error_log_file):
     # Log the order details to a separate file for further processing
     log_error_order_details(order_details)
 
-
 def log_error_order_details(error_order):
     """Log the order details for later manual entry for errors in a separate file."""
     try:
@@ -243,7 +385,6 @@ def log_error_order_details(error_order):
         with open(ERROR_ORDER_DETAILS_FILE, 'a') as order_file:
             order_file.write(error_order + '\n')
         logging.info(f"Order details saved to {ERROR_ORDER_DETAILS_FILE}")
-
 
 def remove_error(order_details):
     """Remove the order from both the error log and the order details log."""

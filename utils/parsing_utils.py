@@ -1,11 +1,15 @@
-import re
 import csv
-import logging
 import json
-from discord import embeds
+import logging
+import re
 from datetime import datetime
-from utils.csv_utils import save_order_to_csv, save_holdings_to_csv, read_holdings_log, get_holdings_for_summary
-from utils.config_utils import load_config, get_account_nickname, load_account_mappings
+
+from discord import embeds
+
+from utils.config_utils import (get_account_nickname, load_account_mappings,
+                                load_config)
+from utils.csv_utils import (get_holdings_for_summary, read_holdings_log,
+                             save_holdings_to_csv, save_order_to_csv)
 from utils.watch_utils import update_watchlist
 
 # Load configuration
@@ -16,7 +20,7 @@ ORDERS_CSV_FILE = config['paths']['orders_log']
 
 # Order headers
 ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
-HOLDINGS_HEADERS = ['Key', 'Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
+HOLDINGS_HEADERS = ['Key', 'Broker Name', 'Broker Number', 'Account', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
 
 # Centralized function for standardizing broker names
 def standardize_broker_name(broker_name):
@@ -243,7 +247,8 @@ def parse_manual_order_message(content):
 
         # Returning the parsed values
         return {
-            'broker_name': parts[1] + ' ' + parts[2],  # Combining Broker and BrokerNumber
+            'broker_name': parts[1],
+            'group_number': parts[2],  # Combining Broker and BrokerNumber
             'account': parts[3],      # Account
             'order_type': parts[4],   # Order type (e.g., 'buy' or 'sell')
             'stock': parts[5],        # Stock ticker symbol
@@ -253,26 +258,34 @@ def parse_manual_order_message(content):
         print(f"Error parsing manual order: {e}")
         return None
 
-def parse_embed_message(embed, holdings_log_file):
-    
 
+def parse_embed_message(embed, holdings_log_file):
+    """
+    Parses an embed message and updates holdings in the CSV log based on the new JSON structure.
+    """
     for field in embed.fields:
         name_field = field.name
-        embed_split = name_field.split(' (')
-        broker_name = embed_split[0]
-        
-        # Extract the account number and remove leading zeros
-        #if broker_name == 'WELLSFARGO':
-        #    broker_name = 'Wellsfargo'
-        account_number = re.search(r'\((\w+)\)', field.name).group(1).lstrip('x') if re.search(r'\((\w+)\)', field.name) else field.name.lstrip('0')
+        embed_split = name_field.split(' ')
+        broker_name = embed_split[0]  # Extract broker name
+        group_number = embed_split[1] if len(embed_split) > 1 else '1'  # Extract group number or default to '1'
+        print(broker_name, group_number,)
 
-        # Get the account nickname using the helper function
-        account_nickname = get_account_nickname(broker_name, account_number)
-        mapped_account = broker_name + " " + account_nickname
+        # Extract the account number (only the last 4 digits, skipping the 'xxxxx' part)
+        account_number_match = re.search(r'x+(\d+)', field.name)  # Match the visible part of the account number
+        account_number = account_number_match.group(1) if account_number_match else None
+        print(account_number)
+
+        # If there's no account number, skip this field
+        if not account_number:
+            continue
+
+        # Get the account nickname using the helper function with broker, group number, and account number
+        account_nickname = get_account_nickname(broker_name, group_number, account_number)
+        mapped_account = f"{broker_name} {account_nickname}"
         account_key = mapped_account
-        print(broker_name)
 
-        print(f"Account nickname: {account_nickname}")
+        print(f"Broker: {broker_name}, Account Number: {account_number}, Group Number: {group_number}")
+        print(f"Account Nickname: {account_nickname}")
 
         # Read existing holdings log
         existing_holdings = []
@@ -284,14 +297,20 @@ def parse_embed_message(embed, holdings_log_file):
         new_holdings = []
         account_total = None
         for line in field.value.splitlines():
+            # Check for "No holdings in Account" and skip it
+            if "No holdings in Account" in line:
+                continue
+
+            # Example of line: "CTNT: 1.0 @ $0.19 = $0.19"
             match = re.match(r"(\w+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
             if match:
                 stock = match.group(1)
                 quantity = match.group(2)
                 price = match.group(3)
                 total_value = match.group(4)
-                new_holdings.append([account_key, broker_name, account_number, stock, quantity, price, total_value])
-                update_watchlist(broker_name, account_nickname, stock, quantity)
+                new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
+          
+            # Extract the total value for the account
             if "Total:" in line:
                 account_total = line.split(": $")[1].strip()
 
@@ -309,5 +328,3 @@ def parse_embed_message(embed, holdings_log_file):
             csv_writer.writerows(updated_holdings)
 
         print(f"Updated holdings for {account_key}.")
-
-
