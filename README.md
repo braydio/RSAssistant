@@ -1,30 +1,18 @@
 # RSAssistant
+
 TODO:
 - Restrict watchlist date values to date values, otherwise the ..watchlist/..reminder commands will break if it tries to parse a non-date
-# Updates:
-  - Changed main script to RSAssistant.py, to start bot run `python RSAssistant.py`
-  - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
-    - Webull 1 xxxxNUMB will be mapped to Webull 1 {"NUMB": "Cash Account"}
-  - Errors in updating excel log will me logged to error_log.txt
-    - Includes order in 'manual' format, can copy/paste to manual_order_entry.txt and run ..todiscord to re-process order
-  - I forget the other changes  
-
+ 
 ## Overview
 
-RSAssistant is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. The bot provides account summaries, tracks stocks your different brokerage accounts, and hopefully makes monitoring way the heck easier.
+RSAssistant is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. This script reads the output from auto-rsa in the discord channel and saves order activity and holdings information locally for quick recall / reference. Current features include a dynamic watchlist for users to specify upcoming r/s, accounts mapped to custom nicknames with order activity saved to a local excel file. This script does not directly access any of your accounts, so no credentials are needed other than discord bot / channel information.
 
 ## Setup
 
-Hopefully add more helpful setup instructions soon but for now: 
-
-1. Copy/paste and rename any file with 'example-' prefix
-2. Follow [the instructions per this guide to set up a discord bot](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) where it can see the output from the auto-rsa script, ideally as a live feed from your auto-rsa discord bot. 
+1. Rename files with the 'example-' prefix by removing the prefix (e.g., example-settings.yaml to settings.yaml).
+2. Follow [the instructions per this guide to set up a discord bot](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) where it can see the output from the auto-rsa script.
 3. Create a copy of [example-settings.yaml](https://github.com/braydio/RSAssistant/blob/master/config/example-settings.yaml) and remove the prefix 'example-'
-4. Save your discord channel ID, RSA bot ID, and your discord ID per per below
-
->[!NOTE]
->The field `ID_OF_YOUR_NEW_BOT` will be the *token* for your new bot (not actually the ID) <sup>it's okay to be confused  <sup>I am too</sup></sup>
-
+4. Save your discord channel ID, auto-rsa bot ID, and your discord ID per per below along with the token of your new RSAssistant bot
 ```
 # Discord ID's
 discord_ids:
@@ -37,35 +25,34 @@ discord:
   token: "ID_OF_YOUR_NEW_BOT"
   token: "ID_OF_YOUR_NEW_BOT"
 ```
-Once the settings are setting'ed and the bot is ready to start doing the work of a small team of interns,
-
-  |> Set up and initialize a venv
-
-  |>> Install the required packages with pip install
-   
-  |>>> Start the robit as in the next few lines:
-
+Once the settings are set, initialize the bot with the following commands: 
 ```   
 python -m venv venv
 venv/Scripts/activate
 pip install -r requirements.txt
 python RSAssistant.py discord
 ```
-7(?) I probably missed some stuff but feel free to DM me if you have questions 
 
 ## Account Names
 
-Account names are set in config/account_mapping.json.
+Account names are managed in two files:
+
+  - logs/excel/ReverseSplitLog.xlsx (Excel file)
+  - config/account_mapping.json (JSON file)
 
 >[!NOTE]
 >If account nickname is not specified, the account is saved as '(Broker) (Group #) (Account #)' eg 'Webull 1 1234'
 
-The names listed on the 
-```
-    LEFT SIDE     |     RIGHT SIDE
-is the OUTPUT     |     ARE CUSTOM NAMES
-FROM auto-rsa     |     which can be modified
+ - Accounts can be defined in the shaded columns (A:E) on the Account Details sheet in ReverseSplitLog.xlsx. 
+    ```
+    - (Discord Account Format) |   (Excel Account Details Format)    
+    -      Webull 1 xxx4565    |  (Webull) (1) (4565) (Cash Account) 
+    ```
+To update mappings from the excel log run `..updatemappings`
+Use the provided example-account_mapping.json to avoid duplicate account mappings. The .json file does not need to be configured if you use the excel process with the ..update commands, this will be done automatically. 
 
+Account Mapping in account_mapping.json:
+```
         "Webull 1": { 
             "1234": "Margin Account Nickname",
             "2345": "Account Nickname",
@@ -74,12 +61,6 @@ FROM auto-rsa     |     which can be modified
             },
 
 ```
-To set your custom nicknames, change the 4 digits (eg. 1234) to the actual last 4 for each respective broker / account pair.
-Set the names on the right side to whatever you would like. 
-
->[!NOTE]
->Set your custom names to match the names set in the excel log, the bot updates the excel log automatically.
-
 
 ## Features
 
@@ -87,22 +68,19 @@ Set the names on the right side to whatever you would like.
   - Add, remove specific tickers for the bot to track. This should be done *before* sending any orders for new r/s stocks.
   -  `..watch ticker` starts watching a ticker  |  `..watched ticker` to stop watching
     
-- **Bot Commands from within Discord Channel**:
+- **Other Bot Commands from within Discord Channel**:
   - Enter the bot commands to the same channel that the auto-rsa bot is in.
   - Command prefix is `..`
     - Eg: *`..brokerwith arqq`* lists all brokers with position in ARQQ
   - List all commands with *`..help`*
-  -   *all commands listed do not all work all the way yet, please enjoy responsibly* :)
 
 - **Excel Log with Automatic Updates**:
-  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase.
-  - Setup instructions per excel file
+  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase, Tradier, Firstrade and any of the other ones in auto-rsa that I might be forgetting.
+  - Map account names in Account Details sheet of the Excel log and run the `..updatemapping` and `..updatelog` commands and it will begin logging
   - Can also send order details in bulk by saving order details down in manual_order_entry.txt in the provided format and run command '..todiscord'  
 
 # ToDo
-  - Link changes in accounts_mapping.json to excel log
-  - Update excel.example for new mappings
-  - Reformat account summary commands to not be such a massive text wall
+  - Clean account summary command prints
   - Clean up all the non-working code from (mainly watch_utils.py)
   - Debug discord command ..brokerlist *broker* to see where this robot learned to count
 
@@ -113,9 +91,5 @@ This project relies on [auto-rsa by Nelson Dane](main/program_function_flow.md) 
 For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/auto-rsa/blob/main/README.md)
 
 ## Program Flow and Structure
-
-References *(these are quite outdated)*:
-- [Program Function Flow](program_function_flow) - Detailed flow of how *(some of)* the program works internally *(I might finish this)*
-- [Program Map](program_map.txt) - A hierarchical structure outlining the modules and functions in the project. *(See note above ^)*
-
+wip
 
