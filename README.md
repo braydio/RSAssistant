@@ -2,14 +2,6 @@
 
 TODO:
 - Restrict watchlist date values to date values, otherwise the ..watchlist/..reminder commands will break if it tries to parse a non-date
-
-# Updates:
-  - Changed main script to RSAssistant.py, to start bot run `python RSAssistant.py`
-  - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
-    - Webull 1 xxxxNUMB will be mapped to Webull 1 {"NUMB": "Cash Account"}
-  - Errors in updating excel log will me logged to error_log.txt
-    - Includes order in 'manual' format, can copy/paste to manual_order_entry.txt and run ..todiscord to re-process order
-  - I forget the other changes  
  
 ## Overview
 
