@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import os
+import yfinance as yf
 
 import discord
 import yaml
@@ -143,8 +144,6 @@ async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
     except Exception as e:
         await ctx.send(f"Error loading account mappings: {e}")
 
-
-
 def all_broker_accounts(broker):
     """
     Retrieve all accounts (nicknames and numbers) for a given broker.
@@ -214,7 +213,6 @@ async def all_account_nicknames(ctx, broker):
 
     await ctx.send(embed=embed)
 
-
 def all_account_numbers(broker):
     """
     Retrieve all account numbers for a given broker.
@@ -280,6 +278,24 @@ def get_account_totals(broker, group_number=None):
     return account_totals
 
 # -- Helper functions
+
+def get_last_stock_price(stock):
+    """
+    Fetches the last price of the given stock using Yahoo Finance.
+    """
+    try:
+        ticker = yf.Ticker(stock)
+        stock_info = ticker.history(period="1d")
+        if not stock_info.empty:
+            last_price = stock_info['Close'].iloc[-1]
+            return round(last_price, 2)  # Round to 2 decimal places for simplicity
+            
+        else:
+            logging.warning(f"No stock data found for {stock}.")
+            return None
+    except Exception as e:
+        logging.error(f"Error fetching last price for {stock}: {e}")
+        return None
 
 async def send_large_message_chunks(ctx, message):
     # Discord messages have a max character limit of 2000

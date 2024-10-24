@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import yfinance as yf
 from discord import Embed
 
-from utils.config_utils import get_account_nickname, load_config
+from utils.config_utils import get_account_nickname, load_config, get_last_stock_price
 from utils.excel_utils import update_excel_log
 
 # Load configuration and mappings
@@ -155,24 +155,6 @@ def save_holdings_to_csv(holdings_data):
                 writer.writerow(entry)
     except Exception as e:
         logging.error(f"Error saving holdings: {e}")
-
-def get_last_stock_price(stock):
-    """
-    Fetches the last price of the given stock using Yahoo Finance.
-    """
-    try:
-        ticker = yf.Ticker(stock)
-        stock_info = ticker.history(period="1d")
-        if not stock_info.empty:
-            last_price = stock_info['Close'].iloc[-1]
-            return round(last_price, 2)  # Round to 2 decimal places for simplicity
-            
-        else:
-            logging.warning(f"No stock data found for {stock}.")
-            return None
-    except Exception as e:
-        logging.error(f"Error fetching last price for {stock}: {e}")
-        return None
 
 def read_holdings_log(file_path=HOLDINGS_LOG_CSV):
     """Reads holdings log to avoid duplicates."""
