@@ -8,7 +8,17 @@
     ```
 To update mappings from the excel log run `..updatemappings`
 
+TODO:
+- Restrict watchlist date values to date values, otherwise the ..watchlist/..reminder commands will break if it tries to parse a non-date
 
+# Updates:
+  - Changed main script to RSAssistant.py, to start bot run `python RSAssistant.py`
+  - Changed the way accounts are mapped, they now include Broker Group # & Account # Last4
+    - Webull 1 xxxxNUMB will be mapped to Webull 1 {"NUMB": "Cash Account"}
+  - Errors in updating excel log will me logged to error_log.txt
+    - Includes order in 'manual' format, can copy/paste to manual_order_entry.txt and run ..todiscord to re-process order
+  - I forget the other changes  
+ 
 ## Overview
 
 RSAssistant is a tracking system designed to run in a discord channel alongside [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa) to help manage and monitor the progress of reverse-split share roundups across multiple broker accounts. This script reads the output from auto-rsa in the discord channel and saves order activity and holdings information locally for quick recall / reference. Current features include a dynamic watchlist for users to specify upcoming r/s, accounts mapped to custom nicknames with order activity saved to a local excel file. This script does not directly access any of your accounts, so no credentials are needed other than discord bot / channel information.

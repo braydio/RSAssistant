@@ -1,12 +1,14 @@
 import csv
-import os
 import logging
-import yfinance as yf
-from datetime import datetime, timedelta
-from utils.config_utils import load_config, get_account_nickname
-from utils.excel_utils import update_excel_log
+import os
 from collections import defaultdict
+from datetime import datetime, timedelta
+
+import yfinance as yf
 from discord import Embed
+
+from utils.config_utils import get_account_nickname, load_config
+from utils.excel_utils import update_excel_log
 
 # Load configuration and mappings
 config = load_config()

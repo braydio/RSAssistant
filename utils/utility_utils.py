@@ -1,10 +1,12 @@
 import asyncio
+import csv
 import json
 import logging
-from datetime import datetime, timedelta
-import csv
 import os
-from utils.config_utils import load_config, load_account_mappings, get_account_nickname
+from datetime import datetime, timedelta
+
+from utils.config_utils import (get_account_nickname, load_account_mappings,
+                                load_config)
 from utils.csv_utils import read_holdings_log
 
 # Load configuration and holdings data
@@ -188,6 +190,7 @@ async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_TXT, delay=1):
 
 async def send_large_message_chunks(ctx, message):
     # Discord messages have a max character limit of 2000
+    print(" Brayden need to move this to config_utils.")
     max_length = 2000
 
     # Split the message by line breaks
@@ -209,3 +212,5 @@ async def send_large_message_chunks(ctx, message):
     # Send any remaining text in the current chunk
     if current_chunk:
         await ctx.send(current_chunk)
+    
+    print(" Brayden need to move this to config_utils.")

@@ -1,14 +1,18 @@
-import json
-import os
-import logging
-import pandas as pd
-import discord
 import asyncio
-from datetime import datetime, timedelta
+import csv
+import json
+import logging
+import os
 from collections import defaultdict
-from utils.config_utils import load_config, get_account_nickname, load_account_mappings, should_skip
+from datetime import datetime, timedelta
+
+import discord
+import pandas as pd
+
+from utils.config_utils import (get_account_nickname, load_account_mappings,
+                                load_config, send_large_message_chunks,
+                                should_skip)
 from utils.excel_utils import add_stock_to_excel_log
-from utils.utility_utils import send_large_message_chunks
 
 # Load configuration and paths from settings
 config = load_config()
@@ -56,11 +60,7 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
     if ticker not in watch_list:
         watch_list[ticker] = {
             'split_date': split_date,
-            'reminder_sent': False,
-            'brokers': defaultdict(lambda: {
-                'state': 'initial',  
-                'last_updated': None
-            })
+            'reminder_sent': False
         }
         add_stock_to_excel_log(ticker, EXCEL_XLSX_FILE)
         logging.info("Added stock to watchlist and passed to excel utils.")
@@ -68,97 +68,12 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
     save_watch_list()
 
 def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=None):
-    """Updates the watchlist based on holdings data and order type."""
-    stock = stock.upper()
-    quantity = float(quantity)
-    if stock in watch_list:
-        watchlist_entry = watch_list[stock]
+    """This function has been deprecated and no longer updates the watchlist."""
+    print(f"update_watchlist called for stock: {stock}, but this function is deprecated.")
+    # You could even raise a warning to make sure it’s not used inadvertently in the future.
+    # import warnings
+    # warnings.warn("update_watchlist is deprecated and no longer updates the watchlist", DeprecationWarning)
 
-        if broker_name not in watchlist_entry['brokers']:
-            watchlist_entry['brokers'][broker_name] = {}
-
-        if quantity > 0:
-            # If the account has a positive quantity, mark it as "has position"
-            watchlist_entry['brokers'][broker_name][account_nickname] = {
-                'state': 'has position',
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-        elif order_type == 'sell':
-            # If it's a sell order, mark it as "completed"
-            watchlist_entry['brokers'][broker_name][account_nickname] = {
-                'state': 'completed',  # Marking as completed instead of removing
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            print(f"Account {account_nickname} marked as completed for {stock}.")
-        elif order_type == 'finalize_closure':
-            # If we are finalizing the closure, remove the account from the watchlist
-            if account_nickname in watchlist_entry['brokers'][broker_name]:
-                del watchlist_entry['brokers'][broker_name][account_nickname]
-                print(f"Account {account_nickname} closed out position for {stock}.")
-
-            if not watchlist_entry['brokers'][broker_name]:
-                del watchlist_entry['brokers'][broker_name]
-                print(f"Broker {broker_name} removed from watchlist for {stock}.")
-
-            if not watchlist_entry['brokers']:
-                del watch_list[stock]
-                print(f"Stock {stock} fully closed across all accounts. Removed from watchlist.")
-
-        save_watch_list()
-
-    else:
-        print(f"{stock} is not in the watchlist.")
-
-
-
-async def check_watchlist_positions(ctx, show_accounts=False):
-    """Check which brokers or accounts still need to purchase watchlist tickers."""
-    today = datetime.now().strftime('%Y-%m-%d')
-    account_mapping = load_account_mappings()
-
-    reminders = []  # Store reminder messages
-    for ticker, data in watch_list.items():
-        split_date = data.get('split_date')
-        split_date = datetime.strptime(split_date, '%m/%d').replace(year=datetime.now().year).strftime('%Y-%m-%d')
-
-        if split_date >= today:
-            ticker_reminders = []  # Stores details per ticker
-            print(f"Checking ticker {ticker} with split date {split_date}")
-
-            for broker, accounts in account_mapping.items():
-                watchlist_broker_accounts = data.get('brokers', {}).get(broker, {})
-                print(f"Broker in watchlist: {broker}, Accounts in watchlist for broker: {watchlist_broker_accounts}")
-
-                account_reminders = []
-                for account in accounts:
-                    account_nickname = get_account_nickname(broker, account)
-
-                    # Skip accounts in the excluded list or completed state
-                    if should_skip(broker, account_nickname):
-                        continue
-
-                    account_data = watchlist_broker_accounts.get(account_nickname, {})
-                    account_state = account_data.get('state', 'waiting')
-
-                    # Only add to reminders if the state is "waiting" or "has position"
-                    if account_state == 'waiting' or account_state == 'has position':
-                        account_reminders.append(account_nickname)
-
-                if account_reminders:
-                    if show_accounts:
-                        account_list = ", ".join(account_reminders)
-                        ticker_reminders.append(f"Broker: {broker} | Accounts: {account_list}")
-                    else:
-                        ticker_reminders.append(f"Broker: {broker}")
-
-            if ticker_reminders:
-                reminders.append(f"Yet to purchase {ticker}:\n" + "\n".join(ticker_reminders))
-
-    if reminders:
-        reminder_message = "\n\n".join(reminders)
-        await send_large_message_chunks(ctx, reminder_message)
-    else:
-        await ctx.send("All accounts have purchased the necessary stocks.")
 
 async def get_watch_status(ctx, ticker: str):
     """Get the status of a specific stock ticker across all accounts."""
@@ -176,7 +91,7 @@ async def get_watch_status(ctx, ticker: str):
             else:
                 status += f"{broker_name}: No position in {total_accounts} accounts\n"
 
-        await send_chunked_message(ctx, status)
+        await send_large_message_chunks(ctx, status)
     else:
         await ctx.send(f"{ticker} is not being watched.")
 
@@ -339,30 +254,3 @@ async def stop_watching(ctx, ticker: str):
     else:
         await ctx.send(f"{ticker} is not being watched.")
         logging.info(f"{ticker} was not being watched.")
-
-async def send_chunked_message(ctx, message):
-    """Send messages in chunks to avoid exceeding Discord's message length limit."""
-    if len(message) > 2000:
-        chunks = [message[i:i + 2000] for i in range(0, len(message), 2000)]
-        for chunk in chunks:
-            await ctx.send(chunk)
-    else:
-        await ctx.send(message)
-
-async def watch_ticker_status(ctx, ticker: str):
-    """Track the progress of a ticker across all accounts."""
-    ticker = ticker.upper()
-
-    if ticker not in watch_list:
-        await ctx.send(f"{ticker} is not being watched.")
-        return
-
-    total_accounts = sum(len(accounts) for accounts in watch_list[ticker]['brokers'].values())
-    buy_count = sum(1 for accounts in watch_list[ticker]['brokers'].values() for acc in accounts.values() if acc['steps_completed'] >= 1)
-
-    progress_message = (
-        f"**Progress for {ticker}:**\n"
-        f"Accounts bought: {buy_count}/{total_accounts}\n"
-        f"Split date: {watch_list[ticker]['split_date']}\n"
-    )
-    await ctx.send(progress_message)
