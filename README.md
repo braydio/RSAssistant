@@ -1,13 +1,5 @@
 # RSAssistant
 
-# Updates 10/20:
-  - Accounts can be defined in the shaded columns (A:E) on the Account Details sheet in ReverseSplitLog.xlsx. 
-    ```
-    - (Discord Account Format) |        (Account Details Format)      | (Reverse Split Log Account Format)
-    - Webull 1 xxx4565         | (Webull) (1) (4565) ({Cash Account}) | Webull 1 Cash Account
-    ```
-To update mappings from the excel log run `..updatemappings`
-
 TODO:
 - Restrict watchlist date values to date values, otherwise the ..watchlist/..reminder commands will break if it tries to parse a non-date
 
@@ -59,6 +51,14 @@ Account names are managed in two files:
 >[!NOTE]
 >If account nickname is not specified, the account is saved as '(Broker) (Group #) (Account #)' eg 'Webull 1 1234'
 
+ - Accounts can be defined in the shaded columns (A:E) on the Account Details sheet in ReverseSplitLog.xlsx. 
+    ```
+    - (Discord Account Format) |   (Excel Account Details Format)    
+    -      Webull 1 xxx4565    |  (Webull) (1) (4565) (Cash Account) 
+    ```
+To update mappings from the excel log run `..updatemappings`
+Use the provided example-account_mapping.json to avoid duplicate account mappings. The .json file does not need to be configured if you use the excel process with the ..update commands, this will be done automatically. 
+
 Account Mapping in account_mapping.json:
 ```
         "Webull 1": { 
@@ -69,13 +69,6 @@ Account Mapping in account_mapping.json:
             },
 
 ```
-To set custom nicknames from the json file, modify the digits (e.g., 1234) to match the last four digits of the actual account number, and update the nickname accordingly. 
-
->[!NOTE]
->Ensure the custom names match those in the Excel log, as the bot updates the Excel log automatically.
-
-Initialize the bo
-
 
 ## Features
 
@@ -88,17 +81,14 @@ Initialize the bo
   - Command prefix is `..`
     - Eg: *`..brokerwith arqq`* lists all brokers with position in ARQQ
   - List all commands with *`..help`*
-  -   *all commands listed do not all work all the way yet, please enjoy responsibly* :)
 
 - **Excel Log with Automatic Updates**:
-  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase.
-  - Setup instructions per excel file
+  - Currently logs for Fidelity, Webull, Fennel, Robinhood, Public, BBAE, Vanguard, Schwab, Chase, Tradier, Firstrade and any of the other ones in auto-rsa that I might be forgetting.
+  - Map account names in Account Details sheet of the Excel log and run the `..updatemapping` and `..updatelog` commands and it will begin logging
   - Can also send order details in bulk by saving order details down in manual_order_entry.txt in the provided format and run command '..todiscord'  
 
 # ToDo
-  - Link changes in accounts_mapping.json to excel log
-  - Update excel.example for new mappings
-  - Reformat account summary commands to not be such a massive text wall
+  - Clean account summary command prints
   - Clean up all the non-working code from (mainly watch_utils.py)
   - Debug discord command ..brokerlist *broker* to see where this robot learned to count
 
