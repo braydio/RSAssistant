@@ -53,6 +53,7 @@ def update_watchlist_with_stock(ticker):
         logging.error(f"Error updating watchlist: {e}")
 
 # Main functions
+# Main functions
 async def watch_ticker(ctx, ticker: str, split_date: str):
     """Add a stock ticker with a split date to the watch list."""
     ticker = ticker.upper()
@@ -62,10 +63,18 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
             'split_date': split_date,
             'reminder_sent': False
         }
-        add_stock_to_excel_log(ticker, EXCEL_XLSX_FILE)
-        logging.info("Added stock to watchlist and passed to excel utils.")
+        try:
+            # Ensure the async function is awaited
+            await add_stock_to_excel_log(ticker, split_date, EXCEL_XLSX_FILE)
+            logging.info("Added stock to watchlist and passed to excel utils.")
+        except Exception as e:
+            await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")
+            logging.error(f"Error adding stock {ticker} to Excel: {str(e)}")
+            return
+    
     await ctx.send(f"Watching {ticker} with a reverse split date on {split_date}.")
     save_watch_list()
+
 
 def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=None):
     """This function has been deprecated and no longer updates the watchlist."""

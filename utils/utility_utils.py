@@ -52,61 +52,77 @@ async def profile(ctx, broker_name):
     await send_large_message_chunks(ctx, "\n".join(summary_message))
 
 async def track_ticker_summary(ctx, ticker, show_details=False, holding_logs_file=HOLDINGS_LOG_CSV, account_mapping_file=ACCOUNT_MAPPING_FILE):
+    """
+    Track which accounts hold or do not hold the specified ticker.
+    """
     holdings = {}
     no_holdings = {}
     unique_accounts = {}
     ticker = ticker.upper()
 
+    # Load the account mappings from the new structure (brokers -> groups -> accounts)
     account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
 
     try:
-        with open(account_mapping_file, 'r') as am_file:
-            account_mapping = json.load(am_file)
-
-        # Open the holdings log
         with open(holding_logs_file, mode='r') as file:
             csv_reader = csv.DictReader(file)
+
             for row in csv_reader:
                 broker_name = row['Broker Name']
+                broker_number = row['Broker Number']
                 account = row['Account']
 
-                # Handle Fennel specific account number parsing
+                # Handle specific cases like Fennel (if custom account parsing is needed)
                 if broker_name.lower() == 'fennel':
                     account = get_fennel_account_number(account)
                 else:
-                    account = account[-4:]  # Last 4 digits for non-Fennel accounts
+                    account = account[-4:]  # Last 4 digits for other brokers
 
                 stock = row['Stock'].upper()
                 quantity = float(row['Quantity'])
 
-                if broker_name not in holdings:
-                    holdings[broker_name] = set()
-                    no_holdings[broker_name] = set()
-                    unique_accounts[broker_name] = set()
+                # Key is now broker + group
+                broker_key = f"{broker_name} {broker_number}"
 
-                unique_accounts[broker_name].add(account)
+                # Initialize the holding and no_holdings structures if not already present
+                if broker_key not in holdings:
+                    holdings[broker_key] = set()
+                    no_holdings[broker_key] = set()
+                    unique_accounts[broker_key] = set()
 
+                unique_accounts[broker_key].add(account)
+
+                # Track accounts holding the ticker
                 if stock == ticker and quantity > 0:
-                    holdings[broker_name].add(account)
+                    holdings[broker_key].add(account)
                 else:
-                    no_holdings[broker_name].add(account)
+                    no_holdings[broker_key].add(account)
 
         message = f"**{ticker} Holdings - All Brokerages**\n**=============================**\n"
-        for broker, accounts in account_mapping.items():
-            total = len(accounts)
-            held_accounts = len(holdings.get(broker, []))
-            message += f"**| ** {broker} - Position in {held_accounts} of {total} accounts\n"
 
+        # Iterate through the account mapping (broker -> group -> accounts)
+        for broker_name, groups in account_mapping.items():
+            for group_number, accounts in groups.items():
+                broker_key = f"{broker_name} {group_number}"
+                total_accounts = len(accounts)
+                held_accounts = len(holdings.get(broker_key, []))
+
+                # Add summary for each broker and group
+                message += f"**| ** {broker_name} (Group {group_number}) - Position in {held_accounts} of {total_accounts} accounts\n"
+
+        # Show account-level details if requested
         if show_details:
             message += "\n**Ticker not in the following accounts:**\n"
-            for broker, accounts in no_holdings.items():
+            for broker_key, accounts in no_holdings.items():
                 if accounts:
-                    message += f"\n**{broker}**:\n"
+                    message += f"\n**{broker_key}**:\n"
                     for account in accounts:
-                        account_nickname = get_account_nickname(broker, account)
-                        logging.info(account_nickname)
-                        # Check for matching orders in orders_log.csv
-                        order_details = get_order_details(broker, account, ticker)
+                        # Extract broker name and group number from the key
+                        broker_name, group_number = broker_key.split(' ')
+                        account_nickname = get_account_nickname(broker_name, group_number, account)
+
+                        # Check for matching orders in orders_log.csv (if relevant)
+                        order_details = get_order_details(broker_name, group_number, account, ticker)
                         if order_details:
                             message += f" **| <> ** {account_nickname} :  Found transaction data: \n   <-> *{order_details}*\n"
                         else:

@@ -48,10 +48,10 @@ async def add_stock_to_excel_log(ticker, split_date, excel_file_path=EXCEL_FILE_
         date_row = config['excel_log_settings']['date_row']    # E.g., '2' for row 2
         split_ratio_placeholder = config['excel_log_settings']['split_ratio_placeholder']  # E.g., "(S:S)"
         
-
-        # Load the Excel workbook and the 'Reverse Split Log' sheet
+        # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
         wb = load_excel_log(excel_file_path)
         print("Loaded Excel log workbook")
+        
         if not wb:
             logging.error("Workbook could not be loaded.")
             return
@@ -76,12 +76,12 @@ async def add_stock_to_excel_log(ticker, split_date, excel_file_path=EXCEL_FILE_
 
         # Set the stock ticker and split ratio placeholder in the new columns
         ws.cell(row=stock_row, column=ticker_col).value = ticker
-        ws.cell(row=stock_row, column=split_ratio_col).value = split_ratio_placeholder
+        ws.cell(row=stock_row, column=split_ratio_col).value = split_date
 
         # Insert the split date one row above the stock ticker
         ws.cell(row=date_row, column=ticker_col).value = split_date
 
-        # Save the workbook and close it
+        # Save the workbook and close it (no await)
         wb.save(excel_file_path)
         logging.info(f"Added {ticker} to Excel log at column {get_column_letter(ticker_col)} with split date {split_date}.")
 
@@ -372,18 +372,19 @@ def log_error_message(error_message, order_details, error_log_file):
     # Log the order details to a separate file for further processing
     log_error_order_details(order_details)
 
-def log_error_order_details(error_order):
+def log_error_order_details(order_details):
     """Log the order details for later manual entry for errors in a separate file."""
     try:
+        print(order_details)
         with open(ERROR_ORDER_DETAILS_FILE, 'r') as order_file:
             existing_orders = order_file.read()
     except FileNotFoundError:
         existing_orders = ""
 
     # Avoid logging duplicate orders
-    if error_order not in existing_orders:
+    if order_details not in existing_orders:
         with open(ERROR_ORDER_DETAILS_FILE, 'a') as order_file:
-            order_file.write(error_order + '\n')
+            order_file.write(order_details + '\n')
         logging.info(f"Order details saved to {ERROR_ORDER_DETAILS_FILE}")
 
 def remove_error(order_details):
