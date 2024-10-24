@@ -1,1 +1,348 @@
-Key,Broker Name,Account,Stock,Quantity,Price,Position Value,Account Total
+Key,Broker Name,Broker Number,Account,Stock,Quantity,Price,Position Value,Account Total
+Robinhood 4130,Robinhood,1,4130,INHD,1.0,4.50,4.50,68.30
+Robinhood 4130,Robinhood,1,4130,NCNC,1.0,0.11,0.11,68.30
+Robinhood 4130,Robinhood,1,4130,SANW,0.052632,2.76,0.15,68.30
+Robinhood 4130,Robinhood,1,4130,CTNT,1.0,0.20,0.20,68.30
+Robinhood 4130,Robinhood,1,4130,NUKK,1.0,0.29,0.29,68.30
+Robinhood 1076,Robinhood,1,1076,NCNC,1.0,0.11,0.11,231.10
+Robinhood 1076,Robinhood,1,1076,SANW,0.052632,2.76,0.15,231.10
+Robinhood 1076,Robinhood,1,1076,CTNT,1.0,0.20,0.20,231.10
+Robinhood 1076,Robinhood,1,1076,INHD,1.0,4.50,4.50,231.10
+Robinhood 1076,Robinhood,1,1076,NUKK,1.0,0.29,0.29,231.10
+Robinhood 7076,Robinhood,1,7076,NCNC,1.0,0.11,0.11,272.40
+Robinhood 7076,Robinhood,1,7076,SANW,0.052632,2.76,0.15,272.40
+Robinhood 7076,Robinhood,1,7076,CTNT,1.0,0.20,0.20,272.40
+Robinhood 7076,Robinhood,1,7076,INHD,1.0,4.50,4.50,272.40
+Robinhood 7076,Robinhood,1,7076,NUKK,1.0,0.29,0.29,272.40
+Robinhood 0725,Robinhood,2,0725,INHD,1.0,4.50,4.50,53.76
+Robinhood 0725,Robinhood,2,0725,NCNC,1.0,0.11,0.11,53.76
+Robinhood 0725,Robinhood,2,0725,SANW,0.052632,2.76,0.15,53.76
+Robinhood 0725,Robinhood,2,0725,CTNT,1.0,0.20,0.20,53.76
+Robinhood 0725,Robinhood,2,0725,NUKK,1.0,0.29,0.29,53.76
+Robinhood 1188,Robinhood,2,1188,NCNC,1.0,0.11,0.11,98.93
+Robinhood 1188,Robinhood,2,1188,SANW,0.052632,2.76,0.15,98.93
+Robinhood 1188,Robinhood,2,1188,CTNT,1.0,0.20,0.20,98.93
+Robinhood 1188,Robinhood,2,1188,INHD,1.0,4.50,4.50,98.93
+Robinhood 1188,Robinhood,2,1188,NUKK,1.0,0.29,0.29,98.93
+Robinhood 9604,Robinhood,2,9604,NCNC,1.0,0.11,0.11,96.87
+Robinhood 9604,Robinhood,2,9604,SANW,0.052632,2.76,0.15,96.87
+Robinhood 9604,Robinhood,2,9604,CTNT,1.0,0.20,0.20,96.87
+Robinhood 9604,Robinhood,2,9604,INHD,1.0,4.50,4.50,96.87
+Robinhood 9604,Robinhood,2,9604,NUKK,1.0,0.29,0.29,96.87
+Robinhood 8081,Robinhood,3,8081,INHD,1.0,4.50,4.50,27.26
+Robinhood 8081,Robinhood,3,8081,NCNC,1.0,0.11,0.11,27.26
+Robinhood 8081,Robinhood,3,8081,SANW,0.052632,2.76,0.15,27.26
+Robinhood 8081,Robinhood,3,8081,CTNT,1.0,0.20,0.20,27.26
+Robinhood 8081,Robinhood,3,8081,NUKK,1.0,0.29,0.29,27.26
+Robinhood 7867,Robinhood,3,7867,NCNC,1.0,0.11,0.11,73.48
+Robinhood 7867,Robinhood,3,7867,SANW,0.052632,2.76,0.15,73.48
+Robinhood 7867,Robinhood,3,7867,CTNT,1.0,0.20,0.20,73.48
+Robinhood 7867,Robinhood,3,7867,INHD,1.0,4.50,4.50,73.48
+Robinhood 7867,Robinhood,3,7867,NUKK,1.0,0.29,0.29,73.48
+Robinhood 0529,Robinhood,3,0529,NCNC,1.0,0.11,0.11,71.99
+Robinhood 0529,Robinhood,3,0529,SANW,0.052632,2.76,0.15,71.99
+Robinhood 0529,Robinhood,3,0529,CTNT,1.0,0.20,0.20,71.99
+Robinhood 0529,Robinhood,3,0529,INHD,1.0,4.50,4.50,71.99
+Robinhood 0529,Robinhood,3,0529,NUKK,1.0,0.29,0.29,71.99
+BBAE Cash Account 1,BBAE,1,4365,CTNT,1.0,0.19,0.19,75.20
+BBAE Cash Account 1,BBAE,1,4365,K016130,1.0,0.00,0.00,75.20
+BBAE Cash Account 1,BBAE,1,4365,NCNC,1.0,0.11,0.11,75.20
+BBAE Cash Account 1,BBAE,1,4365,NUKK,1.0,0.27,0.27,75.20
+BBAE (Lem) Cash Account 1,BBAE,2,4837,CTNT,1.0,0.19,0.19,23.05
+BBAE (Lem) Cash Account 1,BBAE,2,4837,K016130,1.0,0.00,0.00,23.05
+BBAE (Lem) Cash Account 1,BBAE,2,4837,NCNC,1.0,0.11,0.11,23.05
+BBAE (Lem) Cash Account 1,BBAE,2,4837,NUKK,1.0,0.27,0.27,23.05
+BBAE (Dre) Cash Account 1,BBAE,3,5363,CTNT,1.0,0.19,0.19,7.92
+BBAE (Dre) Cash Account 1,BBAE,3,5363,NUKK,1.0,0.27,0.27,7.92
+Fidelity Margin Account,Fidelity,1,6699,INHD,1.0,4.39,4.39,1986.56
+Fidelity Margin Account,Fidelity,1,6699,CTNT,1.0,0.19,0.19,1986.56
+Fidelity Margin Account,Fidelity,1,6699,NVDA,1.0,139.56,139.56,1986.56
+Fidelity Margin Account,Fidelity,1,6699,GOOGL,1.0,162.78,162.78,1986.56
+Fidelity Margin Account,Fidelity,1,6699,VOO,1.037,531.27,550.93,1986.56
+Fidelity Margin Account,Fidelity,1,6699,CRWD,1.0,299.30,299.30,1986.56
+Fidelity Cash Account 1,Fidelity,1,7057,INHD,1.0,4.39,4.39,102.83
+Fidelity Cash Account 1,Fidelity,1,7057,NCNC,1.0,0.11,0.11,102.83
+Fidelity Cash Account 1,Fidelity,1,7057,CTNT,1.0,0.19,0.19,102.83
+Fidelity Cash Account 1,Fidelity,1,7057,VTI,0.144,285.05,41.05,102.83
+Fidelity Cash Account 1,Fidelity,1,7057,VHT,0.052,275.72,14.34,102.83
+Fidelity Cash Account 1,Fidelity,1,7057,NUKK,1.0,0.27,0.27,102.83
+Fidelity Cash Account 2,Fidelity,1,3294,INHD,1.0,4.39,4.39,31.42
+Fidelity Cash Account 2,Fidelity,1,3294,NCNC,1.0,0.11,0.11,31.42
+Fidelity Cash Account 2,Fidelity,1,3294,CTNT,1.0,0.19,0.19,31.42
+Fidelity Cash Account 2,Fidelity,1,3294,NUKK,1.0,0.27,0.27,31.42
+Fidelity Roth IRA,Fidelity,1,9313,INHD,1.0,4.39,4.39,265.53
+Fidelity Roth IRA,Fidelity,1,9313,NCNC,1.0,0.11,0.11,265.53
+Fidelity Roth IRA,Fidelity,1,9313,CTNT,1.0,0.19,0.19,265.53
+Fidelity Roth IRA,Fidelity,1,9313,VUG,0.25,388.06,97.02,265.53
+Fidelity Roth IRA,Fidelity,1,9313,VOO,0.145,531.27,77.03,265.53
+Fidelity Roth IRA,Fidelity,1,9313,RITM,2.0,10.56,21.12,265.53
+Fidelity Roth IRA,Fidelity,1,9313,NUKK,1.0,0.27,0.27,265.53
+Fidelity 1580,Fidelity,1,1580,INHD,1.0,4.39,4.39,238.85
+Fidelity 1580,Fidelity,1,1580,NCNC,1.0,0.11,0.11,238.85
+Fidelity 1580,Fidelity,1,1580,CTNT,1.0,0.19,0.19,238.85
+Fidelity 1580,Fidelity,1,1580,VOO,0.326,531.27,173.19,238.85
+Fidelity 1580,Fidelity,1,1580,NUKK,1.0,0.27,0.27,238.85
+Fidelity IRA,Fidelity,1,1550,NVDA,1.0,139.56,139.56,465.76
+Fidelity IRA,Fidelity,1,1550,VOO,0.237,531.27,125.91,465.76
+Fidelity 7060,Fidelity,1,7060,CRWD,1.0,299.30,299.30,21804.08
+Fidelity 7060,Fidelity,1,7060,NVDA,22.002,139.56,3070.60,21804.08
+Fidelity 7060,Fidelity,1,7060,NLR,3.0,92.53,277.59,21804.08
+Fidelity 7060,Fidelity,1,7060,SOFI,100.0,10.42,1042.00,21804.08
+Fidelity 7060,Fidelity,1,7060,VUG,8.754,388.06,3397.08,21804.08
+Fidelity 7060,Fidelity,1,7060,SPMO,12.914,92.99,1200.87,21804.08
+Fidelity 7060,Fidelity,1,7060,VOO,6.525,531.27,3466.54,21804.08
+Fidelity 7060,Fidelity,1,7060,VHT,12.697,275.72,3500.82,21804.08
+Fidelity 7060,Fidelity,1,7060,RITM,119.627,10.56,1263.26,21804.08
+Fidelity 7060,Fidelity,1,7060,PFE,105.661,28.86,3049.38,21804.08
+Fidelity HSA 1,Fidelity,1,6381,NCNC,1.0,0.11,0.11,3.30
+Fidelity HSA 1,Fidelity,1,6381,CTNT,1.0,0.19,0.19,3.30
+Fidelity HSA 1,Fidelity,1,6381,NUKK,1.0,0.27,0.27,3.30
+Fidelity 80,Fidelity,1,80,RIVN,2.0,10.16,20.32,73.90
+Fidelity 80,Fidelity,1,80,RITM,2.044,10.56,21.58,73.90
+Fidelity (Lem) Cash Account 1,Fidelity,2,5494,CTNT,1.0,0.19,0.19,92.99
+Fidelity (Lem) Cash Account 1,Fidelity,2,5494,INHD,1.0,4.39,4.39,92.99
+Fidelity (Lem) Cash Account 1,Fidelity,2,5494,NCNC,1.0,0.11,0.11,92.99
+Fidelity (Lem) Cash Account 1,Fidelity,2,5494,NUKK,1.0,0.27,0.27,92.99
+Fidelity (Lem) Cash Account 1,Fidelity,2,5494,VUG,0.064,388.06,24.84,92.99
+Fidelity (Lem) Cash Account 2,Fidelity,2,7235,CTNT,1.0,0.19,0.19,43.04
+Fidelity (Lem) Cash Account 2,Fidelity,2,7235,INHD,1.0,4.39,4.39,43.04
+Fidelity (Lem) Cash Account 2,Fidelity,2,7235,NCNC,1.0,0.11,0.11,43.04
+Fidelity (Lem) Cash Account 2,Fidelity,2,7235,NUKK,1.0,0.27,0.27,43.04
+Fidelity (Lem) IRA,Fidelity,2,7060,CTNT,1.0,0.19,0.19,123.76
+Fidelity (Lem) IRA,Fidelity,2,7060,INHD,1.0,4.39,4.39,123.76
+Fidelity (Lem) IRA,Fidelity,2,7060,NCNC,1.0,0.11,0.11,123.76
+Fidelity (Lem) IRA,Fidelity,2,7060,NUKK,1.0,0.27,0.27,123.76
+Fidelity (Lem) IRA,Fidelity,2,7060,VOO,0.132,531.27,70.13,123.76
+Fidelity (Lem) Roth IRA,Fidelity,2,9166,CTNT,1.0,0.19,0.19,123.21
+Fidelity (Lem) Roth IRA,Fidelity,2,9166,INHD,1.0,4.39,4.39,123.21
+Fidelity (Lem) Roth IRA,Fidelity,2,9166,NCNC,1.0,0.11,0.11,123.21
+Fidelity (Lem) Roth IRA,Fidelity,2,9166,NUKK,1.0,0.27,0.27,123.21
+Fidelity (Lem) Roth IRA,Fidelity,2,9166,VOO,0.132,531.27,70.13,123.21
+Fidelity (Lem) HSA 1,Fidelity,2,9457,CTNT,1.0,0.19,0.19,2.79
+Fidelity (Lem) HSA 1,Fidelity,2,9457,NCNC,1.0,0.11,0.11,2.79
+Fidelity (Lem) HSA 1,Fidelity,2,9457,NUKK,1.0,0.27,0.27,2.79
+Fidelity (Dre) Cash Account 1,Fidelity,3,0025,CTNT,1.0,0.19,0.19,22.66
+Fidelity (Dre) Cash Account 1,Fidelity,3,0025,INHD,1.0,4.39,4.39,22.66
+Fidelity (Dre) Cash Account 1,Fidelity,3,0025,NCNC,1.0,0.11,0.11,22.66
+Fidelity (Dre) Cash Account 1,Fidelity,3,0025,NUKK,1.0,0.27,0.27,22.66
+Fidelity (Dre) Cash Account 2,Fidelity,3,0039,CTNT,1.0,0.19,0.19,23.02
+Fidelity (Dre) Cash Account 2,Fidelity,3,0039,INHD,1.0,4.39,4.39,23.02
+Fidelity (Dre) Cash Account 2,Fidelity,3,0039,NCNC,1.0,0.11,0.11,23.02
+Fidelity (Dre) Cash Account 2,Fidelity,3,0039,NUKK,1.0,0.27,0.27,23.02
+Fidelity (Dre) IRA,Fidelity,3,0521,CTNT,1.0,0.19,0.19,21.97
+Fidelity (Dre) IRA,Fidelity,3,0521,INHD,1.0,4.39,4.39,21.97
+Fidelity (Dre) IRA,Fidelity,3,0521,NCNC,1.0,0.11,0.11,21.97
+Fidelity (Dre) IRA,Fidelity,3,0521,NUKK,1.0,0.27,0.27,21.97
+Fidelity (Dre) Roth IRA,Fidelity,3,9116,CTNT,1.0,0.19,0.19,21.33
+Fidelity (Dre) Roth IRA,Fidelity,3,9116,INHD,1.0,4.39,4.39,21.33
+Fidelity (Dre) Roth IRA,Fidelity,3,9116,NCNC,1.0,0.11,0.11,21.33
+Fidelity (Dre) Roth IRA,Fidelity,3,9116,NUKK,1.0,0.27,0.27,21.33
+Fidelity 179,Fidelity,3,179,FFLEX,17.903,18.58,332.64,332.64
+Firstrade Cash Account 1,Firstrade,1,5272,CTNT,1.0,0.20,0.20,57.61
+Firstrade Cash Account 1,Firstrade,1,5272,K016130,1.0,0.00,0.00,57.61
+Firstrade Cash Account 1,Firstrade,1,5272,NCNC,1.0,0.11,0.11,57.61
+Firstrade Roth IRA,Firstrade,1,6914,CTNT,1.0,0.20,0.20,40.40
+Firstrade Roth IRA,Firstrade,1,6914,K016130,1.0,0.00,0.00,40.40
+Firstrade Roth IRA,Firstrade,1,6914,NCNC,1.0,0.11,0.11,40.40
+Firstrade IRA,Firstrade,1,6915,CTNT,1.0,0.20,0.20,40.41
+Firstrade IRA,Firstrade,1,6915,K016130,1.0,0.00,0.00,40.41
+Firstrade IRA,Firstrade,1,6915,NCNC,1.0,0.11,0.11,40.41
+Firstrade (Dre) Cash Account 1,Firstrade,2,9338,CTNT,1.0,0.20,0.20,15.57
+Firstrade (Dre) Cash Account 1,Firstrade,2,9338,K016130,1.0,0.00,0.00,15.57
+Firstrade (Dre) Cash Account 1,Firstrade,2,9338,NCNC,1.0,0.11,0.11,15.57
+Public Cash Account,Public,1,9752,MGRX,1.0,2.37,2.37,130.77
+Public Cash Account,Public,1,9752,INHD,1.0,3.96,3.96,130.77
+Public Cash Account,Public,1,9752,ZCAR,1.0,6.06,6.06,130.77
+Public Cash Account,Public,1,9752,ME,1.0,4.72,4.72,130.77
+Public Cash Account,Public,1,9752,TRAW,0.04,4.88,0.20,130.77
+Public Cash Account,Public,1,9752,SONN,0.125,6.00,0.75,130.77
+Public Cash Account,Public,1,9752,SYTA,0.05555,1.16,0.06,130.77
+Public Cash Account,Public,1,9752,HURA,1.0,4.88,4.88,130.77
+Public Cash Account,Public,1,9752,SANW,0.05263,2.89,0.15,130.77
+Public Cash Account,Public,1,9752,TOVX,0.04,1.47,0.06,130.77
+Public Cash Account,Public,1,9752,MNPR,0.2,4.86,0.97,130.77
+Public Cash Account,Public,1,9752,NUKK,1.0,0.29,0.29,130.77
+Public Cash Account,Public,1,9752,NCNC,1.0,0.11,0.11,130.77
+Public Cash Account,Public,1,9752,DLPN,1.0,1.38,1.38,130.77
+Public Cash Account,Public,1,9752,K016130,1.0,0.00,0.00,130.77
+Public Cash Account,Public,1,9752,QMCO,0.05,5.14,0.26,130.77
+Public Cash Account,Public,1,9752,DPRO,0.04,3.01,0.12,130.77
+Public Cash Account,Public,1,9752,ILLR,1.0,2.55,2.55,130.77
+Public Cash Account,Public,1,9752,CTNT,1.0,0.20,0.20,130.77
+Public Margin Account,Public,2,2663,ZCAR,1.0,6.06,6.06,122.47
+Public Margin Account,Public,2,2663,QMCO,0.05,5.14,0.26,122.47
+Public Margin Account,Public,2,2663,MNPR,0.2,4.86,0.97,122.47
+Public Margin Account,Public,2,2663,INHD,1.0,3.96,3.96,122.47
+Public Margin Account,Public,2,2663,HURA,1.0,4.88,4.88,122.47
+Public Margin Account,Public,2,2663,MGRX,1.0,2.37,2.37,122.47
+Public Margin Account,Public,2,2663,SONN,0.125,6.00,0.75,122.47
+Public Margin Account,Public,2,2663,NUKK,1.0,0.29,0.29,122.47
+Public Margin Account,Public,2,2663,ME,1.0,4.72,4.72,122.47
+Public Margin Account,Public,2,2663,TRAW,0.04,4.88,0.20,122.47
+Public Margin Account,Public,2,2663,NCNC,1.0,0.11,0.11,122.47
+Public Margin Account,Public,2,2663,DLPN,1.0,1.38,1.38,122.47
+Public Margin Account,Public,2,2663,K016130,1.0,0.00,0.00,122.47
+Public Margin Account,Public,2,2663,CTNT,1.0,0.20,0.20,122.47
+Public Margin Account,Public,2,2663,TOVX,0.04,1.47,0.06,122.47
+Public Margin Account,Public,2,2663,SANW,0.05263,2.89,0.15,122.47
+Public Margin Account,Public,2,2663,DPRO,0.04,3.01,0.12,122.47
+Public Margin Account,Public,2,2663,ILLR,1.0,2.55,2.55,122.47
+Public (Lem) Margin Account,Public,3,0822,TOVX,0.04,1.47,0.06,168.39
+Public (Lem) Margin Account,Public,3,0822,HURA,1.0,4.88,4.88,168.39
+Public (Lem) Margin Account,Public,3,0822,CTNT,1.0,0.20,0.20,168.39
+Public (Lem) Margin Account,Public,3,0822,TRAW,0.04,4.88,0.20,168.39
+Public (Lem) Margin Account,Public,3,0822,SANW,0.05263,2.89,0.15,168.39
+Public (Lem) Margin Account,Public,3,0822,WTO,1.0,0.43,0.43,168.39
+Public (Lem) Margin Account,Public,3,0822,MTNB,1.0,3.36,3.36,168.39
+Public (Lem) Margin Account,Public,3,0822,NCNC,1.0,0.11,0.11,168.39
+Public (Lem) Margin Account,Public,3,0822,K016130,1.0,0.00,0.00,168.39
+Public (Lem) Margin Account,Public,3,0822,NUKK,1.0,0.29,0.29,168.39
+Public (Lem) Margin Account,Public,3,0822,MGRX,1.0,2.37,2.37,168.39
+Public (Lem) Margin Account,Public,3,0822,ILLR,1.0,2.55,2.55,168.39
+Public (Lem) Margin Account,Public,3,0822,ZCAR,1.0,6.06,6.06,168.39
+Public (Lem) Margin Account,Public,3,0822,ME,1.0,4.72,4.72,168.39
+Public (Lem) Margin Account,Public,3,0822,INHD,1.0,3.96,3.96,168.39
+Public (Lem) Margin Account,Public,3,0822,PRFX,1.0,0.75,0.75,168.39
+Public (Lem) Margin Account,Public,3,0822,DLPN,1.0,1.38,1.38,168.39
+Public (Dre) Cash Account,Public,5,0326,ILLR,1.0,2.55,2.55,26.74
+Public (Dre) Cash Account,Public,5,0326,NUKK,1.0,0.29,0.29,26.74
+Public (Dre) Cash Account,Public,5,0326,NCNC,1.0,0.11,0.11,26.74
+Public (Dre) Cash Account,Public,5,0326,DLPN,1.0,1.38,1.38,26.74
+Public (Dre) Cash Account,Public,5,0326,K016130,1.0,0.00,0.00,26.74
+Public (Dre) Cash Account,Public,5,0326,SANW,0.05263,2.89,0.15,26.74
+Public (Dre) Cash Account,Public,5,0326,MGRX,1.0,2.37,2.37,26.74
+Public (Dre) Cash Account,Public,5,0326,ZCAR,1.0,6.06,6.06,26.74
+Public (Dre) Cash Account,Public,5,0326,HURA,1.0,4.88,4.88,26.74
+Public (Dre) Cash Account,Public,5,0326,CTNT,1.0,0.20,0.20,26.74
+Public (Dre) Cash Account,Public,5,0326,ME,1.0,4.72,4.72,26.74
+Robinhood Cash Account,Robinhood,1,4130,INHD,1.0,4.50,4.50,68.30
+Robinhood Cash Account,Robinhood,1,4130,NCNC,1.0,0.11,0.11,68.30
+Robinhood Cash Account,Robinhood,1,4130,SANW,0.052632,2.76,0.15,68.30
+Robinhood Cash Account,Robinhood,1,4130,CTNT,1.0,0.20,0.20,68.30
+Robinhood Cash Account,Robinhood,1,4130,NUKK,1.0,0.29,0.29,68.30
+Robinhood Roth IRA,Robinhood,1,1076,NCNC,1.0,0.11,0.11,231.10
+Robinhood Roth IRA,Robinhood,1,1076,SANW,0.052632,2.76,0.15,231.10
+Robinhood Roth IRA,Robinhood,1,1076,CTNT,1.0,0.20,0.20,231.10
+Robinhood Roth IRA,Robinhood,1,1076,INHD,1.0,4.50,4.50,231.10
+Robinhood Roth IRA,Robinhood,1,1076,NUKK,1.0,0.29,0.29,231.10
+Robinhood IRA,Robinhood,1,7076,NCNC,1.0,0.11,0.11,272.40
+Robinhood IRA,Robinhood,1,7076,SANW,0.052632,2.76,0.15,272.40
+Robinhood IRA,Robinhood,1,7076,CTNT,1.0,0.20,0.20,272.40
+Robinhood IRA,Robinhood,1,7076,INHD,1.0,4.50,4.50,272.40
+Robinhood IRA,Robinhood,1,7076,NUKK,1.0,0.29,0.29,272.40
+Robinhood (Lem)  Cash Account,Robinhood,2,0725,INHD,1.0,4.50,4.50,53.76
+Robinhood (Lem)  Cash Account,Robinhood,2,0725,NCNC,1.0,0.11,0.11,53.76
+Robinhood (Lem)  Cash Account,Robinhood,2,0725,SANW,0.052632,2.76,0.15,53.76
+Robinhood (Lem)  Cash Account,Robinhood,2,0725,CTNT,1.0,0.20,0.20,53.76
+Robinhood (Lem)  Cash Account,Robinhood,2,0725,NUKK,1.0,0.29,0.29,53.76
+Robinhood (Lem)  Roth IRA,Robinhood,2,1188,NCNC,1.0,0.11,0.11,98.93
+Robinhood (Lem)  Roth IRA,Robinhood,2,1188,SANW,0.052632,2.76,0.15,98.93
+Robinhood (Lem)  Roth IRA,Robinhood,2,1188,CTNT,1.0,0.20,0.20,98.93
+Robinhood (Lem)  Roth IRA,Robinhood,2,1188,INHD,1.0,4.50,4.50,98.93
+Robinhood (Lem)  Roth IRA,Robinhood,2,1188,NUKK,1.0,0.29,0.29,98.93
+Robinhood (Lem)  IRA,Robinhood,2,9604,NCNC,1.0,0.11,0.11,96.87
+Robinhood (Lem)  IRA,Robinhood,2,9604,SANW,0.052632,2.76,0.15,96.87
+Robinhood (Lem)  IRA,Robinhood,2,9604,CTNT,1.0,0.20,0.20,96.87
+Robinhood (Lem)  IRA,Robinhood,2,9604,INHD,1.0,4.50,4.50,96.87
+Robinhood (Lem)  IRA,Robinhood,2,9604,NUKK,1.0,0.29,0.29,96.87
+Robinhood (Dre)  Cash Account,Robinhood,3,8081,INHD,1.0,4.50,4.50,27.26
+Robinhood (Dre)  Cash Account,Robinhood,3,8081,NCNC,1.0,0.11,0.11,27.26
+Robinhood (Dre)  Cash Account,Robinhood,3,8081,SANW,0.052632,2.76,0.15,27.26
+Robinhood (Dre)  Cash Account,Robinhood,3,8081,CTNT,1.0,0.20,0.20,27.26
+Robinhood (Dre)  Cash Account,Robinhood,3,8081,NUKK,1.0,0.29,0.29,27.26
+Robinhood (Dre)  IRA,Robinhood,3,7867,NCNC,1.0,0.11,0.11,73.48
+Robinhood (Dre)  IRA,Robinhood,3,7867,SANW,0.052632,2.76,0.15,73.48
+Robinhood (Dre)  IRA,Robinhood,3,7867,CTNT,1.0,0.20,0.20,73.48
+Robinhood (Dre)  IRA,Robinhood,3,7867,INHD,1.0,4.50,4.50,73.48
+Robinhood (Dre)  IRA,Robinhood,3,7867,NUKK,1.0,0.29,0.29,73.48
+Robinhood (Dre)  Roth IRA,Robinhood,3,0529,NCNC,1.0,0.11,0.11,71.99
+Robinhood (Dre)  Roth IRA,Robinhood,3,0529,SANW,0.052632,2.76,0.15,71.99
+Robinhood (Dre)  Roth IRA,Robinhood,3,0529,CTNT,1.0,0.20,0.20,71.99
+Robinhood (Dre)  Roth IRA,Robinhood,3,0529,INHD,1.0,4.50,4.50,71.99
+Robinhood (Dre)  Roth IRA,Robinhood,3,0529,NUKK,1.0,0.29,0.29,71.99
+Schwab IRA,Schwab,1,8745,CTNT,1.0,0.21,0.21,22.19
+Schwab IRA,Schwab,1,8745,497CVR027,1.0,0.00,0.00,22.19
+Schwab IRA,Schwab,1,8745,NCNC,1.0,0.11,0.11,22.19
+Schwab IRA,Schwab,1,8745,NUKK,1.0,0.29,0.29,22.19
+Schwab Cash Account 1,Schwab,1,1038,CTNT,1.0,0.21,0.21,67.13
+Schwab Cash Account 1,Schwab,1,1038,497CVR027,1.0,0.00,0.00,67.13
+Schwab Cash Account 1,Schwab,1,1038,NCNC,1.0,0.11,0.11,67.13
+Schwab Cash Account 1,Schwab,1,1038,NUKK,1.0,0.29,0.29,67.13
+Schwab Cash Account 2,Schwab,1,9547,CTNT,1.0,0.21,0.21,65.21
+Schwab Cash Account 2,Schwab,1,9547,497CVR027,1.0,0.00,0.00,65.21
+Schwab Cash Account 2,Schwab,1,9547,NCNC,1.0,0.11,0.11,65.21
+Schwab Cash Account 2,Schwab,1,9547,NUKK,1.0,0.29,0.29,65.21
+Schwab Roth IRA,Schwab,1,7312,CTNT,1.0,0.21,0.21,37.58
+Schwab Roth IRA,Schwab,1,7312,497CVR027,1.0,0.00,0.00,37.58
+Schwab Roth IRA,Schwab,1,7312,NCNC,1.0,0.11,0.11,37.58
+Schwab Roth IRA,Schwab,1,7312,NUKK,1.0,0.29,0.29,37.58
+Schwab Cash Account 3,Schwab,1,7683,CTNT,1.0,0.21,0.21,77.40
+Schwab Cash Account 3,Schwab,1,7683,497CVR027,1.0,0.00,0.00,77.40
+Schwab Cash Account 3,Schwab,1,7683,NCNC,1.0,0.11,0.11,77.40
+Schwab Cash Account 3,Schwab,1,7683,NUKK,1.0,0.29,0.29,77.40
+Schwab (Lem)  Roth IRA,Schwab,2,0687,CTNT,1.0,0.21,0.21,25.02
+Schwab (Lem)  Roth IRA,Schwab,2,0687,497CVR027,1.0,0.00,0.00,25.02
+Schwab (Lem)  Roth IRA,Schwab,2,0687,NCNC,1.0,0.11,0.11,25.02
+Schwab (Lem)  Roth IRA,Schwab,2,0687,NUKK,1.0,0.29,0.29,25.02
+Schwab (Lem)  IRA,Schwab,2,7313,CTNT,1.0,0.21,0.21,28.23
+Schwab (Lem)  IRA,Schwab,2,7313,497CVR027,1.0,0.00,0.00,28.23
+Schwab (Lem)  IRA,Schwab,2,7313,NCNC,1.0,0.11,0.11,28.23
+Schwab (Lem)  IRA,Schwab,2,7313,NUKK,1.0,0.29,0.29,28.23
+Schwab (Lem)  Margin Account 1,Schwab,2,6613,CTNT,1.0,0.21,0.21,25.17
+Schwab (Lem)  Margin Account 1,Schwab,2,6613,497CVR027,1.0,0.00,0.00,25.17
+Schwab (Lem)  Margin Account 1,Schwab,2,6613,NCNC,1.0,0.11,0.11,25.17
+Schwab (Lem)  Margin Account 1,Schwab,2,6613,NUKK,1.0,0.29,0.29,25.17
+Schwab (Lem)  Cash Account 1,Schwab,2,2476,CTNT,1.0,0.21,0.21,25.24
+Schwab (Lem)  Cash Account 1,Schwab,2,2476,497CVR027,1.0,0.00,0.00,25.24
+Schwab (Lem)  Cash Account 1,Schwab,2,2476,NCNC,1.0,0.11,0.11,25.24
+Schwab (Lem)  Cash Account 1,Schwab,2,2476,NUKK,1.0,0.29,0.29,25.24
+Schwab (Dre)  Margin Account 1,Schwab,3,0410,CTNT,1.0,0.21,0.21,20.95
+Schwab (Dre)  Margin Account 1,Schwab,3,0410,497CVR027,1.0,0.00,0.00,20.95
+Schwab (Dre)  Margin Account 1,Schwab,3,0410,NCNC,1.0,0.11,0.11,20.95
+Schwab (Dre)  Margin Account 1,Schwab,3,0410,NUKK,1.0,0.29,0.29,20.95
+Schwab (Dre)  Cash Account 1,Schwab,3,4278,CTNT,1.0,0.21,0.21,20.98
+Schwab (Dre)  Cash Account 1,Schwab,3,4278,497CVR027,1.0,0.00,0.00,20.98
+Schwab (Dre)  Cash Account 1,Schwab,3,4278,NCNC,1.0,0.11,0.11,20.98
+Schwab (Dre)  Cash Account 1,Schwab,3,4278,NUKK,1.0,0.29,0.29,20.98
+Schwab (Dre)  Roth IRA,Schwab,3,6958,CTNT,1.0,0.21,0.21,21.05
+Schwab (Dre)  Roth IRA,Schwab,3,6958,497CVR027,1.0,0.00,0.00,21.05
+Schwab (Dre)  Roth IRA,Schwab,3,6958,NCNC,1.0,0.11,0.11,21.05
+Schwab (Dre)  Roth IRA,Schwab,3,6958,NUKK,1.0,0.29,0.29,21.05
+Schwab (Dre)  IRA,Schwab,3,3649,CTNT,1.0,0.21,0.21,21.88
+Schwab (Dre)  IRA,Schwab,3,3649,497CVR027,1.0,0.00,0.00,21.88
+Schwab (Dre)  IRA,Schwab,3,3649,NCNC,1.0,0.11,0.11,21.88
+Schwab (Dre)  IRA,Schwab,3,3649,NUKK,1.0,0.29,0.29,21.88
+Tradier Cash Account 1,Tradier,1,7978,CTNT,1.0,0.19,0.19,31.20
+Tradier Cash Account 1,Tradier,1,7978,497CVR027,1.0,0.00,0.00,31.20
+Tradier Cash Account 1,Tradier,1,7978,NCNC,1.0,0.11,0.11,31.20
+Tradier Cash Account 1,Tradier,1,7978,NUKK,1.0,0.27,0.27,31.20
+Tradier (Dre) Cash Account 1,Tradier,2,0386,CTNT,1.0,0.19,0.19,35.42
+Tradier (Dre) Cash Account 1,Tradier,2,0386,497CVR027,1.0,0.00,0.00,35.42
+Tradier (Dre) Cash Account 1,Tradier,2,0386,NCNC,1.0,0.11,0.11,35.42
+Tradier (Dre) Cash Account 1,Tradier,2,0386,NUKK,1.0,0.27,0.27,35.42
+Webull Margin Account,Webull,1,5766,NUKK,1.0,0.27,0.27,156.34
+Webull Margin Account,Webull,1,5766,CTNT,1.0,0.19,0.19,156.34
+Webull Margin Account,Webull,1,5766,NCNC,1.0,0.11,0.11,156.34
+Webull Margin Account,Webull,1,5766,SNAP,0.26955,10.17,2.74,156.34
+Webull Margin Account,Webull,1,5766,F,0.55972,11.06,6.19,156.34
+Webull Cash Account,Webull,1,6640,NUKK,1.0,0.27,0.27,317.26
+Webull Cash Account,Webull,1,6640,CTNT,1.0,0.19,0.19,317.26
+Webull Cash Account,Webull,1,6640,NCNC,1.0,0.11,0.11,317.26
+Webull Cash Account,Webull,1,6640,GOOG,0.06079,164.50,10.00,317.26
+Webull Cash Account,Webull,1,6640,F,3.35832,11.06,37.14,317.26
+Webull Cash Account,Webull,1,6640,SPOT,0.0803,379.83,30.50,317.26
+Webull Cash Account,Webull,1,6640,SNAP,3.7737,10.15,38.30,317.26
+Webull 9,Webull,3,9,ZCAR,1.0,6.12,6.12,31.20
+WELLSFARGO Cash Account 1,WELLSFARGO,1,9740,CTNT,1.0,0.19,0.19,7.57
+WELLSFARGO Cash Account 1,WELLSFARGO,1,9740,NCNC,1.0,0.11,0.11,7.57
+WELLSFARGO IRA,WELLSFARGO,1,2603,CTNT,1.0,0.19,0.19,51.63
+WELLSFARGO IRA,WELLSFARGO,1,2603,NCNC,1.0,0.11,0.11,51.63
+WELLSFARGO IRA,WELLSFARGO,1,2603,VMAR,0.0,4.02,0.00,51.63
+WELLSFARGO IRA,WELLSFARGO,1,2603,XPON,0.0,3.06,0.00,51.63
+WELLSFARGO Cash Account 2,WELLSFARGO,1,3523,CETX,1.0,0.30,0.30,73.33
+WELLSFARGO Cash Account 2,WELLSFARGO,1,3523,CTNT,1.0,0.19,0.19,73.33
+WELLSFARGO Cash Account 2,WELLSFARGO,1,3523,NCNC,1.0,0.11,0.11,73.33
+WELLSFARGO Cash Account 2,WELLSFARGO,1,3523,VMAR,0.0,4.02,0.00,73.33
+WELLSFARGO Cash Account 2,WELLSFARGO,1,3523,XPON,0.0,3.06,0.00,73.33
+WELLSFARGO Roth IRA,WELLSFARGO,1,9113,NCNC,1.0,0.11,0.11,42.27
+WELLSFARGO Roth IRA,WELLSFARGO,1,9113,XPON,0.0,3.06,0.00,42.27
