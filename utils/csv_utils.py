@@ -29,10 +29,10 @@ def ensure_csv_file_exists(file_path, headers):
             writer = csv.writer(file)
             writer.writerow(headers)
 
-def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
+def save_order_to_csv(broker_name, broker_number, account_number, order_type, quantity, stock):
     """Saves order information to the orders CSV, removes duplicates, and removes stale orders."""
     print("Processing new order, checking for duplicates and stale entries.")
-        
+    print(broker_name, broker_number)    
     try:
         # Load existing orders from the CSV
         existing_orders = []
@@ -46,7 +46,7 @@ def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
 
         # Remove duplicates and stale orders
         updated_orders = []
-        new_order_key = (broker_name, account_number, order_type.lower(), stock.upper())
+        new_order_key = (broker_name, broker_number, account_number, order_type.lower(), stock.upper())
 
         for order in existing_orders:
             order_date = datetime.strptime(order['Date'], '%Y-%m-%d')
@@ -66,6 +66,7 @@ def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
         current_time = datetime.now().strftime('%Y-%m-%d')
         new_order = {
             'Broker Name': broker_name,
+            'Broker Number': broker_number,  # Add broker number here
             'Account Number': account_number,
             'Order Type': order_type.capitalize(),
             'Stock': stock.upper(),
@@ -76,7 +77,7 @@ def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
 
         # Write the updated orders list back to the CSV with headers
         with open(ORDERS_CSV_FILE, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=ORDERS_HEADERS)
+            writer = csv.DictWriter(file, fieldnames=ORDERS_HEADERS + ['Broker Number'])  # Include Broker Number in headers
             writer.writeheader()  # Ensure headers are written
             writer.writerows(updated_orders)
 
@@ -84,15 +85,17 @@ def save_order_to_csv(broker_name, account_number, order_type, quantity, stock):
         price = get_last_stock_price(new_order['Stock'])
         print(price)
 
-        account_nickname = get_account_nickname(broker_name, account_number)
-        print(f"Updating excel log for {broker_name}, {account_nickname}, with order {order_type} {quantity} of {stock} at {price} on {current_time}")
+        account_nickname = get_account_nickname(broker_name, broker_number, account_number)
+        print(f"Updating excel log for {broker_name} {broker_number}, {account_nickname}, with order {order_type} {quantity} of {stock} at {price} on {current_time}")
 
-        update_excel_log([[broker_name, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), EXCEL_XLSX_FILE)
+        # Pass broker_number to update_excel_log
+        update_excel_log([[broker_name, broker_number, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), EXCEL_XLSX_FILE)
 
     except ValueError as ve:
         logging.error(f"Error saving order due to value error: {ve}. Check quantity or stock.")
     except Exception as e:
         logging.error(f"Error saving order: {e}")
+
 
 def update_holdings_data(order_type, broker_name, account_number, stock, quantity, price):
     """
