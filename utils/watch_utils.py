@@ -11,7 +11,7 @@ import pandas as pd
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config, send_large_message_chunks,
-                                should_skip)
+                                should_skip, get_last_stock_price)
 from utils.excel_utils import add_stock_to_excel_log
 
 # Load configuration and paths from settings
@@ -108,7 +108,8 @@ async def list_watched_tickers(ctx):
         
         for ticker, data in watch_list.items():
             split_date = data.get('split_date', 'N/A')
-            embed.add_field(name=f" **|** {ticker}", value=f" **|** Split Date: {split_date} \n", inline=True)
+            last_price = get_last_stock_price(ticker)
+            embed.add_field(name=f"{ticker} **|** ${last_price:.2f}", value=f" **|** Split Date: {split_date} \n", inline=True)
         
         await ctx.send(embed=embed)
 
