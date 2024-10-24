@@ -103,22 +103,20 @@ def handle_complete_order(match, broker_name, broker_number):
         if broker_name.lower() in ['robinhood', 'public', 'bbae', 'fennel']:
             # Specific to these brokers
             action, quantity, stock, account_number = match.groups()[1:5]
-        elif broker_name.lower() == 'webull' and 'buy' in match.groups():
-            # Webull-specific buy
-            quantity, stock = match.groups()[1:3]
-            account_number = 'N/A'
-            action = 'buy'
+        elif broker_name.lower() == 'webull':
+            # Webull-specific sell
+            if 'sell' in match.group(0).lower():
+                # Webull-specific sell
+                quantity, stock, account_number = match.groups()[1:4]
+                action = 'sell'
+            elif 'buy' in match.group(0).lower():
+                # Webull-specific buy
+                quantity, stock = match.groups()[1:3]
+                account_number = 'N/A'
+                action = 'buy'
         elif broker_name.lower() in ['fidelity', 'wellsfargo']:
             # Fidelity/Wells Fargo extract account and action
             account_number, action, quantity, stock = match.groups()[1:5]
-        elif broker_name.lower() == 'webull' and 'sell' in match.groups():
-            # Webull-specific sell
-            quantity, stock, account_number = match.groups()[1:4]
-            if quantity == '1.0':
-                action = 'sell'
-            elif quantity in ['99.0', '999.0']:
-                action = 'buy'
-                quantity = '1'
         else:
             raise ValueError(f"Broker {broker_name} not recognized in complete order handler.")
 
@@ -132,6 +130,7 @@ def handle_complete_order(match, broker_name, broker_number):
 
     except Exception as e:
         print(f"Error handling complete order: {e}")
+
 
 def handle_incomplete_order(match, broker_order):
     """Handles incomplete buy/sell orders for Chase, Schwab, and Firstrade."""
