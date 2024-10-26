@@ -12,16 +12,17 @@ import pandas as pd
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config, send_large_message_chunks,
                                 should_skip, get_last_stock_price)
-from utils.excel_utils import add_stock_to_excel_log
+from utils.excel_utils import add_stock_to_excel_log, get_excel_file_path
 
 # Load configuration and paths from settings
 config = load_config()
 WATCH_FILE = config['paths']['watch_list']
-EXCEL_XLSX_FILE = config['paths']['excel_log']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 TARGET_CHANNEL_ID = config['discord_ids']['channel_id']  # change to ['discord_ids']['reminder_channel_id']
 excluded_brokers = config.get('excluded_brokers', {})
+
+excel_log_file = get_excel_file_path()
 
 # Dictionary to track the watch list for specific tickers across accounts
 watch_list = defaultdict(lambda: defaultdict(dict))
@@ -52,8 +53,9 @@ def update_watchlist_with_stock(ticker):
     except Exception as e:
         logging.error(f"Error updating watchlist: {e}")
 
-# Main functions
-# Main functions
+
+# -- Main functions
+
 async def watch_ticker(ctx, ticker: str, split_date: str):
     """Add a stock ticker with a split date to the watch list."""
     ticker = ticker.upper()
@@ -65,7 +67,7 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
         }
         try:
             # Ensure the async function is awaited
-            await add_stock_to_excel_log(ticker, split_date, EXCEL_XLSX_FILE)
+            await add_stock_to_excel_log(ticker, split_date, excel_log_file)
             logging.info("Added stock to watchlist and passed to excel utils.")
         except Exception as e:
             await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")

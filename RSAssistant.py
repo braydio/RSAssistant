@@ -17,7 +17,7 @@ from discord.ext import commands
 from utils.config_utils import (all_account_nicknames, all_account_numbers,
                                 all_brokers, all_brokers_groups, load_config)
 from utils.csv_utils import read_holdings_log, save_holdings_to_csv
-from utils.excel_utils import index_account_details, map_accounts_in_excel_log, update_excel_log
+from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, update_excel_log
 from utils.parsing_utils import (parse_embed_message,
                                  parse_manual_order_message,
                                  parse_order_message)
@@ -31,9 +31,9 @@ from utils.watch_utils import (list_watched_tickers,
 # Load configuration and holdings data
 config = load_config()
 holdings_data = read_holdings_log()
+excel_log_file = get_excel_file_path()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 MANUAL_ORDER_ENTRY_TXT = config['paths']['manual_orders']
-EXCEL_FILE_PATH = config['paths']['excel_log']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 task = None
 
@@ -67,7 +67,7 @@ async def on_ready():
     
 # Check if the account_mapping.json file exists and has content
     try:
-        account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_PATH}`\n\nThen run: `..updatemapping` and `..updatelog`."
+        account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{excel_log_file}`\n\nThen run: `..updatemapping` and `..updatelog`."
         
         with open(ACCOUNT_MAPPING_FILE, 'r') as file:
             account_mappings = (json.load(file))
@@ -169,7 +169,7 @@ async def on_message(message):
                     None,  # date not needed
                     order_details['price']
                 )]
-                update_excel_log(orders, order_details['order_type'], EXCEL_FILE_PATH)
+                update_excel_log(orders, order_details['order_type'], excel_log_file)
         elif message.content.lower().startswith("**"):
             print("No ")
         else:

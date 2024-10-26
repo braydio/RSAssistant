@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import yfinance as yf
+from datetime import datetime
 
 import discord
 import yaml
@@ -47,8 +48,6 @@ def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
         logging.error(f"Account mapping file {filename} not found.")
         return {}
 
-account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-
 def should_skip(broker, account_nickname):
     """Returns True if the broker and account_nickname should be skipped."""
     if broker in EXCLUDED_BROKERS and account_nickname in EXCLUDED_BROKERS[broker]:
@@ -66,32 +65,34 @@ def get_account_nickname(broker, group_number, account_number):
         logging.error("Account mappings are empty or not loaded.")
         return account_number
 
+    # Ensure account_number is padded to 4 digits
+    padded_account_number = str(account_number).zfill(4)
+
     # Get the broker data
     broker_accounts = account_mapping.get(broker, {})
 
     if not broker_accounts:
         logging.warning(f"No account mappings found for broker: {broker}. Returning account number.")
-        return account_number
+        return padded_account_number
 
     # Get the group data
     group_accounts = broker_accounts.get(group_number, {})
 
     if not group_accounts:
         logging.warning(f"No account mappings found for broker: {broker} and group number: {group_number}.")
-        return account_number
+        return padded_account_number
 
-    # Get the account nickname or return the account number if not found
-    return group_accounts.get(account_number, account_number)
+    # Get the account nickname or return the padded account number if not found
+    return group_accounts.get(padded_account_number, padded_account_number)
     
 def save_account_mappings(mappings):
     """Save the account mappings to the JSON file."""
     with open(ACCOUNT_MAPPING_FILE, 'w') as f:
         json.dump(mappings, f, indent=4)
 
+account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
+
 # -- Account Indexing and Commands
-
-import discord
-
 
 async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
     """
