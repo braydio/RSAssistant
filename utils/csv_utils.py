@@ -8,19 +8,20 @@ import yfinance as yf
 from discord import Embed
 
 from utils.config_utils import get_account_nickname, load_config, get_last_stock_price
-from utils.excel_utils import update_excel_log
+from utils.excel_utils import update_excel_log, get_excel_file_path
 
 # Load configuration and mappings
 config = load_config()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ORDERS_CSV_FILE = config['paths']['orders_log']
 HOLDINGS_DATA_FINAL = config['paths']['holdings_data']
-EXCEL_XLSX_FILE = config['paths']['excel_log']
 ACCOUNT_MAPPING = config['paths']['account_mapping']
 
 ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
 HOLDINGS_HEADERS = ['Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Total Value', 'Account Total']
 EXCLUDED_BROKERS = config.get('excluded_brokers', {})
+
+excel_log_file = get_excel_file_path()
 
 # Ensure CSV files exist
 def ensure_csv_file_exists(file_path, headers):
@@ -89,13 +90,12 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
         print(f"Updating excel log for {broker_name} {broker_number}, {account_nickname}, with order {order_type} {quantity} of {stock} at {price} on {current_time}")
 
         # Pass broker_number to update_excel_log
-        update_excel_log([[broker_name, broker_number, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), EXCEL_XLSX_FILE)
+        update_excel_log([[broker_name, broker_number, account_number, order_type, stock, quantity, current_time, price]], order_type.lower(), excel_log_file)
 
     except ValueError as ve:
         logging.error(f"Error saving order due to value error: {ve}. Check quantity or stock.")
     except Exception as e:
         logging.error(f"Error saving order: {e}")
-
 
 def update_holdings_data(order_type, broker_name, account_number, stock, quantity, price):
     """

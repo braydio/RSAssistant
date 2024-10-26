@@ -62,21 +62,23 @@ patterns = {
     'bbae': r'(?i)(BBAE\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
 }
 
+
 def parse_order_message(content):
     """Parses an order message and extracts relevant details based on broker formats."""
     for broker, pattern in patterns.items():
         match = re.match(pattern, content)
         if match:
             # Split the broker into broker_name and broker_number if applicable
-            broker_split = match.group(1).split()  # Use the first matched group (broker) to split
+            broker_split = match.group(0).split()  # Use the first matched group (broker) to split
             broker_name = broker_split[0]  # Extract broker name (e.g., 'Fidelity')
             broker_number = broker_split[1] if len(broker_split) > 1 else "N/A"  # Extract broker number or set as "N/A"
+            print(f'Matching {broker_name} broker number {broker_number} to mapped accounts.')
 
-            if broker in ['schwab_order', 'chase_buy_sell', 'firstrade_order', 'tradier_order']:
-                print(f"Processing incomplete order for {broker_name}")
+            if broker in ['schwab_order', 'chase_order', 'firstrade_order', 'tradier_order']:
+                print(f"Processing incomplete order for {broker_name} {broker_number}")
                 handle_incomplete_order(match, broker_name, broker_number)
             elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification', 'tradier_verification']:
-                print("Received verification message, handling...")
+                print(f"Received verification message for {broker_name} broker number {broker_number}")
                 handle_verification(match, broker_name, broker_number)
             elif broker in ['schwab_failure', 'firstrade_failure']:
                 print("Received failure message, removing failed account...")
@@ -86,6 +88,116 @@ def parse_order_message(content):
                 handle_complete_order(match, broker_name, broker_number)
             return
     print(f"Failed to parse order message: {content}")
+        
+
+def handle_incomplete_order(match, broker_name, broker_number):
+    """Handles incomplete buy/sell orders for Chase, Schwab, Tradier, and Firstrade."""
+    print(f"Initialized verification for {broker_name} broker number: {broker_number}")
+    try:
+        # Print matched groups for debugging
+        print(f"Matched groups for {broker_name} {broker_number}: {match.groups()[0:4]}")
+
+        # Get other values from match groups
+        action, quantity, stock = match.groups()[1:4]
+        print(f"Temporary orders for all accounts in {broker_name} {broker_number}, details: {action} {quantity} {stock}")
+
+        # Ensure none of the variables are missing
+        if not action or not quantity or not stock:
+            raise ValueError(f"Missing values: action={action}, quantity={quantity}, stock={stock}")
+
+        # Load the account mapping
+        account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
+
+        # Check if the broker exists in the mapping
+        if broker_name in account_mapping:
+            broker_level_names = account_mapping[broker_name]
+
+            # Check if the group number (broker_number) exists in the broker's accounts
+            if broker_number in broker_level_names:
+                account_level_numbers = broker_level_names[broker_number]
+
+                # Iterate through accounts in the group
+                for account_number, nickname in account_level_numbers.items():
+                    print(f"Generating temporary order for {nickname} - last four: {account_number}.")
+
+                    # Populate incomplete_orders with broker_name, broker_number, action, quantity, and stock
+                    incomplete_orders[(stock, account_number)] = {
+                        'broker_name': broker_name,
+                        'broker_number': broker_number,
+                        'account_number': account_number,
+                        'nickname': nickname,
+                        'action': action,
+                        'quantity': quantity,
+                        'stock': stock
+                    }
+                    print(f"Saved placeholder order for account {account_number} ({nickname}): {incomplete_orders[(stock, account_number)]}")
+            else:
+                print(f"Group number {broker_number} not found for broker {broker_name}.")
+        else:
+            print(f"Broker {broker_name} not found in account mapping.")
+
+    except ValueError as e:
+        print(f"Error in handle_incomplete_order: {e}")
+
+
+def handle_verification(match, broker_name, broker_number):
+    """Processes order verification for Chase, Schwab, and Firstrade."""
+    print(f"Verification order passed for {broker_name} {broker_number}")
+    
+    # Load the account mapping
+    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
+    
+    # Extract the account number from the matched groups
+    account_number = match.groups()[1]
+    
+    # Check if the broker exists in the mapping
+    if broker_name in account_mapping:
+        broker_accounts = account_mapping[broker_name]
+        
+        # Check if the group number (broker_number) exists in the broker's accounts
+        if broker_number in broker_accounts:
+            temp_orders_account_level = broker_accounts[broker_number]
+            
+            # Check if the account number is in the group
+            if account_number in temp_orders_account_level:
+                print(f"Account {account_number} found for {broker_name} {broker_number}. Processing verification.")
+                # Call process_verified_orders with the relevant accounts
+                process_verified_orders(broker_name, account_number, temp_orders_account_level)
+            else:
+                print(f"Account {account_number} not found for {broker_name} {broker_number}.")
+        else:
+            print(f"Group number {broker_number} not found for broker {broker_name}.")
+    else:
+        print(f"Broker {broker_name} not found in account mapping.")
+
+
+def process_verified_orders(broker_name, account_number, temp_orders_account_level):
+    """Processes verified orders for the specified broker."""
+    print(f"Processing verified orders for {broker_name}, account number: {account_number}")
+    
+    # Ensure that account_list contains valid account data
+    if not temp_orders_account_level:
+        print(f"No placeholder orders found for broker {broker_name}.")
+        return
+    
+    # Iterate through incomplete orders to find matching stock and account
+    for (stock, account), order in list(incomplete_orders.items()):
+        # Check if the broker name, account number, and action match the placeholder order
+        if order['broker_name'] == broker_name and order['account_number'] == account_number:
+            # Account has been found; remove the verified order from the incomplete list
+            del incomplete_orders[(stock, account)]
+
+            # Retrieve broker_number from the order data
+            broker_number = order.get('broker_number')
+
+            # Save the verified order to CSV using the provided broker_name, broker_number, account_number, etc.
+            save_order_to_csv(broker_name, broker_number, account_number, order['action'], order['quantity'], stock)
+
+            # Log the successful processing of the verified order
+            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker_name} {broker_number}, Account: {account_number}")
+            break
+        else:
+            print(f"Order for {broker_name} {account_number} not found in incomplete orders.")
 
 
 def handle_complete_order(match, broker_name, broker_number):
@@ -132,104 +244,39 @@ def handle_complete_order(match, broker_name, broker_number):
         print(f"Error handling complete order: {e}")
 
 
-def handle_incomplete_order(match, broker_order):
-    """Handles incomplete buy/sell orders for Chase, Schwab, and Firstrade."""
+def handle_failed_order(match, broker_name, broker_number):
+    """Handles failed orders by removing incomplete entries."""
     try:
-        # Print matched groups for debugging
-        print(f"Matched groups for {broker_order}: {match.groups()[0:4]}")
-
-        # Handle brokers based on the expected groups
-        if broker_order in ('schwab_order', 'tradier_order', 'chase_order', 'firstrade_order'):
-            broker, action, quantity, stock = match.groups()[0:4]
-            print(f"incomplete_orders as {broker} {action} {quantity} {stock}")
-
-            # Add fallback in case any of the variables are None
-            if not action or not quantity or not stock:
-                raise ValueError(f"Missing values: action={action}, quantity={quantity}, stock={stock}")
-
-            # Account mapping logic
-            account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
+        account_number = match.group(1)
+        to_remove = [(stock, account) for (stock, account), order in incomplete_orders.items()
+                     if order['broker'] == broker_name and account == account_number]
         
-            if broker in account_mapping:
-                # Debug: Print account_mapping for the current broker
-                print(f"Account mapping for {broker}: {account_mapping[broker]}")
+        for item in to_remove:
+            del incomplete_orders[item]
+            print(f"Removed failed order for {broker_name} {account_number}")
 
-                for account in account_mapping.get(broker, []):
-                    # Debug: Check if account is valid
-                    print(f"Checking account: {account}")
+    except Exception as e:
+        print(f"Error handling failed order: {e}")
 
-                    # Populate incomplete_orders
-                    incomplete_orders[(stock, account)] = {
-                        'broker': broker, 'action': action, 'quantity': quantity, 'stock': stock
-                    }
-                    print(f"Saved order for account {account}: {incomplete_orders[(stock, account)]}")
 
-            else:
-                print(f"Broker {broker} not found in account mapping.")
+def parse_manual_order_message(content):
+    """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
+    try:
+        parts = content.split()
+        if len(parts) != 7:
+            raise ValueError("Invalid format. Expected 'manual Broker BrokerNumber Account OrderType Stock Price'.")
 
-    except ValueError as e:
-        print(f"Error in handle_incomplete_order: {e}")
-
-        print(f"Error in handle_incomplete_order: {e}")
-
-def handle_verification(match, broker):
-    """Processes order verification for Chase, Schwab, and Firstrade."""
-    print(match, broker)
-    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-    
-    if broker in ['schwab_verification', 'chase_verification', 'firstrade_verification']:
-        account_number = match.groups()[1]
-        broker = match.groups()[0]
-        print(f"Received order {broker}, account number: {account_number}, mapped list: {account_mapping.get(broker, [])}")
-        process_verified_orders(broker, account_number, account_mapping.get(broker, []))
-    
-    elif broker == 'tradier_verification':
-        account_number = match.groups()[1]
-
-        for outer_key, accounts in account_mapping.items():
-            if account_number in accounts:
-                broker = outer_key  # Store the outer key (e.g., "Tradier 1")
-                break
-        
-        print(broker)
-        print(f"Received order {broker}, account number: {account_number}, mapped list: {account_mapping.get(account_number, [])}")
-        
-        process_verified_orders(broker, account_number, account_mapping.get(broker, []))
-
-def process_verified_orders(broker, account_number, account_list, status=None):
-    """Processes verified orders for the specified broker, including Firstrade."""
-    
-    # Split broker into broker_name and broker_number if applicable
-    broker_split = broker.split()
-    if len(broker_split) > 1:
-        broker_name = broker_split[0]  # e.g., 'Fidelity'
-        broker_number = broker_split[1]  # e.g., '1'
-    else:
-        broker_name = broker_split[0]
-        broker_number = "N/A"  # Handle cases where no broker number is given
-    
-    print(f"Processing verified orders for {broker_name}, broker number: {broker_number}, account number: {account_number}")
-    
-    # Debug: Print incomplete orders
-    print(f"Incomplete orders: {incomplete_orders}")
-    
-    # Iterate through incomplete orders
-    for (stock, account), order in list(incomplete_orders.items()):
-        print(f"Checking stock: {stock}, account: {account}, broker in order: {order['broker']}")
-
-        # Check if the broker and account match the incomplete orders
-        if order['broker'] == broker_name and account in account_list:
-            # Remove the verified order from the incomplete orders
-            del incomplete_orders[(stock, account)]
-            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker_name} {account_number}")
-            
-            # Save the verified order to CSV (passing broker_name and broker_number separately)
-            save_order_to_csv(broker_name, broker_number, account_number, order['action'], order['quantity'], stock)
-            print("Order successfully saved to CSV")
-            
-            # Debugging output of remaining incomplete orders
-            print(f"Remaining incomplete orders: {list(incomplete_orders.items())}")
-            break
+        return {
+            'broker_name': parts[1],
+            'group_number': parts[2],  # Broker Number
+            'account': parts[3],      # Account
+            'order_type': parts[4],   # Order type (buy/sell)
+            'stock': parts[5],        # Stock ticker symbol
+            'price': float(parts[6])  # Price
+        }
+    except Exception as e:
+        print(f"Error parsing manual order: {e}")
+        return None
 
 
 def handle_failed_order(match, broker):
