@@ -10,15 +10,28 @@ app_name: RSAssistant
 
 # Paths for logs and other files
 paths:
-  orders_log: "logs/orders_log.csv"         # Log file for orders
-  holdings_log: "logs/holdings_log.csv"     # Log file for holdings
+  orders_log: "logs/orders_log.csv"           # Log file for orders
+  holdings_log: "logs/holdings_log.csv"       # Log file for holdings
   account_mapping: "config/account_mapping.json" # File that stores broker account nicknames
-  excel_log: "excel/ReverseSplitLog.xlsx"   # Excel file for tracking reverse split logs
-  watch_list: "utils/watch_list.json"       # JSON file for watch list data
-  manual_orders: "manual_order_entry.txt"   # Enter order confirmation messages to send to discord
-  holdings_data: "logs/holdings_data.csv"   # Not implemented
+  excel_directory: "excel/"                   # Directory where Excel logs are stored
+  excel_file_name: "ReverseSplitLog"          # Excel file for tracking reverse split logs
+  example_excel_file: "example-ReverseSplitLog.xlsx"
+  watch_list: "utils/watch_list.json"         # JSON file for watch list data
+  manual_orders: "todiscord.txt"              # Enter order confirmation messages to send to discord
+  holdings_data: "logs/holdings_data.csv"     # Not implemented
   error_log: "logs/error_log.txt"             # Error log for errors in excel logging
-  error_order: "logs/error_OrderDetails.txt"  # Order details for errors, senformatted for manual order
+  error_order: "logs/error_details.txt"  # Order details for errors, formatted for manual order
+
+# Settings for excel logging index values
+excel_log_settings:
+  stock_row: 1
+  date_row: 2
+  account_start_row: 4
+  account_start_column: 1
+  split_ratio_placeholder: "S:S"
+  days_keep_backup: 3    # Number of days to keep backup files
+  format_source: 3
+
 
 # Discord ID's
 discord_ids:
@@ -41,17 +54,8 @@ excluded_brokers:
     - "Account Nickname"
   Additional_Brokers:
     - "Account Nickname"
-
-# Settings for excel logging index values
-excel_log_settings:
-  stock_row: 1
-  date_row: 2
-  account_start_row: 4
-  account_start_column: 1
-  split_ratio_placeholder: "S:S"
-
-# Watch list settings
-
+    
+# Watchlist settings
 watch_list:
   auto_update: true  # Automatically update watchlist every interval
   notification_interval: 3600  # Time between notifications in seconds (1 hour)
