@@ -15,7 +15,7 @@ from utils.config_utils import (get_account_nickname, load_account_mappings,
 config = load_config()
 EXCEL_FILE_DIRECTORY = config['paths']['excel_directory']
 EXCEL_FILE_NAME = config['paths']['excel_file_name']
-EXAMPLE_LOG_FILE = config['paths']['example_excel_file']
+BASE_EXCEL_FILE = config['paths']['base_excel_file']
 ORDERS_LOG_CSV = config['paths']['orders_log']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ACCOUNT_MAPPING = config['paths']['account_mapping']
@@ -32,16 +32,15 @@ config_account_start_row = config['excel_log_settings']['account_start_row']
 config_account_start_column = config['excel_log_settings']['account_start_column']
 config_split_ratio_placeholder = config['excel_log_settings']['split_ratio_placeholder']
 config_days_keep_backup = config['excel_log_settings']['days_keep_backup']
-config_format_source_row = config['excel_log_settings']['format_source']
 
 
 # -- Setup and Initialize Excel File
 
 def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
-    print(directory + filename)
+    print("How many times is this file being loaded? - brayden")
     """
     Returns the path of the Excel file with today's date.
-    If the file doesn't exist, it creates one based on the template file.
+    If the file doesn't exist, it creates one based on the template file ReverseSplitLog.xslx
     Also ensures that a file for tomorrow's date exists.
     """
     today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
@@ -52,8 +51,7 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
     tomorrow_excel_file = os.path.join(os.path.normpath(directory), f"{filename}.{tomorrow}.xlsx")
     
     # Path to the base template file (without date)
-    base_excel_file = os.path.join(os.path.normpath(EXCEL_FILE_DIRECTORY), (EXAMPLE_LOG_FILE))
-    print(base_excel_file)
+    base_excel_file = os.path.join(os.path.normpath(EXCEL_FILE_DIRECTORY), (BASE_EXCEL_FILE))
     
     # Ensure today's file exists
     if not os.path.exists(today_excel_file):
@@ -85,7 +83,7 @@ def load_excel_log(file_path):
         logging.error(f"Excel log not found: {file_path}")
         
         # Check if the base file exists and copy it to create a new one
-        base_file_path = os.path.join(os.path.dirname(EXCEL_FILE_DIRECTORY), EXAMPLE_LOG_FILE)
+        base_file_path = os.path.join(os.path.dirname(EXCEL_FILE_DIRECTORY), BASE_EXCEL_FILE)
         print()
         if os.path.exists(base_file_path):
             # Copy the base file to the new file path
@@ -203,8 +201,8 @@ async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_account
         account_mappings = json.load(f)
 
     # Load configuration settings
-    config_account_start_row = config['excel_log_settings']['account_start_row']
-    config_account_start_column = config['excel_log_settings']['account_start_column']
+    # config_account_start_row = config['excel_log_settings']['account_start_row']
+    # config_account_start_column = config['excel_log_settings']['account_start_column']
 
     try:
         # Count the total number of accounts in the mappings
