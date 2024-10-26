@@ -1,0 +1,599 @@
+manual WELLSFARGO 1 9740 sell VMAR 3.95
+manual WELLSFARGO 1 9740 sell XPON 3.03
+manual WELLSFARGO 1 2603 sell VMAR 3.95
+manual WELLSFARGO 1 2603 sell XPON 3.08
+manual WELLSFARGO 1 3523 sell VMAR 3.95
+manual WELLSFARGO 1 3523 sell XPON 3.07
+manual WELLSFARGO 1 9113 sell VMAR 3.95
+manual WELLSFARGO 1 9113 sell XPON 3.07
+manual Firstrade 1 5272 sell ZCAR 5.95
+manual Firstrade 1 6914 sell ZCAR 5.95
+manual Firstrade 1 6915 sell ZCAR 5.95
+manual Firstrade 2 9338 sell ZCAR 5.95
+manual Public 1 9752 sell CETX 0.29
+manual Public 2 2663 sell CETX 0.29
+manual Public 3 0822 sell CETX 0.29
+manual Tradier 1 7978 sell HURA 4.98
+manual Tradier 2 0386 sell HURA 4.98
+manual Tradier 1 7978 sell ZCAR 5.95
+manual BBAE 1 4365 sell DLPN 1.37
+manual Robinhood 1 4130 sell LSB 3.46
+manual Robinhood 1 7076 sell LSB 3.46
+manual Robinhood 2 0725 sell LSB 3.46
+manual Robinhood 2 1188 sell LSB 3.46
+manual Robinhood 2 9604 sell LSB 3.46
+manual Robinhood 3 8081 sell LSB 3.46
+manual Robinhood 3 0529 sell LSB 3.46
+manual Robinhood 3 7867 sell LSB 3.46
+manual Tradier 2 0386 sell DLPN 1.4
+manual Tradier 1 7978 sell ILLR 3.02
+manual Tradier 2 0386 sell ME 5.07
+manual Tradier 1 7978 sell ME 5.07
+manual Tradier 1 7978 sell MGRX 2.45
+manual Public 1 9752 sell PIXY 10.97
+manual Public 2 2663 sell PIXY 10.97
+manual Public 3 0822 sell PIXY 10.97
+manual Public 5 0326 sell PIXY 10.97
+manual BBAE 1 4365 buy KTRA 0.22
+manual BBAE 2 4837 buy KTRA 0.22
+manual Chase 1 5792 buy KTRA 0.22
+manual Chase 1 5303 buy KTRA 0.22
+manual Fennel 1 3 buy KTRA 0.22
+manual Fennel 1 4 buy KTRA 0.22
+manual Fennel 1 5 buy KTRA 0.22
+manual Fennel 1 6 buy KTRA 0.22
+manual Fennel 1 7 buy KTRA 0.22
+manual Chase 1 5792 sell DLPN 1.41
+manual Chase 1 5303 sell DLPN 1.41
+manual Chase 1 5303 sell ILLR 3.15
+manual Chase 1 5792 sell ILLR 3.15
+manual Firstrade 1 6914 buy KTRA 0.22
+manual Firstrade 2 9338 buy KTRA 0.22
+manual Public 1 9752 buy KTRA 0.22
+manual Public 2 2663 buy KTRA 0.22
+manual Public 3 0822 buy KTRA 0.22
+manual Public 5 0326 buy KTRA 0.22
+manual Robinhood 2 0725 buy KTRA 0.22
+manual Robinhood 3 7867 buy KTRA 0.22
+manual Robinhood 3 0529 buy KTRA 0.22
+manual Robinhood 2 9604 buy KTRA 0.22
+manual Robinhood 3 8081 buy KTRA 0.22
+manual Chase 1 5792 sell ME 4.95
+manual Robinhood 2 1188 buy KTRA 0.22
+manual Chase 1 5303 sell ME 4.95
+manual Schwab 2 6613 buy KTRA 0.22
+manual Schwab 2 2476 buy KTRA 0.22
+manual Schwab 3 0410 buy KTRA 0.22
+manual Schwab 3 4278 buy KTRA 0.22
+manual Tradier 2 0386 sell MGRX 2.63
+manual BBAE 1 4365 buy SANW 0.21
+manual BBAE 2 4837 buy SANW 0.21
+manual Chase 1 5792 sell MGRX 2.57
+manual Chase 1 5303 sell MGRX 2.57
+manual Fennel 1 2 buy SANW 0.21
+manual Fennel 1 3 buy SANW 0.21
+manual Fennel 1 4 buy SANW 0.21
+manual Fennel 1 5 buy SANW 0.21
+manual Fennel 1 6 buy SANW 0.21
+manual Fennel 1 7 buy SANW 0.21
+manual Firstrade 1 6914 buy SANW 0.21
+manual Firstrade 1 6915 buy SANW 0.21
+manual Firstrade 2 9338 buy SANW 0.21
+manual Public 1 9752 buy SANW 0.21
+manual Public 2 2663 buy SANW 0.21
+manual Public 3 0822 buy SANW 0.21
+manual Public 5 0326 buy SANW 0.21
+manual Robinhood 2 0725 buy SANW 0.21
+manual Robinhood 2 1188 buy SANW 0.21
+manual Robinhood 3 7867 buy SANW 0.21
+manual Robinhood 3 8081 buy SANW 0.21
+manual Robinhood 2 9604 buy SANW 0.21
+manual Robinhood 3 0529 buy SANW 0.21
+manual Schwab 2 6613 buy SANW 0.21
+manual Schwab 2 2476 buy SANW 0.21
+manual Schwab 3 0410 buy SANW 0.21
+manual Schwab 3 4278 buy SANW 0.21
+manual Chase 1 5347 sell HURA 6.87
+manual Chase 1 5792 sell HURA 6.87
+manual Chase 1 5303 sell HURA 6.87
+manual BBAE 2 4837 buy ME 4.95
+manual BBAE 2 4837 buy MGRX 2.5
+manual Fennel 1 3 buy ILLR 3.18
+manual Fennel 1 4 buy ILLR 3.18
+manual Fennel 1 5 buy ILLR 3.18
+manual Fennel 1 6 buy ILLR 3.18
+manual Fennel 1 7 buy ILLR 3.18
+manual Fennel 1 3 buy ME 4.95
+manual Fennel 1 4 buy ME 4.95
+manual Fennel 1 5 buy ME 4.95
+manual Fennel 1 6 buy ME 4.95
+manual Fennel 1 7 buy ME 4.95
+manual Fennel 1 3 buy MGRX 2.5
+manual Fennel 1 4 buy MGRX 2.5
+manual Fennel 1 5 buy MGRX 2.5
+manual Fennel 1 6 buy MGRX 2.5
+manual Fennel 1 7 buy MGRX 2.5
+manual Firstrade 1 6914 sell DLPN 1.44
+manual Firstrade 1 6914 sell ILLR 3.18
+manual Firstrade 1 6914 sell ME 4.95
+manual Webull 1 5766 buy ILLR 3.26
+manual Webull 1 5766 buy ME 4.95
+manual Webull 1 5766 buy MGRX 2.49
+manual Webull 1 6640 buy ZCAR 0.11
+manual Webull 1 NDP6 buy ZCAR 0.11
+manual Webull 1 NDUB buy ZCAR 0.11
+manual BBAE 1 4365 buy ZCAR 0.1
+manual BBAE 2 4837 buy ZCAR 0.1
+manual BBAE 3 5363 buy ZCAR 0.1
+manual Chase 1 5792 buy ZCAR 0.1
+manual Fennel 1 3 buy ZCAR 0.1
+manual Fennel 1 4 buy ZCAR 0.1
+manual Fennel 1 5 buy ZCAR 0.1
+manual Fennel 1 6 buy ZCAR 0.1
+manual Fennel 1 7 buy ZCAR 0.1
+manual Fennel 1 8 buy ZCAR 0.1
+manual Firstrade 1 6914 sell MGRX 2.47
+manual Public 2 2663 buy ZCAR 0.1
+manual Public 3 0822 buy ZCAR 0.1
+manual Public 5 0326 buy ZCAR 0.1
+manual Robinhood 2 0725 buy ZCAR 0.1
+manual Robinhood 2 1188 buy ZCAR 0.1
+manual Robinhood 2 9604 buy ZCAR 0.1
+manual Robinhood 3 8081 buy ZCAR 0.1
+manual Robinhood 3 7867 buy ZCAR 0.1
+manual Robinhood 3 0529 buy ZCAR 0.1
+manual Schwab 2 6613 buy ZCAR 0.1
+manual Schwab 2 2476 buy ZCAR 0.1
+manual Schwab 3 0410 buy ZCAR 0.1
+manual Schwab 3 4278 buy ZCAR 0.1
+manual Schwab 1 7312 sell HURA 5.78
+manual Schwab 1 7683 sell HURA 5.78
+manual Schwab 2 0687 sell HURA 5.78
+manual Schwab 2 7313 sell HURA 5.78
+manual Schwab 2 6613 sell HURA 5.78
+manual Schwab 2 2476 sell HURA 5.78
+manual Schwab 3 0410 sell HURA 5.78
+manual Schwab 3 4278 sell HURA 5.78
+manual Schwab 3 6958 sell HURA 5.78
+manual Schwab 3 3649 sell HURA 5.78
+manual Robinhood 1 4130 buy CETX 0.32
+manual Robinhood 1 7076 buy CETX 0.32
+manual Robinhood 2 0725 buy CETX 0.32
+manual Robinhood 2 1188 buy CETX 0.32
+manual Robinhood 2 9604 buy CETX 0.32
+manual Robinhood 3 8081 buy CETX 0.32
+manual Robinhood 3 7867 buy CETX 0.32
+manual Robinhood 3 0529 buy CETX 0.32
+manual Robinhood 1 4130 buy VMAR 3.69
+manual Robinhood 1 7076 buy VMAR 3.69
+manual Robinhood 2 0725 buy VMAR 3.69
+manual Robinhood 2 1188 buy VMAR 3.69
+manual Robinhood 2 9604 buy VMAR 3.69
+manual Robinhood 3 8081 buy VMAR 3.69
+manual Robinhood 3 7867 buy VMAR 3.69
+manual Robinhood 3 0529 buy VMAR 3.69
+manual Public 2 2663 buy VMAR 3.68
+manual Public 3 0822 buy VMAR 3.68
+manual Robinhood 1 4130 buy XPON 3.47
+manual Robinhood 1 7076 buy XPON 3.47
+manual Robinhood 2 0725 buy XPON 3.47
+manual Robinhood 2 1188 buy XPON 3.47
+manual Robinhood 3 8081 buy XPON 3.47
+manual Robinhood 3 7867 buy XPON 3.47
+manual Robinhood 2 9604 buy XPON 3.47
+manual Robinhood 3 0529 buy XPON 3.47
+manual Tradier 1 7978 sell HURA 4.96
+manual Tradier 2 0386 sell ZCAR 5.8
+manual Tradier 1 7978 sell ZCAR 5.8
+manual Tradier 2 0386 sell HURA 4.96
+manual BBAE 1 4365 Buy NUKK 0.27
+manual BBAE 2 4837 Buy NUKK 0.27
+manual BBAE 3 5363 Buy NUKK 0.27
+manual Fennel 1 1 buy NUKK 0.27
+manual Fennel 1 2 buy NUKK 0.27
+manual Fennel 1 3 buy NUKK 0.27
+manual Fennel 1 4 buy NUKK 0.27
+manual Fennel 1 5 buy NUKK 0.27
+manual Fennel 1 6 buy NUKK 0.27
+manual Fennel 1 7 buy NUKK 0.27
+manual Fennel 1 8 buy NUKK 0.27
+manual Fidelity 1 7057 buy NUKK 0.27
+manual Fidelity 1 3294 buy NUKK 0.27
+manual Fidelity 1 9313 buy NUKK 0.27
+manual Fidelity 1 1580 buy NUKK 0.27
+manual Fidelity 1 6381 buy NUKK 0.27
+manual Fidelity 2 5494 buy NUKK 0.27
+manual Fidelity 2 7235 buy NUKK 0.27
+manual Fidelity 2 7060 buy NUKK 0.27
+manual Fidelity 2 9166 buy NUKK 0.27
+manual Fidelity 2 9457 buy NUKK 0.27
+manual Fidelity 3 0025 buy NUKK 0.27
+manual Fidelity 3 0039 buy NUKK 0.27
+manual Fidelity 3 0521 buy NUKK 0.27
+manual Fidelity 3 9116 buy NUKK 0.27
+manual Public 1 9752 buy NUKK 0.27
+manual Public 2 2663 buy NUKK 0.27
+manual Public 5 0326 buy NUKK 0.27
+manual Robinhood 1 4130 buy NUKK 0.27
+manual Robinhood 1 1076 buy NUKK 0.27
+manual Robinhood 1 7076 buy NUKK 0.27
+manual Robinhood 2 0725 buy NUKK 0.27
+manual Robinhood 2 1188 buy NUKK 0.27
+manual Robinhood 2 9604 buy NUKK 0.27
+manual Robinhood 3 8081 buy NUKK 0.27
+manual Robinhood 3 7867 buy NUKK 0.27
+manual Robinhood 3 0529 buy NUKK 0.27
+manual Public 3 0822 buy NUKK 0.27
+manual Schwab 1 8745 buy NUKK 0.27
+manual Schwab 1 1038 buy NUKK 0.27
+manual Schwab 1 9547 buy NUKK 0.27
+manual Schwab 1 7312 buy NUKK 0.27
+manual Schwab 1 7683 buy NUKK 0.27
+manual Schwab 2 0687 buy NUKK 0.27
+manual Schwab 2 7313 buy NUKK 0.27
+manual Schwab 2 6613 buy NUKK 0.27
+manual Schwab 2 2476 buy NUKK 0.27
+manual Schwab 3 0410 buy NUKK 0.27
+manual Schwab 3 4278 buy NUKK 0.27
+manual Schwab 3 6958 buy NUKK 0.27
+manual Schwab 3 3649 buy NUKK 0.27
+manual Tradier 1 7978 buy NUKK 0.27
+manual Tradier 2 0386 buy NUKK 0.27
+manual Webull 1 N/A buy NUKK 0.27
+manual Webull 1 5766 buy NUKK 0.27
+manual Webull 1 6640 buy NUKK 0.27
+manual Webull 1 NDP6 buy NUKK 0.27
+manual Webull 1 NDUB buy NUKK 0.27
+manual Webull 2 N/A buy NUKK 0.27
+manual Webull 3 N/A buy NUKK 0.27
+manual WELLSFARGO 1 9740 buy NUKK 0.26
+manual WELLSFARGO 1 2603 buy NUKK 0.27
+manual WELLSFARGO 1 3523 buy NUKK 0.27
+manual WELLSFARGO 1 9113 buy NUKK 0.27
+manual Robinhood 1076 buy LSB 3.46
+Excel save error
+manual BBAE 4365 sell DLPN 1.37
+manual Robinhood 4130 sell LSB 3.46
+manual Robinhood 1076 sell LSB 3.46
+manual Robinhood 7076 sell LSB 3.46
+manual Tradier 7978 sell ILLR 3.02
+manual BBAE 4365 buy KTRA 0.22
+manual BBAE 4837 buy KTRA 0.22
+manual Chase 1 5792 buy KTRA 0.22
+manual Chase 1 5303 buy KTRA 0.22
+manual Fennel 3 buy KTRA 0.22
+manual Fennel 4 buy KTRA 0.22
+manual Fennel 5 buy KTRA 0.22
+manual Fennel 6 buy KTRA 0.22
+manual Fennel 7 buy KTRA 0.22
+manual Chase 1 5303 sell ILLR 3.15
+manual Chase 1 5792 sell ILLR 3.15
+manual Firstrade 6914 buy KTRA 0.22
+manual Firstrade 9338 buy KTRA 0.22
+manual Public 9752 buy KTRA 0.22
+manual Public 2663 buy KTRA 0.22
+manual Public 0822 buy KTRA 0.22
+manual Public 0326 buy KTRA 0.22
+manual Robinhood 0725 buy KTRA 0.22
+manual Robinhood 7867 buy KTRA 0.22
+manual Robinhood 0529 buy KTRA 0.22
+manual Robinhood 9604 buy KTRA 0.22
+manual Robinhood 8081 buy KTRA 0.22
+manual Robinhood 1188 buy KTRA 0.22
+manual Schwab 6613 buy KTRA 0.22
+manual Schwab 2476 buy KTRA 0.22
+manual Schwab 0410 buy KTRA 0.22
+manual Schwab 4278 buy KTRA 0.22
+manual Fennel 2 buy SANW 0.21
+manual Fennel 3 buy SANW 0.21
+manual Fennel 4 buy SANW 0.21
+manual Fennel 5 buy SANW 0.21
+manual Fennel 6 buy SANW 0.21
+manual Fennel 7 buy SANW 0.21
+manual Chase 1 5347 sell HURA 6.87
+manual Chase 1 5792 sell HURA 6.87
+manual Chase 1 5303 sell HURA 6.87
+manual Fennel 3 buy ILLR 3.18
+manual Fennel 4 buy ILLR 3.18
+manual Fennel 5 buy ILLR 3.18
+manual Fennel 6 buy ILLR 3.18
+manual Fennel 7 buy ILLR 3.18
+manual Fennel 3 buy ME 4.95
+manual Fennel 4 buy ME 4.95
+manual Fennel 5 buy ME 4.95
+manual Fennel 6 buy ME 4.95
+manual Fennel 7 buy ME 4.95
+manual Fennel 3 buy MGRX 2.5
+manual Fennel 4 buy MGRX 2.5
+manual Fennel 5 buy MGRX 2.5
+manual Fennel 6 buy MGRX 2.5
+manual Fennel 7 buy MGRX 2.5
+manual Firstrade 6914 sell ILLR 3.18
+manual Webull 5766 buy ILLR 3.26
+manual Fennel 3 buy ZCAR 0.1
+manual Fennel 4 buy ZCAR 0.1
+manual Fennel 5 buy ZCAR 0.1
+manual Fennel 6 buy ZCAR 0.1
+manual Fennel 7 buy ZCAR 0.1
+manual Fennel 8 buy ZCAR 0.1
+manual Schwab 7312 sell HURA 5.78
+manual Schwab 7683 sell HURA 5.78
+manual Schwab 0687 sell HURA 5.78
+manual Schwab 7313 sell HURA 5.78
+manual Schwab 6613 sell HURA 5.78
+manual Schwab 2476 sell HURA 5.78
+manual Schwab 0410 sell HURA 5.78
+manual Schwab 4278 sell HURA 5.78
+manual Schwab 6958 sell HURA 5.78
+manual Schwab 3649 sell HURA 5.78
+manual fidelity 6699 sell INHD 3.75
+manual fidelity 7057 sell INHD 3.75
+manual fidelity 3294 sell INHD 3.75
+manual fidelity 1580 sell INHD 3.75
+manual fidelity 9313 sell INHD 3.75
+manual fidelity 5494 sell INHD 3.75
+manual fidelity 7235 sell INHD 3.75
+manual Fidelity 1580 sell INHD 3.75
+manual Webull 6640 sell NUKK 2.9
+manual Webull NDP6 sell NUKK 2.9
+manual Webull NDUB sell NUKK 2.9
+manual Fidelity 1580 sell INHD 3.68
+manual Public 0822 sell PRFX 0.71
+manual BBAE 4365 Buy KXIN 0.11
+manual BBAE 4837 Buy KXIN 0.11
+manual BBAE 5363 Buy KXIN 0.11
+manual Fennel 1 buy KXIN 0.11
+manual Fennel 2 buy KXIN 0.11
+manual Fennel 3 buy KXIN 0.11
+manual Fennel 4 buy KXIN 0.11
+manual Fennel 5 buy KXIN 0.11
+manual Fennel 6 buy KXIN 0.11
+manual Fennel 7 buy KXIN 0.11
+manual Fennel 8 buy KXIN 0.11
+manual Fidelity 7057 buy KXIN 0.11
+manual Fidelity 3294 buy KXIN 0.11
+manual Fidelity 9313 buy KXIN 0.11
+manual Fidelity 1580 buy KXIN 0.11
+manual Fidelity 6381 buy KXIN 0.11
+manual Fidelity 5494 buy KXIN 0.11
+manual Fidelity 7235 buy KXIN 0.11
+manual Fidelity 7060 buy KXIN 0.11
+manual Fidelity 9166 buy KXIN 0.11
+manual Fidelity 9457 buy KXIN 0.11
+manual Fidelity 0025 buy KXIN 0.11
+manual Fidelity 0039 buy KXIN 0.11
+manual Fidelity 0521 buy KXIN 0.11
+manual Fidelity 9116 buy KXIN 0.11
+manual Public 9752 buy KXIN 0.11
+manual Public 2663 buy KXIN 0.11
+manual Public 0822 buy KXIN 0.11
+manual Public 0326 buy KXIN 0.11
+manual Robinhood 4130 buy KXIN 0.11
+manual Robinhood 1076 buy KXIN 0.11
+manual Robinhood 7076 buy KXIN 0.11
+manual Robinhood 0725 buy KXIN 0.11
+manual Robinhood 1188 buy KXIN 0.11
+manual Robinhood 0529 buy KXIN 0.11
+manual Robinhood 8081 buy KXIN 0.11
+manual Robinhood 7867 buy KXIN 0.11
+manual Robinhood 9604 buy KXIN 0.11
+manual Webull N/A buy KXIN 0.11
+manual Webull 5766 sell KXIN 0.11
+manual Webull 6640 sell KXIN 0.11
+manual Webull NDP6 sell KXIN 0.11
+manual Webull NDUB sell KXIN 0.11
+manual WELLSFARGO 9740 buy KXIN 0.11
+manual WELLSFARGO 2603 buy KXIN 0.11
+manual WELLSFARGO 3523 buy KXIN 0.11
+manual WELLSFARGO 9113 buy KXIN 0.11
+manual Sofi 1 buy AMIX 0.5
+manual Fennel 1 buy AMIX 0.5
+manual Fidelity 1580 buy AMIX 0.5
+manual Webull N/A buy AMIX 0.5
+manual Schwab 0687 buy AMIX 9.9
+manual Schwab 7313 buy AMIX 9.9
+manual Schwab 6613 buy AMIX 9.9
+manual Schwab 2476 buy AMIX 9.9
+manual Schwab 0410 buy AMIX 9.9
+manual Schwab 4278 buy AMIX 9.9
+manual Schwab 6958 buy AMIX 9.9
+manual Schwab 3649 buy AMIX 9.9
+manual Tradier 7978 buy AMIX 9.9
+manual Tradier 0386 buy AMIX 9.9
+manual BBAE 4365 Sell NUKK 2.43
+manual BBAE 4837 Sell NUKK 2.43
+manual BBAE 5363 Sell NUKK 2.43
+manual Fennel 1 sell CTNT 2.82
+manual Fennel 2 sell CTNT 2.82
+manual Fennel 3 sell CTNT 2.82
+manual Fennel 4 sell CTNT 2.82
+manual Fennel 5 sell CTNT 2.82
+manual Fennel 6 sell CTNT 2.82
+manual Fennel 7 sell CTNT 2.82
+manual Fennel 8 sell CTNT 2.82
+manual Fennel 1 sell NUKK 2.43
+manual Fennel 2 sell NUKK 2.43
+manual Fennel 3 sell NUKK 2.43
+manual Fennel 4 sell NUKK 2.43
+manual Fennel 5 sell NUKK 2.43
+manual Fennel 6 sell NUKK 2.43
+manual Fennel 7 sell NUKK 2.43
+manual Fennel 8 sell NUKK 2.43
+manual Tradier 7978 sell HURA 4.98
+manual Tradier 0386 sell HURA 4.98
+manual Tradier 7978 sell HURA 4.96
+manual Tradier 0386 sell HURA 4.96
+manual BBAE 4365 Buy NUKK 0.27
+manual BBAE 4837 Buy NUKK 0.27
+manual BBAE 5363 Buy NUKK 0.27
+manual Fennel 1 buy NUKK 0.27
+manual Fennel 2 buy NUKK 0.27
+manual Fennel 3 buy NUKK 0.27
+manual Fennel 4 buy NUKK 0.27
+manual Fennel 5 buy NUKK 0.27
+manual Fennel 6 buy NUKK 0.27
+manual Fennel 7 buy NUKK 0.27
+manual Fennel 8 buy NUKK 0.27
+manual Fidelity 7057 buy NUKK 0.27
+manual Fidelity 3294 buy NUKK 0.27
+manual Fidelity 9313 buy NUKK 0.27
+manual Fidelity 1580 buy NUKK 0.27
+manual Fidelity 6381 buy NUKK 0.27
+manual Fidelity 5494 buy NUKK 0.27
+manual Fidelity 7235 buy NUKK 0.27
+manual Fidelity 7060 buy NUKK 0.27
+manual Fidelity 9166 buy NUKK 0.27
+manual Fidelity 9457 buy NUKK 0.27
+manual Fidelity 0025 buy NUKK 0.27
+manual Fidelity 0039 buy NUKK 0.27
+manual Fidelity 0521 buy NUKK 0.27
+manual Fidelity 9116 buy NUKK 0.27
+manual Public 9752 buy NUKK 0.27
+manual Public 2663 buy NUKK 0.27
+manual Public 0326 buy NUKK 0.27
+manual Robinhood 4130 buy NUKK 0.27
+manual Robinhood 1076 buy NUKK 0.27
+manual Robinhood 7076 buy NUKK 0.27
+manual Robinhood 0725 buy NUKK 0.27
+manual Robinhood 1188 buy NUKK 0.27
+manual Robinhood 9604 buy NUKK 0.27
+manual Robinhood 8081 buy NUKK 0.27
+manual Robinhood 7867 buy NUKK 0.27
+manual Robinhood 0529 buy NUKK 0.27
+manual Public 0822 buy NUKK 0.27
+manual Schwab 8745 buy NUKK 0.27
+manual Schwab 1038 buy NUKK 0.27
+manual Schwab 9547 buy NUKK 0.27
+manual Schwab 7312 buy NUKK 0.27
+manual Schwab 7683 buy NUKK 0.27
+manual Schwab 0687 buy NUKK 0.27
+manual Schwab 7313 buy NUKK 0.27
+manual Schwab 6613 buy NUKK 0.27
+manual Schwab 2476 buy NUKK 0.27
+manual Schwab 0410 buy NUKK 0.27
+manual Schwab 4278 buy NUKK 0.27
+manual Schwab 6958 buy NUKK 0.27
+manual Schwab 3649 buy NUKK 0.27
+manual Tradier 7978 buy NUKK 0.27
+manual Tradier 0386 buy NUKK 0.27
+manual Webull N/A buy NUKK 0.27
+manual Webull 5766 buy NUKK 0.27
+manual Webull 6640 buy NUKK 0.27
+manual Webull NDP6 buy NUKK 0.27
+manual Webull NDUB buy NUKK 0.27
+manual WELLSFARGO 9740 buy NUKK 0.26
+manual WELLSFARGO 2603 buy NUKK 0.27
+manual WELLSFARGO 3523 buy NUKK 0.27
+manual WELLSFARGO 9113 buy NUKK 0.27
+manual Chase 1 5347 sell CTNT 2.77
+manual Chase 1 5347 sell NUKK 2.5
+manual Chase 1 5347 sell CTNT 2.76
+manual Chase 1 5347 sell NUKK 2.66
+manual Fennel 3 sell ZCAR 6.4
+manual Fennel 4 sell ZCAR 6.4
+manual Fennel 5 sell ZCAR 6.4
+manual Schwab 6613 buy SANW 0.21
+manual Schwab 2476 buy SANW 0.21
+manual Schwab 0410 buy SANW 0.21
+manual Schwab 4278 buy SANW 0.21
+manual Schwab 6613 buy ZCAR 0.1
+manual Schwab 2476 buy ZCAR 0.1
+manual Schwab 0410 buy ZCAR 0.1
+manual Schwab 4278 buy ZCAR 0.1
+manual Chase 1 5347 buy ALBT 0.2
+manual Fennel 3 buy ALBT 0.2
+manual Fennel 4 buy ALBT 0.2
+manual Fennel 5 buy ALBT 0.2
+manual Fidelity 1580 buy ALBT 0.2
+manual Chase 1 5347 Buy ALBT 0.2
+manual Chase 1 5792 Buy ALBT 0.2
+manual Chase 1 5303 Buy ALBT 0.2
+manual Chase 1 3422 Buy ALBT 0.2
+manual Firstrade 5272 sell KXIN 5.59
+manual Firstrade 6914 sell KXIN 5.59
+manual Firstrade 6915 buy ALBT 0.21
+manual Firstrade 9338 buy ALBT 0.21
+manual Schwab 8745 buy ALBT 0.21
+manual Schwab 1038 buy ALBT 0.21
+manual Schwab 9547 buy ALBT 0.21
+manual Schwab 7312 buy ALBT 0.21
+manual Schwab 7683 buy ALBT 0.21
+manual Schwab 0687 buy ALBT 0.21
+manual Schwab 7313 buy ALBT 0.21
+manual Schwab 6613 buy ALBT 0.21
+manual Schwab 2476 buy ALBT 0.21
+manual Schwab 0410 buy ALBT 0.21
+manual Schwab 4278 buy ALBT 0.21
+manual Schwab 6958 buy ALBT 0.21
+manual Schwab 3649 buy ALBT 0.21
+manual Tradier 7978 buy ALBT 0.21
+manual Tradier 9690 buy ALBT 0.21
+manual Tradier 0386 buy ALBT 0.21
+manual Webull N/A buy ALBT 0.2
+manual Tradier 7978 sell AMIX 7.57
+manual Tradier 0386 sell AMIX 7.57
+manual Tradier 7978 sell CTNT 2.83
+manual Tradier 9690 sell CTNT 2.83
+manual Tradier 0386 sell CTNT 2.83
+manual Tradier 9690 sell KXIN 5.79
+manual Tradier 7978 sell NUKK 2.61
+manual Tradier 0386 sell NUKK 2.61
+manual Webull 5766 sell CTNT 2.81
+manual Webull 6640 sell KXIN 5.79
+manual Webull NDP6 sell KXIN 5.79
+manual Webull NDUB sell KXIN 5.79
+manual Webull 5766 sell NUKK 2.6
+manual Chase 1 3422 Buy ALBT 0.2
+manual Fidelity 1 1580 sell ME 4.67
+manual Fennel 1 3 sell ZCAR 6.4
+manual Fennel 1 4 sell ZCAR 6.4
+manual Fennel 1 5 sell ZCAR 6.4
+manual Fennel 1 3 buy KXIN 0.11
+manual Fennel 1 3 sell CTNT 2.82
+manual Fennel 1 3 sell NUKK 2.43
+manual Fennel 1 4 buy KXIN 0.11
+manual Fennel 1 4 sell CTNT 2.82
+manual Fennel 1 4 sell NUKK 2.43
+manual Fennel 1 5 buy KXIN 0.11
+manual Fennel 1 5 sell CTNT 2.82
+manual Fennel 1 5 sell NUKK 2.43
+manual Webull 1 N/A buy AMIX 0.5
+manual Webull 1 N/A buy KXIN 0.11
+manual Chase 1 5347 buying ALBT 0.23
+manual Chase 1 5792 buying ALBT 0.23
+manual Chase 1 5303 buying ALBT 0.23
+manual Robinhood 1 1076 sell LSB 3.46
+manual BBAE 1: 4365 Buy ALBT 0.23
+manual BBAE 2: 4837 Buy ALBT 0.23
+manual BBAE 3: 5363 Buy ALBT 0.23
+manual Fennel 1: 1 buy ALBT 0.23
+manual Fennel 1: 2 buy ALBT 0.23
+manual Fennel 1: 3 buy ALBT 0.23
+manual Fennel 1: 4 buy ALBT 0.23
+manual Fennel 1: 5 buy ALBT 0.23
+manual Fennel 1: 6 buy ALBT 0.23
+manual Fennel 1: 7 buy ALBT 0.23
+manual Fennel 1: 8 buy ALBT 0.23
+manual Fidelity 1 1580 buy ALBT 0.23
+manual Public 3: 0822 buy ALBT 0.23
+manual Public 4: 3345 buy ALBT 0.23
+manual Public 5: 0326 buy ALBT 0.23
+manual Robinhood 1: 4130 buy ALBT 0.23
+manual Robinhood 1: 1076 buy ALBT 0.23
+manual Robinhood 2: 1188 buy ALBT 0.23
+manual Robinhood 2: 9604 buy ALBT 0.23
+manual Robinhood 1: 7076 buy ALBT 0.23
+manual Robinhood 3: 0529 buy ALBT 0.23
+manual Robinhood 3: 8081 buy ALBT 0.23
+manual Robinhood 3: 7867 buy ALBT 0.23
+manual Robinhood 2: 0725 buy ALBT 0.23
+manual Schwab 2 0687 buying ALBT 0.23
+manual Schwab 2 7313 buying ALBT 0.23
+manual Schwab 2 6613 buying ALBT 0.23
+manual Schwab 2 2476 buying ALBT 0.23
+manual Webull 1: N/A buy ALBT 0.23
+manual Webull 1: 6640 sell ALBT 0.23
+manual Webull 1: NDP6 sell ALBT 0.23
+manual Webull 1: NDUB sell ALBT 0.23
+manual Webull 2: N/A buy ALBT 0.23
+manual Webull 3: N/A buy ALBT 0.23
