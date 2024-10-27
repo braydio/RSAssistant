@@ -26,9 +26,9 @@ discord:
 # Account Owners List - Please specify account ownership with Account Nickname per excel log > Account Details
 # EG. 'Cash Account 1 AO1' will be assigned 'account_owner_1'
 account_owners:
-  AO1 : account_owner_1
-  AO2 : account_owner_2
-  AO3 : account_owner_3
+  1 : account_owner_1
+  2 : account_owner_2
+  3 : account_owner_3
 
 # Brokers / Accounts to be excluded from the summarized views
 # See below example formatting and update as needed
