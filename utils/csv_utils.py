@@ -31,9 +31,10 @@ def ensure_csv_file_exists(file_path, headers):
             writer.writerow(headers)
 
 def save_order_to_csv(broker_name, broker_number, account_number, order_type, quantity, stock):
-    """Saves order information to the orders CSV, removes duplicates, and removes stale orders."""
+    """Saves order information to the orders CSV, removes duplicates, and archives stale orders."""
     print("Processing new order, checking for duplicates and stale entries.")
-    print(broker_name, broker_number)    
+    print(broker_name, broker_number)
+    
     try:
         # Load existing orders from the CSV
         existing_orders = []
@@ -44,8 +45,12 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
 
         # Define the cutoff for stale orders (e.g., 30 days)
         cutoff_date = datetime.now() - timedelta(days=30)
+        stale_orders = []
+        
+        # Path to the archive file
+        archive_path = os.path.join(HOLDINGS_LOG_CSV, 'archive.csv')
 
-        # Remove duplicates and stale orders
+        # Remove duplicates and move stale orders to archive
         updated_orders = []
         new_order_key = (broker_name, broker_number, account_number, order_type.lower(), stock.upper())
 
@@ -54,7 +59,8 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
             order_key = (order['Broker Name'], order['Account Number'], order['Order Type'].lower(), order['Stock'].upper())
 
             if order_date < cutoff_date:
-                # Skip stale orders
+                # Move stale orders to the archive
+                stale_orders.append(order)
                 continue
 
             if order_key == new_order_key:
@@ -78,9 +84,24 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
 
         # Write the updated orders list back to the CSV with headers
         with open(ORDERS_CSV_FILE, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=ORDERS_HEADERS + ['Broker Number'])  # Include Broker Number in headers
-            writer.writeheader()  # Ensure headers are written
+            writer = csv.DictWriter(file, fieldnames=ORDERS_HEADERS + ['Broker Number'])
+            writer.writeheader()
             writer.writerows(updated_orders)
+
+        # Archive stale orders if there are any
+        if stale_orders:
+            archive_headers = ORDERS_HEADERS + ['Broker Number']
+            if not os.path.exists(archive_path):
+                # If archive file doesn't exist, write headers
+                with open(archive_path, mode='w', newline='') as archive_file:
+                    archive_writer = csv.DictWriter(archive_file, fieldnames=archive_headers)
+                    archive_writer.writeheader()
+                    archive_writer.writerows(stale_orders)
+            else:
+                # Append to existing archive file
+                with open(archive_path, mode='a', newline='') as archive_file:
+                    archive_writer = csv.DictWriter(archive_file, fieldnames=archive_headers)
+                    archive_writer.writerows(stale_orders)
 
         print(f"Order saved: {new_order}")
         price = get_last_stock_price(new_order['Stock'])
@@ -96,6 +117,7 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
         logging.error(f"Error saving order due to value error: {ve}. Check quantity or stock.")
     except Exception as e:
         logging.error(f"Error saving order: {e}")
+
 
 def update_holdings_data(order_type, broker_name, account_number, stock, quantity, price):
     """
