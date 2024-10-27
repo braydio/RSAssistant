@@ -8,29 +8,6 @@
 # General settings
 app_name: RSAssistant
 
-# Paths for logs and other files
-paths:
-  orders_log: "logs/orders_log.csv"           # Log file for orders
-  holdings_log: "logs/holdings_log.csv"       # Log file for holdings
-  account_mapping: "config/account_mapping.json" # File that stores broker account nicknames
-  excel_directory: "excel/"                   # Directory where Excel logs are stored
-  excel_file_name: "ReverseSplitLog"          # Excel file for tracking reverse split logs
-  base_excel_file: "ReverseSplitLog.xlsx"
-  watch_list: "utils/watch_list.json"         # JSON file for watch list data
-  manual_orders: "todiscord.txt"              # Enter order confirmation messages to send to discord
-  holdings_data: "logs/holdings_data.csv"     # Not implemented
-  error_log: "logs/error_log.txt"             # Error log for errors in excel logging
-  error_order: "logs/error_details.txt"  # Order details for errors, formatted for manual order
-
-# Settings for excel logging index values
-excel_log_settings:
-  stock_row: 1 # Stock tickers saved to EVERY OTHER column of 'stock_row'
-  date_row: 2 # Dates saved to EVERY OTEHR column of 'date_row'
-  account_start_row: 4  # Account names are saved to EVERY row, starting at 'account_start_row'
-  account_start_column: 1 # Account names are saved to EVERY SUBSEQUENT row to 'account_start_row' in 'account_start_column'
-  split_ratio_placeholder: "S:S"  # Placeholder entered into EVERY EMPTY cell in 'stock_row' - functionality WIP
-  days_keep_backup: 3    # Number of days to keep backup files
-
 # Discord ID's
 discord_ids:
   channel_id: ID_OF_YOUR_DISCORD_CHANNEL
@@ -46,13 +23,48 @@ discord:
     guilds: true
     members: true
 
-# Broker settings
+# Account Owners List - Please specify account ownership with Account Nickname per excel log > Account Details
+# EG. 'Cash Account 1 AO1' will be assigned 'account_owner_1'
+account_owners:
+  AO1 : account_owner_1
+  AO2 : account_owner_2
+  AO3 : account_owner_3
+
+# Brokers / Accounts to be excluded from the summarized views
+# See below example formatting and update as needed
 excluded_brokers:
+  Sofi: []    # No excluded accounts (shoutout NelsonDane & the auto-rsa team for the new addition lfg)
+  Plynk: null   # Exclude all accounts (explicit null)
   Fidelity:
-    - "Account Nickname"
-  Additional_Brokers:
-    - "Account Nickname"
-    
+    accounts:
+      - "BrokerageLink Roth"
+      - "BrokerageLink 401K"
+      - "Credit Card"
+    exclude_all: false  # Optionally say you are not excluding all Fidelity accounts
+
+# Settings for excel logging index values
+excel_log_settings:
+  stock_row: 1 # Stock tickers saved to EVERY OTHER column of 'stock_row'
+  date_row: 2 # Dates saved to EVERY OTEHR column of 'date_row'
+  account_start_row: 4  # Account names are saved to EVERY row, starting at 'account_start_row'
+  account_start_column: 1 # Account names are saved to EVERY SUBSEQUENT row to 'account_start_row' in 'account_start_column'
+  split_ratio_placeholder: "S:S"  # Placeholder entered into EVERY EMPTY cell in 'stock_row' - functionality WIP
+  days_keep_backup: 3    # Number of days to keep backup files
+
+# Paths for logs and other files
+paths:
+  orders_log: "logs/orders_log.csv"           # Log file for orders
+  holdings_log: "logs/holdings_log.csv"       # Log file for holdings
+  account_mapping: "config/account_mapping.json" # File that stores broker account nicknames
+  excel_directory: "excel/"                   # Directory where Excel logs are stored
+  excel_file_name: "ReverseSplitLog"          # Excel file for tracking reverse split logs
+  base_excel_file: "ReverseSplitLog.xlsx"
+  watch_list: "utils/watch_list.json"         # JSON file for watch list data
+  manual_orders: "todiscord.txt"              # Enter order confirmation messages to send to discord
+  holdings_data: "logs/holdings_data.csv"     # Not implemented
+  error_log: "logs/error_log.txt"             # Error log for errors in excel logging
+  error_order: "logs/error_details.txt"  # Order details for errors, formatted for manual order
+
 # Watchlist settings
 watch_list:
   auto_update: true  # Automatically update watchlist every interval
