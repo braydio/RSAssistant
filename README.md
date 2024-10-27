@@ -86,7 +86,7 @@ Account Mapping in account_mapping.json:
 
 ## Dependencies
 
-This project relies on [auto-rsa by Nelson Dane](main/program_function_flow.md) for key stock-related data processing and order flow management. Make sure to set up and run the auto-rsa bot as described in its repository before using RSAssistant.
+This project relies on [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) for key stock-related data processing and order flow management. Make sure to set up and run the auto-rsa bot as described in its repository before using RSAssistant.
 
 For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/auto-rsa/blob/main/README.md)
 
