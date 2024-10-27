@@ -17,7 +17,7 @@ from discord.ext import commands
 from utils.config_utils import (all_account_nicknames, all_account_numbers,
                                 all_brokers, all_brokers_groups, load_config)
 from utils.csv_utils import read_holdings_log, save_holdings_to_csv
-from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, update_excel_log
+from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, update_excel_log, clear_account_mappings
 from utils.parsing_utils import (parse_embed_message,
                                  parse_manual_order_message,
                                  parse_order_message)
@@ -135,11 +135,21 @@ async def excel_details_to_json(ctx):
 @bot.command(name='updatelog', help='Updates excel log with mapped accounts')
 async def excel_details_to_json(ctx):
     try:
-        await ctx.send("Updating logger with mapped accounts")
+        await ctx.send("Updating log with mapped accounts")
         await map_accounts_in_excel_log(ctx)
         await ctx.send("Complete")
     except Exception as e:
         await ctx.send(f"An error occurred during update: {str(e)}")
+
+# Command to clear account mappings
+@bot.command(name='updateclear', help='Clears all account mappings from the account_mapping.json file')
+async def clear_mapping_command(ctx):
+    try:
+        await ctx.send("Clearing account mappings...")
+        await clear_account_mappings(ctx)
+        await ctx.send("Account mappings have been cleared.")
+    except Exception as e:
+        await ctx.send(f"An error occurred during the clearing process: {str(e)}")
 
 # Command to show the summary for a broker
 @bot.command(name='broker', help='Summary totals for a broker')

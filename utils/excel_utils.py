@@ -171,24 +171,6 @@ async def index_account_details(ctx, filename=excel_log_file, mapping_file=ACCOU
     except Exception as e:
         await ctx.send(f"Error saving JSON file: {e}")
 
-# Function to copy both values and formatting from one row to another
-def copy_values_and_formatting(worksheet, source_row, target_row):
-    """Copy both values and formatting from a source row to a target row in the worksheet."""
-    for col in range(1, worksheet.max_column + 1):  # Loop over each column
-        source_cell = worksheet.cell(row=source_row, column=col)
-        target_cell = worksheet.cell(row=target_row, column=col)
-
-        # Copy the cell value
-        target_cell.value = source_cell.value
-
-        # Copy formatting (font, fill, border, alignment, and number format)
-        if source_cell.has_style:
-            target_cell.font = copy(source_cell.font)
-            target_cell.fill = copy(source_cell.fill)
-            target_cell.border = copy(source_cell.border)
-            target_cell.alignment = copy(source_cell.alignment)
-            target_cell.number_format = source_cell.number_format
-
 async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_accounts_json=ACCOUNT_MAPPING):
     """Update the Reverse Split Log sheet by inserting new rows, copying data and formatting, and deleting original rows."""
 
@@ -253,6 +235,39 @@ async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_account
         await ctx.send(f"Updated {filename} with account mappings.")
     except Exception as e:
         await ctx.send(f"Error saving Excel file: {e}")
+
+async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
+    """Clear the account mappings JSON file and notify the user."""
+
+    try:
+        # Clear the account mappings by writing an empty dictionary to the file
+        with open(mapping_file, 'w') as f:
+            json.dump({}, f, indent=4)
+
+        # Notify the user that the file has been cleared
+        await ctx.send(f"Account mappings in `{mapping_file}` have been cleared.")
+    
+    except Exception as e:
+        await ctx.send(f"Error clearing the JSON file: {e}")
+
+def copy_values_and_formatting(worksheet, source_row, target_row):
+    """Copy both values and formatting from a source row to a target row in the worksheet."""
+    for col in range(1, worksheet.max_column + 1):  # Loop over each column
+        source_cell = worksheet.cell(row=source_row, column=col)
+        target_cell = worksheet.cell(row=target_row, column=col)
+
+        # Copy the cell value
+        target_cell.value = source_cell.value
+
+        # Copy formatting (font, fill, border, alignment, and number format)
+        if source_cell.has_style:
+            target_cell.font = copy(source_cell.font)
+            target_cell.fill = copy(source_cell.fill)
+            target_cell.border = copy(source_cell.border)
+            target_cell.alignment = copy(source_cell.alignment)
+            target_cell.number_format = source_cell.number_format
+
+
 # -- Watchlist New Stock Functions
 
 async def add_stock_to_excel_log(ticker, split_date):
