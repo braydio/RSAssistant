@@ -1,0 +1,5 @@
+Error'ed orders should be saved to logs/error_details.txt
+Paste them directly here in the format below
+then run ..todiscord to print them to the channel for re-processing
+
+manual	Robinhood 1 1234	Buy	ADTX	0.18
