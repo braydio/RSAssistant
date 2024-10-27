@@ -78,7 +78,7 @@ async def on_ready():
         if not account_mappings:  # Empty dictionary
             ready_message = account_setup_message
         else:
-            ready_message = f'\nWatching for order activity...\n\n(✪‿✪)'
+            ready_message = f'\nWatching for order activity...\n\n'# (✪‿✪)
 
     except FileNotFoundError:
             ready_message = account_setup_message
@@ -109,7 +109,7 @@ async def restart(ctx):
     await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
     
     # Wait a moment to ensure the message is sent before restarting
-    await asyncio.sleep(1)
+    # await asyncio.sleep(1)
     python = sys.executable
 
     # Properly terminate the current bot process and replace it with a new one
@@ -142,7 +142,7 @@ async def excel_details_to_json(ctx):
         await ctx.send(f"An error occurred during update: {str(e)}")
 
 # Command to clear account mappings
-@bot.command(name='updateclear', help='Clears all account mappings from the account_mapping.json file')
+@bot.command(name='clearmap', help='Clears all account mappings from the account_mapping.json file')
 async def clear_mapping_command(ctx):
     try:
         await ctx.send("Clearing account mappings...")
@@ -191,7 +191,7 @@ async def on_message(message):
             embed = message.embeds[0]
             print("Embeds here:")
             print(embed)
-            parse_embed_message(embed, HOLDINGS_LOG_CSV)
+            parse_embed_message(embed)
             print(f"Holdings data saved to CSV for broker {embed.title.split(' Holdings')[0]}.")
 
     await bot.process_commands(message)

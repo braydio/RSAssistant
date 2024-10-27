@@ -243,7 +243,6 @@ def handle_complete_order(match, broker_name, broker_number):
     except Exception as e:
         print(f"Error handling complete order: {e}")
 
-
 def handle_failed_order(match, broker_name, broker_number):
     """Handles failed orders by removing incomplete entries."""
     try:
@@ -257,7 +256,6 @@ def handle_failed_order(match, broker_name, broker_number):
 
     except Exception as e:
         print(f"Error handling failed order: {e}")
-
 
 def parse_manual_order_message(content):
     """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
@@ -278,7 +276,6 @@ def parse_manual_order_message(content):
         print(f"Error parsing manual order: {e}")
         return None
 
-
 def handle_failed_order(match, broker):
     try:
         # Extract the account number from the failure message
@@ -298,7 +295,6 @@ def handle_failed_order(match, broker):
     except Exception as e:
         print(f"Error handling failed order: {e}")
 
-        
 def parse_manual_order_message(content):
     """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
     try:
@@ -323,73 +319,190 @@ def parse_manual_order_message(content):
         print(f"Error parsing manual order: {e}")
         return None
 
+# -- Parsing Messages for Account Holdings
 
-def parse_embed_message(embed, holdings_log_file):
+def parse_embed_message(embed):
     """
-    Parses an embed message and updates holdings in the CSV log based on the new JSON structure.
+    Handles a new order message by parsing it and saving the holdings to CSV.
     """
+    # Step 1: Parse the holdings from the embed message
+    parsed_holdings = main_embed_message(embed)
+
+    # Step 2: Save the parsed holdings to CSV
+    save_holdings_to_csv(parsed_holdings)
+
+    print("Holdings have been successfully parsed and saved.")
+
+def main_embed_message(embed):
+    """
+    Parses an embed message based on the broker name.
+    Dispatches to specific handler functions or general handler based on broker.
+    Returns parsed holdings data.
+    """
+    broker_name = embed.fields[0].name.split(' ')[0]
+
+    if broker_name.lower() == 'webull':
+        return parse_webull_embed_message(embed)
+    elif broker_name.lower() == 'fennel':
+        return parse_fennel_message(embed)
+    else:
+        return parse_general_embed_message(embed)
+    
+def parse_general_embed_message(embed):
+    """
+    Parses an embed message and returns parsed holdings data for general brokers.
+    """
+    parsed_holdings = []
+
     for field in embed.fields:
         name_field = field.name
+        value_field = field.value
         embed_split = name_field.split(' ')
-        broker_name = embed_split[0]  # Extract broker name
-        group_number = embed_split[1] if len(embed_split) > 1 else '1'  # Extract group number or default to '1'
-        print(broker_name, group_number,)
+        broker_name = embed_split[0]
+        group_number = embed_split[1] if len(embed_split) > 1 else '1'
+        account_number_match = re.search(r'x+(\d+)', name_field)
 
-        # Extract the account number (only the last 4 digits, skipping the 'xxxxx' part)
-        account_number_match = re.search(r'x+(\d+)', field.name)  # Match the visible part of the account number
+        if not account_number_match:
+            account_number_match = re.search(r'\((\d+)\)', name_field)
+
         account_number = account_number_match.group(1) if account_number_match else None
-        print(account_number)
 
-        # If there's no account number, skip this field
         if not account_number:
             continue
 
-        # Get the account nickname using the helper function with broker, group number, and account number
-        account_nickname = get_account_nickname(broker_name, group_number, account_number)
-        mapped_account = f"{broker_name} {account_nickname}"
-        account_key = mapped_account
+        # Directly check and assign fallback if account nickname isn't mapped
+        try:
+            account_nickname = get_account_nickname(broker_name, group_number, account_number)
+        except KeyError:
+            account_nickname = "AccountNotMapped"
 
-        print(f"Broker: {broker_name}, Account Number: {account_number}, Group Number: {group_number}")
-        print(f"Account Nickname: {account_nickname}")
+        account_key = f"{broker_name} {account_nickname}"
 
-        # Read existing holdings log
-        existing_holdings = []
-        with open(holdings_log_file, 'r') as file:
-            csv_reader = csv.reader(file)
-            existing_holdings = [row for row in csv_reader if row[0] != account_key]
-
-        # Parse the new holdings from the message
         new_holdings = []
         account_total = None
-        for line in field.value.splitlines():
-            # Check for "No holdings in Account" and skip it
+        for line in value_field.splitlines():
             if "No holdings in Account" in line:
                 continue
-
-            # Example of line: "CTNT: 1.0 @ $0.19 = $0.19"
-            match = re.match(r"(\w+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
+            match = re.match(r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
             if match:
-                stock = match.group(1)
+                stock = match.group(1).strip()
                 quantity = match.group(2)
                 price = match.group(3)
                 total_value = match.group(4)
                 new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
-          
-            # Extract the total value for the account
+
             if "Total:" in line:
                 account_total = line.split(": $")[1].strip()
 
-        # Append account total to all new holdings rows
         if account_total:
             for holding in new_holdings:
                 holding.append(account_total)
 
-        # Combine old and new holdings
-        updated_holdings = existing_holdings + new_holdings
+        parsed_holdings.extend(new_holdings)
 
-        # Write updated holdings to CSV
-        with open(holdings_log_file, 'w', newline='') as file:
-            csv_writer = csv.writer(file)
-            csv_writer.writerows(updated_holdings)
+    return parsed_holdings
 
-        print(f"Updated holdings for {account_key}.")
+def parse_webull_embed_message(embed):
+    """
+    Parses an embed message and returns parsed holdings data for Webull accounts.
+    """
+    parsed_holdings = []
+
+    for field in embed.fields:
+        name_field = field.name
+        value_field = field.value
+        embed_split = name_field.split(' ')
+        broker_name = embed_split[0]
+        group_number = embed_split[1] if len(embed_split) > 1 else '1'
+        account_number_match = re.search(r'xxxx([\dA-Z]+)', name_field)
+
+        account_number = account_number_match.group(1) if account_number_match else None
+
+        if not account_number:
+            continue
+
+        if account_number.isdigit():
+            account_number = account_number.zfill(4)
+
+        # Directly check and assign fallback if account nickname isn't mapped
+        try:
+            account_nickname = get_account_nickname(broker_name, group_number, account_number)
+        except KeyError:
+            account_nickname = "AccountNotMapped"
+
+        account_key = f"{broker_name} {account_nickname}"
+
+        new_holdings = []
+        account_total = None
+        for line in value_field.splitlines():
+            if "No holdings in Account" in line:
+                continue
+            match = re.match(r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
+            if match:
+                stock = match.group(1).strip()
+                quantity = match.group(2)
+                price = match.group(3)
+                total_value = match.group(4)
+                new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
+
+            if "Total:" in line:
+                account_total = line.split(": $")[1].strip()
+
+        if account_total:
+            for holding in new_holdings:
+                holding.append(account_total)
+
+        parsed_holdings.extend(new_holdings)
+
+    return parsed_holdings
+
+def parse_fennel_message(embed):
+    """
+    Parses an embed message and returns parsed holdings data for Fennel accounts.
+    """
+    parsed_holdings = []
+
+    for field in embed.fields:
+        name_field = field.name
+        value_field = field.value
+        embed_split = name_field.split(' ')
+        broker_name = embed_split[0]
+        group_number = embed_split[1] if len(embed_split) > 1 else '1'
+        account_number_match = re.search(r'\(Account (\d+)\)', name_field)
+
+        account_number = account_number_match.group(1) if account_number_match else None
+
+        if not account_number:
+            continue
+
+        # Directly check and assign fallback if account nickname isn't mapped
+        try:
+            account_nickname = get_account_nickname(broker_name, group_number, account_number)
+        except KeyError:
+            account_nickname = "AccountNotMapped"
+
+        account_key = f"{broker_name} {account_nickname}"
+
+        new_holdings = []
+        account_total = None
+        for line in value_field.splitlines():
+            if "No holdings in Account" in line:
+                continue
+            match = re.match(r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
+            if match:
+                stock = match.group(1).strip()
+                quantity = match.group(2)
+                price = match.group(3)
+                total_value = match.group(4)
+                new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
+
+            if "Total:" in line:
+                account_total = line.split(": $")[1].strip()
+
+        if account_total:
+            for holding in new_holdings:
+                holding.append(account_total)
+
+        parsed_holdings.extend(new_holdings)
+
+    return parsed_holdings

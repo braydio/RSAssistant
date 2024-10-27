@@ -23,7 +23,6 @@ EXCLUDED_BROKERS = config.get('excluded_brokers', {})
 
 excel_log_file = get_excel_file_path()
 
-# Ensure CSV files exist
 def ensure_csv_file_exists(file_path, headers):
     if not os.path.exists(file_path):
         with open(file_path, mode='w', newline='') as file:
@@ -90,6 +89,7 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
 
         # Archive stale orders if there are any
         if stale_orders:
+            print(stale_orders)
             archive_headers = ORDERS_HEADERS + ['Broker Number']
             if not os.path.exists(archive_path):
                 # If archive file doesn't exist, write headers
@@ -118,6 +118,45 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
     except Exception as e:
         logging.error(f"Error saving order: {e}")
 
+
+def save_holdings_to_csv(parsed_holdings):
+    """Saves holdings data to CSV, ensuring no duplicates are saved."""
+    try:
+        # Load existing holdings from the CSV
+        existing_holdings = []
+        if os.path.exists(HOLDINGS_LOG_CSV):
+            with open(HOLDINGS_LOG_CSV, mode='r', newline='') as file:
+                reader = csv.DictReader(file)
+                existing_holdings = list(reader)
+
+        # Create a set of unique keys to track existing entries (based on "Broker Name", "Account", and "Stock")
+        existing_keys = set(
+            (holding['Broker Name'], holding['Account'], holding['Stock'])
+            for holding in existing_holdings
+        )
+
+        # Convert parsed_holdings (list of lists) into a list of dictionaries and filter out duplicates
+        new_holdings = []
+        for holding in parsed_holdings:
+            holding_dict = dict(zip(HOLDINGS_HEADERS, holding))  # Convert list to dictionary
+            holding_key = (holding_dict['Broker Name'], holding_dict['Account'], holding_dict['Stock'])
+            
+            if holding_key not in existing_keys:  # Check if this combination already exists
+                new_holdings.append(holding_dict)  # If not, add it to new holdings
+                existing_keys.add(holding_key)     # Add the key to avoid future duplicates
+
+        # Write updated holdings list back to the CSV
+        with open(HOLDINGS_LOG_CSV, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
+            writer.writeheader()  # Ensure headers are written
+            writer.writerows(existing_holdings + new_holdings)  # Write the combined list
+
+        print(f"Holdings saved, with {len(new_holdings)} new entries added.")
+
+    except Exception as e:
+        logging.error(f"Error saving holdings: {e}")
+
+# -- Deprecate below functions as outdated
 
 def update_holdings_data(order_type, broker_name, account_number, stock, quantity, price):
     """
@@ -166,18 +205,7 @@ def update_holdings_data(order_type, broker_name, account_number, stock, quantit
 
     except Exception as e:
         logging.error(f"Error updating holdings data: {e}")
-
-def save_holdings_to_csv(holdings_data):
-    """Saves holdings data to CSV."""
-    try:
-        with open(HOLDINGS_LOG_CSV, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(HOLDINGS_HEADERS)  # Write headers
-            for key, entry in holdings_data.items():
-                writer.writerow(entry)
-    except Exception as e:
-        logging.error(f"Error saving holdings: {e}")
-
+        
 def read_holdings_log(file_path=HOLDINGS_LOG_CSV):
     """Reads holdings log to avoid duplicates."""
     holdings_data = {}
