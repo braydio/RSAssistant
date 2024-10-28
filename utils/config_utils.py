@@ -50,15 +50,16 @@ def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
         return {}
 
 def should_skip(broker, account_nickname):
+    print(f'should_skip called {broker} and {account_nickname} but this is being deprecated.')
     """Returns True if the broker and account_nickname should be skipped."""
-    if EXCLUDED_BROKERS is None:
-        # If EXCLUDED_BROKERS is None, treat it as an empty dictionary
-        return False
+    # if EXCLUDED_BROKERS is None:
+    #     # If EXCLUDED_BROKERS is None, treat it as an empty dictionary
+    #     return False
 
-    if broker in EXCLUDED_BROKERS and account_nickname in EXCLUDED_BROKERS[broker]:
-        return True
+    # if broker in EXCLUDED_BROKERS and account_nickname in EXCLUDED_BROKERS[broker]:
+    #     return True
 
-    return False
+    # return False
 
 def get_account_nickname(broker, group_number, account_number):
     """
@@ -126,9 +127,7 @@ async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
         active_brokers = list(account_mapping.keys())
         chunk_size = 9  # Maximum number of brokers per embed
         total_brokers = len(active_brokers)
-        print(total_brokers, active_brokers)
 
-        # Continue with your existing logic to create the embed
         for i in range(0, total_brokers, chunk_size):
             embed = discord.Embed(
                 title="**Active Brokers**",
@@ -138,45 +137,28 @@ async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
             chunk_brokers = active_brokers[i:i+chunk_size]
 
             for broker in chunk_brokers:
-                print(f'{broker} in chunk broker {chunk_brokers}')
-                
-                # Debugging: Print the data associated with the broker
+                # Ensure broker_data is valid
                 broker_data = account_mapping.get(broker)
-                print(f"broker_data is {broker_data}")
                 if broker_data is None:
                     await ctx.send(f"Error: Broker '{broker}' has no data (None).")
-                    print(f"Debug: account_mapping.get('{broker}') returned None")
                     continue
                 
                 if not isinstance(broker_data, dict):
-                    await ctx.send(f"Error: Broker '{broker}' data is not in the expected format (not a dictionary).")
-                    print(f"Debug: account_mapping.get('{broker}') returned {type(broker_data)}")
+                    await ctx.send(f"Error: Broker '{broker}' data is not in the expected format.")
                     continue
-                
-                # Now proceed with processing the valid broker data
-                account_count = 0
+
                 total_holdings = 0
+                account_count = 0
 
-                # Loop through group numbers for the current broker
+                # Iterate through each group under the broker
                 for group_number, accounts in broker_data.items():
-                    if accounts is None:
-                        await ctx.send(f"Error: Accounts for group '{group_number}' in broker '{broker}' are None.")
-                        continue
+                    # Sum account totals for each group
+                    group_account_count, group_total = sum_account_totals(broker, group_number, accounts)
+                    account_count += group_account_count
+                    total_holdings += group_total
 
-                    for account_number, account_nickname in accounts.items():
-                        print(f'{broker} | {account_number} | {account_nickname}')
-                        print(should_skip(broker, account_nickname))
-                        if should_skip(broker, account_nickname):
-                            print(f"Skipping {broker}, {account_nickname} due to should_skip")
-                            continue
-
-                        account_count += 1
-                        print("Calling sum account totals now:")
-                        total_holdings += sum_account_totals(broker, group_number, account_number)
-
+                # Prepare broker's information for display
                 plural_check = "account" if account_count == 1 else "accounts"
-
-                # Add the broker and account information as a field in the embed
                 embed.add_field(
                     name=broker,
                     value=(f"{account_count} {plural_check}\nTotal: ${total_holdings:,.2f}"),
@@ -190,36 +172,67 @@ async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
         await ctx.send(f"Error loading account mappings: {e}")
         print(f"Exception: {e}")
 
-
-def sum_account_totals(broker, accounts):
+def get_account_totals(broker, group_number=None, account_number=None):
     """
-    Sum the 'Account Total' for all accounts under a specific broker from the holdings_log.csv file.
+    Retrieve the account totals for all accounts under the specified broker, group, and account from holdings_log.csv.
+    
+    Parameters:
+    - broker: The broker for which to get account totals.
+    - group_number: The group number to filter accounts (optional).
+    - account_number: The account number to filter accounts (optional).
+    
+    Returns:
+    - A dictionary with account numbers as keys and their total as values.
+    """
+    account_totals = {}
+
+    with open(HOLDINGS_LOG_CSV, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        
+        for row in reader:
+            # Match broker name (case-insensitive)
+            if row['Broker Name'].lower() == broker.lower():
+                
+                # Optionally filter by group number if provided
+                if group_number and row['Broker Number'] != str(group_number):
+                    continue  # Skip if group number doesn't match
+
+                # Optionally filter by account number if provided
+                if account_number and row['Account Number'] != str(account_number):
+                    continue  # Skip if account number doesn't match
+
+                # Add the account number and its total to the dictionary
+                account_totals[row['Account Number']] = float(row['Account Total'])
+    
+    return account_totals
+
+def sum_account_totals(broker, group_number, accounts):
+    """
+    Sum the 'Account Total' for all accounts under a specific broker and group number
+    from the holdings_log.csv file.
     
     Parameters:
     - broker: The broker for which to sum account totals.
+    - group_number: The group number under the broker.
     - accounts: A dictionary of account numbers and their nicknames.
     
     Returns:
-    - A tuple with the total number of accounts and the sum of all account totals for the broker.
+    - A tuple with the total number of accounts and the sum of all account totals for the broker and group.
     """
     total_sum = 0.0
     account_count = 0
 
-    # Open and read holdings_log.csv
-    with open(HOLDINGS_LOG_CSV, newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
+    # Get the totals for each account in the group
+    account_totals = get_account_totals(broker, group_number)
 
-        # Create a set of all account nicknames to look for in the CSV
-        account_nicknames = {f"{broker} ({nickname})" for _, nickname in accounts.items()}
-
-        # Iterate through the CSV rows and match broker + account nickname
-        for row in reader:
-            if row['Broker Name'] in account_nicknames:
-                # Accumulate the total value for this account
-                total_sum += float(row['Account Total'])
-                account_count += 1
+    # Sum the totals of all accounts in the group
+    for account_number in accounts.keys():
+        if account_number in account_totals:
+            total_sum += account_totals[account_number]
+            account_count += 1
 
     return account_count, total_sum
+
 
 def calculate_broker_totals(account_mapping):
     """
@@ -249,39 +262,6 @@ def calculate_broker_totals(account_mapping):
 
     return broker_totals
 
-
-def get_account_totals(broker, group_number=None, account_number=None):
-    """
-    Retrieve the account totals for all accounts under the specified broker, group, and account from holdings_log.csv.
-    
-    Parameters:
-    - broker: The broker for which to get account totals.
-    - group_number: The group number to filter accounts (optional).
-    - account_number: The account number to filter accounts (optional).
-    
-    Returns:
-    - A dictionary with account numbers as keys and their total as values.
-    """
-    account_totals = {}
-
-    with open(HOLDINGS_LOG_CSV, newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            # Match broker name (case-insensitive)
-            if row['Broker Name'].lower() == broker.lower():
-                
-                # Optionally filter by group number if provided
-                if group_number and row['Broker Number'] != group_number:
-                    continue  # Skip if group number doesn't match
-
-                # Optionally filter by account number if provided
-                if account_number and row['Account'] != account_number:
-                    continue  # Skip if account number doesn't match
-
-                # Add the account number and its total to the dictionary
-                account_totals[row['Account']] = float(row['Account Total'])
-    
-    return account_totals
 
 def all_broker_accounts(broker):
     """
@@ -533,48 +513,3 @@ async def all_brokers_groups(ctx, filename=ACCOUNT_MAPPING_FILE):
 
 def add_account(broker, account_number, account_nickname):
     print(f"add_account called for {broker}{account_number}{account_nickname} but this function is deprecated.")
-
-    # This has been capped
-    """
-    broker_name = broker_name.lower()
-    account_number = account_number.lower()
-
-    # Ensure account number is exactly 4 characters long
-    if len(account_number) != 4:
-        return "Please check that the account number was entered correctly."
-        
-    # Get brokers, case insensitive    
-    mappings = load_account_mappings()
-    normalized_mapping = {key.lower(): value for key, value in mappings.items()}
-
-    # Check if the broker exists
-    if broker not in mappings:
-        return (f"Broker '{broker}' not found. Available brokers: {all_brokers()}")
-    
-    if should_skip(broker, account_nickname):
-        return (f"Skipping {broker} {account_nickname} from Should Skip settings.")
-        
-    # Check if the broker exists in the normalized mapping
-    if broker_name not in normalized_mapping:
-        raise ValueError(f"Broker '{broker}' not found. Available brokers: {all_brokers()}")
-
-    # If broker exists, append the account details
-    if 'accounts' not in mappings[broker]:
-        mappings[broker]['accounts'] = []
-
-    # Check if the account number already exists
-    for account in mappings[broker]['accounts']:
-        if account['account_number'] == account_number:
-            return f"Account '{account_number}' already exists for broker '{broker}'."
-
-    # Add the new account
-    new_account = {
-        "account_number": account_number,
-        "nickname": account_nickname
-    }
-    mappings[broker]['accounts'].append(new_account)
-
-    # Save the updated mappings
-    save_account_mappings(mappings)
-
-    return f"Account '{account_nickname}' for broker '{broker}' added successfully." """
