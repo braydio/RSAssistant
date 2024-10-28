@@ -16,7 +16,7 @@ discord_ids:
 
 # Discord bot settings
 discord:
-  token: "ID_OF_YOUR_NEW_BOT"
+  token: NEW_ASSISTER_BOT_TOKEN
   prefix: ".."
   intents:
     message_content: true
@@ -37,9 +37,7 @@ excluded_brokers:
   Plynk: null   # Exclude all accounts (explicit null)
   Fidelity:
     accounts:
-      - "BrokerageLink Roth"
-      - "BrokerageLink 401K"
-      - "Credit Card"
+      - "Cash Account 1"
     exclude_all: false  # Optionally say you are not excluding all Fidelity accounts
 
 # Settings for excel logging index values
@@ -64,6 +62,10 @@ paths:
   holdings_data: "logs/holdings_data.csv"     # Not implemented
   error_log: "logs/error_log.txt"             # Error log for errors in excel logging
   error_order: "logs/error_details.txt"  # Order details for errors, formatted for manual order
+
+header_settings:
+  orders_headers : ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
+  holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
 
 # Watchlist settings
 watch_list:
