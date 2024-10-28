@@ -16,7 +16,7 @@ discord_ids:
 
 # Discord bot settings
 discord:
-  token: NEW_ASSISTER_BOT_TOKEN
+  token: "NEW_ASSISTER_BOT_TOKEN"   # Token "WITH QUOTES" around it
   prefix: ".."
   intents:
     message_content: true
