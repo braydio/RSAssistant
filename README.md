@@ -22,8 +22,7 @@ discord_ids:
 
 # Discord bot settings
 discord:
-  token: "ID_OF_YOUR_NEW_BOT"
-  token: "ID_OF_YOUR_NEW_BOT"
+  token: NEW_ASSISTER_BOT_TOKEN
 ```
 Once the settings are set, initialize the bot with the following commands: 
 ```   
