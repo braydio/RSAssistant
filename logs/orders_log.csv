@@ -1,1 +1,1 @@
-Broker Name,Account Number,Order Type,Stock,Quantity,Date,Broker Number
+Key,Broker Name,Broker Number,Account Number,Stock,Quantity,Price,Position Value,Account Total
