@@ -245,19 +245,17 @@ async def brokerlist(ctx, broker: str = None, account_info: str = None):
 async def brokers_groups(ctx):
     await all_brokers_groups(ctx)
 
-# Command to check which brokers hold the ticker
 @bot.command(name='brokerwith', help=' > brokerwith <ticker> (details) ')
 async def broker_has(ctx, ticker: str, *args):
-    show_details = "details" in args
     specific_broker = None
 
-    # Check if a specific broker was provided for details
-    for arg in args:
-        if arg.lower() != "details":
-            specific_broker = arg
+    # Check if a specific broker was provided
+    if args:
+        specific_broker = args[0]  # First argument after ticker is the broker name
 
-    # Call the function with the show_details and specific_broker arguments
-    await track_ticker_summary(ctx, ticker, show_details=show_details, specific_broker=specific_broker)
+    # Call the function with the specific broker if provided
+    await track_ticker_summary(ctx, ticker, show_details=True if specific_broker else False, specific_broker=specific_broker)
+
 
 # Command to watch a stock
 @bot.command(name='watch', help='Adds a ticker to the watchlist for tracking.')

@@ -54,11 +54,9 @@ async def profile(ctx, broker_name):
 async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=None, holding_logs_file=HOLDINGS_LOG_CSV, account_mapping_file=ACCOUNT_MAPPING_FILE):
     """
     Track which accounts hold or do not hold the specified ticker, aggregating at the broker level.
-    Shows details at the account level if requested.
+    Shows details at the account level if a specific broker is provided.
     """
     holdings = {}
-    no_holdings = {}
-    unique_accounts = {}
     ticker = ticker.upper()
 
     # Load the account mappings from the new structure (brokers -> groups -> accounts)
@@ -82,48 +80,41 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
                 stock = row['Stock'].upper()
                 quantity = float(row['Quantity'])
 
-                # Key is now the broker name only for broker-level aggregation
+                # Create broker key
                 broker_key = broker_name
 
-                # Initialize the holding and no_holdings structures if not already present
+                # Initialize holdings for broker if not present
                 if broker_key not in holdings:
-                    holdings[broker_key] = set()
-                    no_holdings[broker_key] = set()
-                    unique_accounts[broker_key] = set()
+                    holdings[broker_key] = {}
 
-                unique_accounts[broker_key].add(account_number)
-
-                # Track accounts holding the ticker
+                # Track if the account holds the ticker
                 if stock == ticker and quantity > 0:
-                    holdings[broker_key].add(account_number)
+                    holdings[broker_key][account_number] = f"Active position in {ticker}."
                 else:
-                    no_holdings[broker_key].add(account_number)
+                    holdings[broker_key][account_number] = f"{ticker} not found."
 
-        message = f"**{ticker} Holdings - All Brokerages**\n**=============================**\n"
+        # If a specific broker is provided, show details for that broker
+        if specific_broker:
+            message = f"**{ticker} - {specific_broker.capitalize()} Holdings**\n"
+            if specific_broker.capitalize() in account_mapping:
+                broker_data = account_mapping[specific_broker.capitalize()]
+                
+                # Iterate through each group and account for the specified broker
+                for group_number, accounts in broker_data.items():
+                    for account_number, account_nickname in accounts.items():
+                        holding_status = holdings.get(specific_broker.capitalize(), {}).get(account_number[-4:], "Does not hold")
+                        message += f"{account_nickname}: {holding_status}\n"
+            else:
+                message += f"No broker found for {specific_broker.capitalize()}."
 
-        # Iterate through the account mapping (broker -> group -> accounts)
-        for broker_name, groups in account_mapping.items():
-            total_accounts = 0
-            held_accounts = 0
+        else:
+            # Default behavior: Aggregate across all brokers
+            message = f"**{ticker} Holdings - All Brokerages**\n**=============================**\n"
+            for broker_name, group_data in account_mapping.items():
+                total_accounts = sum(len(accounts) for accounts in group_data.values())
+                held_accounts = len([acc for acc in holdings.get(broker_name, {}).values() if acc == "Holds"])
 
-            # Aggregate all groups under this broker
-            for group_number, accounts in groups.items():
-                total_accounts += len(accounts)
-                held_accounts += len(holdings.get(broker_name, []))
-
-            # Add summary for each broker
-            message += f"**| ** {broker_name} - Position in {held_accounts} of {total_accounts} accounts\n"
-
-            # If "details" mode is active and specific broker is provided, show account-level details
-            if show_details and specific_broker and specific_broker.lower() == broker_name.lower():
-                message += f"\n**Ticker not in the following accounts for {broker_name}:**\n"
-                for account_number in no_holdings.get(broker_name, []):
-                    account_nickname = get_account_nickname(broker_name, group_number, account_number)
-                    order_details = get_order_details(broker_name, group_number, account_number, ticker)
-                    if order_details:
-                        message += f" **| <> ** {account_nickname} :  Found transaction data: \n   <-> *{order_details}*\n"
-                    else:
-                        message += f" **| <> ** {account_nickname}\n"
+                message += f"**| ** {broker_name} - Position in {held_accounts} of {total_accounts} accounts\n"
 
         await send_large_message_chunks(ctx, message)
 
