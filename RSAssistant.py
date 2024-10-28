@@ -16,7 +16,7 @@ from discord.ext import commands
 # Import utility functions
 from utils.config_utils import (all_account_nicknames, all_account_numbers,
                                 all_brokers, all_brokers_groups, load_config)
-from utils.csv_utils import read_holdings_log, save_holdings_to_csv
+from utils.csv_utils import read_holdings_log, save_holdings_to_csv, clear_holdings_log
 from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, update_excel_log, clear_account_mappings
 from utils.parsing_utils import (parse_embed_message,
                                  parse_manual_order_message,
@@ -122,7 +122,7 @@ async def reminder_message():
 
 # -- CURRENTLY WORKING ON
 
-@bot.command(name='updatemapping', help='Maps accounts from Account Details excel sheet')
+@bot.command(name='loadmap', help='Maps accounts from Account Details excel sheet')
 async def excel_details_to_json(ctx):
     try:
         await ctx.send("Mapping account details...")
@@ -132,7 +132,7 @@ async def excel_details_to_json(ctx):
         await ctx.send(f"An error occurred during update: {str(e)}")
 
 
-@bot.command(name='updatelog', help='Updates excel log with mapped accounts')
+@bot.command(name='loadlog', help='Updates excel log with mapped accounts')
 async def excel_details_to_json(ctx):
     try:
         await ctx.send("Updating log with mapped accounts")
@@ -200,6 +200,19 @@ async def on_message(message):
 @bot.command(name='reminder', help='Shows daily reminder')
 async def show_message(ctx):
     await send_reminder_message_embed(ctx)
+
+# Command to show the summary for a broker
+@bot.command(name='clearholdings', help='Clears entries in holdings_log.csv, repop. with !rsa holdings')
+async def clear_holdings(ctx, filename=HOLDINGS_LOG_CSV):
+    """
+    Command to clear all holdings from the CSV file, preserving only the headers.
+    """
+    success, message = clear_holdings_log(filename)  # Call the function from csv_utils
+    if success:
+        await ctx.send(message)  # Send success message
+    else:
+        await ctx.send(f"Failed to clear holdings log: {message}")  # Send failure message
+
 
 # Command to show the summary for a broker
 @bot.command(name='brokerlist', help='List all active brokers. Optional arg: Broker ')

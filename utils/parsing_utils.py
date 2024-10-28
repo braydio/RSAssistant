@@ -321,17 +321,18 @@ def parse_manual_order_message(content):
 
 # -- Parsing Messages for Account Holdings
 
+
 def parse_embed_message(embed):
     """
     Handles a new order message by parsing it and saving the holdings to CSV.
     """
     # Step 1: Parse the holdings from the embed message
     parsed_holdings = main_embed_message(embed)
-
     # Step 2: Save the parsed holdings to CSV
     save_holdings_to_csv(parsed_holdings)
 
     print("Holdings have been successfully parsed and saved.")
+
 
 def main_embed_message(embed):
     """
@@ -347,7 +348,8 @@ def main_embed_message(embed):
         return parse_fennel_message(embed)
     else:
         return parse_general_embed_message(embed)
-    
+
+
 def parse_general_embed_message(embed):
     """
     Parses an embed message and returns parsed holdings data for general brokers.
@@ -359,6 +361,13 @@ def parse_general_embed_message(embed):
         value_field = field.value
         embed_split = name_field.split(' ')
         broker_name = embed_split[0]
+       
+               # Correct capitalization for specific brokers
+        if broker_name.upper() == 'WELLSFARGO':
+            broker_name = 'Wellsfargo'
+        elif broker_name.upper() == 'VANGUARD':
+            broker_name = 'Vanguard'
+
         group_number = embed_split[1] if len(embed_split) > 1 else '1'
         account_number_match = re.search(r'x+(\d+)', name_field)
 
@@ -370,12 +379,7 @@ def parse_general_embed_message(embed):
         if not account_number:
             continue
 
-        # Directly check and assign fallback if account nickname isn't mapped
-        try:
-            account_nickname = get_account_nickname(broker_name, group_number, account_number)
-        except KeyError:
-            account_nickname = "AccountNotMapped"
-
+        account_nickname = get_account_nickname_or_default(broker_name, group_number, account_number)
         account_key = f"{broker_name} {account_nickname}"
 
         new_holdings = []
@@ -402,6 +406,7 @@ def parse_general_embed_message(embed):
 
     return parsed_holdings
 
+
 def parse_webull_embed_message(embed):
     """
     Parses an embed message and returns parsed holdings data for Webull accounts.
@@ -413,6 +418,7 @@ def parse_webull_embed_message(embed):
         value_field = field.value
         embed_split = name_field.split(' ')
         broker_name = embed_split[0]
+
         group_number = embed_split[1] if len(embed_split) > 1 else '1'
         account_number_match = re.search(r'xxxx([\dA-Z]+)', name_field)
 
@@ -424,12 +430,7 @@ def parse_webull_embed_message(embed):
         if account_number.isdigit():
             account_number = account_number.zfill(4)
 
-        # Directly check and assign fallback if account nickname isn't mapped
-        try:
-            account_nickname = get_account_nickname(broker_name, group_number, account_number)
-        except KeyError:
-            account_nickname = "AccountNotMapped"
-
+        account_nickname = get_account_nickname_or_default(broker_name, group_number, account_number)
         account_key = f"{broker_name} {account_nickname}"
 
         new_holdings = []
@@ -466,25 +467,34 @@ def parse_fennel_message(embed):
         name_field = field.name
         value_field = field.value
         embed_split = name_field.split(' ')
-        broker_name = embed_split[0]
+        broker_name = embed_split[0]  # Keep broker_name as-is (no normalization)
         group_number = embed_split[1] if len(embed_split) > 1 else '1'
-        account_number_match = re.search(r'\(Account (\d+)\)', name_field)
 
+        # Correct capitalization for specific brokers
+        if broker_name.upper() == 'WELLSFARGO':
+            broker_name = 'Wellsfargo'
+        elif broker_name.upper() == 'VANGUARD':
+            broker_name = 'Vanguard'
+
+        # Extract account number
+        account_number_match = re.search(r'\(Account (\d+)\)', name_field)
         account_number = account_number_match.group(1) if account_number_match else None
 
         if not account_number:
             continue
 
-        # Directly check and assign fallback if account nickname isn't mapped
+        # Get account nickname, or return account number if no mapping found
         try:
             account_nickname = get_account_nickname(broker_name, group_number, account_number)
         except KeyError:
             account_nickname = "AccountNotMapped"
 
+        # Construct account key
         account_key = f"{broker_name} {account_nickname}"
 
         new_holdings = []
         account_total = None
+
         for line in value_field.splitlines():
             if "No holdings in Account" in line:
                 continue
@@ -506,3 +516,16 @@ def parse_fennel_message(embed):
         parsed_holdings.extend(new_holdings)
 
     return parsed_holdings
+
+
+def get_account_nickname_or_default(broker_name, group_number, account_number):
+    """
+    Returns the account nickname if found, otherwise returns 'AccountNotMapped'.
+    """
+    try:
+        # Assuming get_account_nickname is the existing function to retrieve the account nickname
+        return get_account_nickname(broker_name, group_number, account_number)
+    except KeyError:
+        # If the account is not found, return 'AccountNotMapped'
+        return 'AccountNotMapped'
+
