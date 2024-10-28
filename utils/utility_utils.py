@@ -4,7 +4,6 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
-import discord
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config)
@@ -52,6 +51,8 @@ async def profile(ctx, broker_name):
     # Send the summary message to Discord
     await send_large_message_chunks(ctx, "\n".join(summary_message))
 
+import discord
+
 async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=None, holding_logs_file=HOLDINGS_LOG_CSV, account_mapping_file=ACCOUNT_MAPPING_FILE):
     """
     Track which accounts hold or do not hold the specified ticker, aggregating at the broker level.
@@ -69,17 +70,15 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
 
             for row in csv_reader:
                 broker_name = row['Broker Name']
-                broker_number = row['Broker Number']
                 account_number = row['Account Number']
+                stock = row['Stock'].upper()
+                quantity = float(row['Quantity'])
 
-                # Handle specific cases like Fennel (if custom account parsing is needed)
+                # Handle Fennel-specific account parsing
                 if broker_name.lower() == 'fennel':
                     account_number = get_fennel_account_number(account_number)
                 else:
                     account_number = account_number[-4:]  # Last 4 digits for other brokers
-
-                stock = row['Stock'].upper()
-                quantity = float(row['Quantity'])
 
                 # Create broker key
                 broker_key = broker_name
@@ -94,30 +93,57 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
                 else:
                     holdings[broker_key][account_number] = f"No position in {ticker}."
 
-        # If a specific broker is provided, show details for that broker
+        # Create a Discord embed message
+        embed = discord.Embed(
+            title=f"**{ticker} Holdings Summary**",
+            description=f"All brokers summary, checking position for {ticker}.",
+            color=discord.Color.blue()
+        )
+
+        # If a specific broker is provided, show detailed holdings for that broker
         if specific_broker:
-            message = f"**{ticker} - {specific_broker.capitalize()} Holdings**\n"
-            if specific_broker.capitalize() in account_mapping:
-                broker_data = account_mapping[specific_broker.capitalize()]
-                
-                # Iterate through each group and account for the specified broker
-                for group_number, accounts in broker_data.items():
-                    for account_number, account_nickname in accounts.items():
-                        holding_status = holdings.get(specific_broker.capitalize(), {}).get(account_number[-4:], f"No position in {ticker}")
-                        message += f"{account_nickname}: {holding_status}\n"
+            broker_name = specific_broker.capitalize()
+            embed.title = f"**{ticker} - {broker_name} Holdings**"
+
+            # Debugging: Check what account_mapping[broker_name] returns
+            print(f"account_mapping[{broker_name}] = {account_mapping.get(broker_name)}")
+            
+            # Ensure that broker_name is a valid dictionary
+            if broker_name in account_mapping:
+                broker_data = account_mapping[broker_name]
+                if isinstance(broker_data, dict):  # Ensure broker_data is a dictionary
+                    for group_number, accounts in broker_data.items():
+                        if isinstance(accounts, dict):  # Ensure accounts is a dictionary
+                            for account_number, account_nickname in accounts.items():
+                                holding_status = holdings.get(broker_name, {}).get(account_number[-4:], f"No position in {ticker}.")
+                                embed.add_field(
+                                    name=f"{account_nickname}",
+                                    value=holding_status,
+                                    inline=True
+                                )
+                        else:
+                            await ctx.send(f"Error: Expected accounts for group {group_number} to be a dictionary, but got {type(accounts)}")
+                else:
+                    await ctx.send(f"Error: Expected account mappings for {broker_name} to be a dictionary, but got {type(broker_data)}.")
             else:
-                message += f"No broker found for {specific_broker.capitalize()}."
-
+                embed.description = f"No broker found for {broker_name}."
         else:
-            # Default behavior: Aggregate across all brokers
-            title = f"**{ticker} Holdings - All Brokerages**\n**\n"
+            # Aggregate behavior: Show all brokers
             for broker_name, group_data in account_mapping.items():
-                total_accounts = sum(len(accounts) for accounts in group_data.values())
-                held_accounts = len([acc for acc in holdings.get(broker_name, {}).values() if acc == "Holds"])
+                if isinstance(group_data, dict):  # Check if group_data is a dictionary
+                    total_accounts = sum(len(accounts) for accounts in group_data.values())
+                    held_accounts = len([acc for acc in holdings.get(broker_name, {}).values() if "Active" in acc])
 
-                message += f"**| ** {broker_name} - Position in {held_accounts} of {total_accounts} accounts\n"
+                    embed.add_field(
+                        name=f"{broker_name}",
+                        value=f"Position in {held_accounts} of {total_accounts} accounts",
+                        inline=True
+                    )
+                else:
+                    await ctx.send(f"Error: Expected group data for {broker_name} to be a dictionary, got {type(group_data)}.")
 
-        await send_large_message_chunks(ctx, message)
+        # Send the embed message
+        await ctx.send(embed=embed)
 
     except FileNotFoundError:
         await ctx.send(f"Error: The file {holding_logs_file} or {account_mapping_file} was not found.")
@@ -125,6 +151,8 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
         await ctx.send(f"Error: Missing expected column in CSV: {e}")
     except Exception as e:
         await ctx.send(f"Error: {e}")
+
+
 
 
 def get_fennel_account_number(account_str):
