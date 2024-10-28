@@ -67,7 +67,7 @@ async def on_ready():
     
 # Check if the account_mapping.json file exists and has content
     try:
-        account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{excel_log_file}`\n\nThen run: `..updatemapping` and `..updatelog`."
+        account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{excel_log_file}`\n\nThen run: `..loadmap` and `..loadlog`."
         
         with open(ACCOUNT_MAPPING_FILE, 'r') as file:
             account_mappings = (json.load(file))
@@ -127,7 +127,7 @@ async def excel_details_to_json(ctx):
     try:
         await ctx.send("Mapping account details...")
         await index_account_details(ctx)
-        await ctx.send("Mapping complete.\n Run `..updatelog` to save mapped accounts to the excel logger.")
+        await ctx.send("Mapping complete.\n Run `..loadlog` to save mapped accounts to the excel logger.")
     except Exception as e:
         await ctx.send(f"An error occurred during update: {str(e)}")
 
