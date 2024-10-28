@@ -17,8 +17,8 @@ ORDERS_CSV_FILE = config['paths']['orders_log']
 HOLDINGS_DATA_FINAL = config['paths']['holdings_data']
 ACCOUNT_MAPPING = config['paths']['account_mapping']
 
-ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
-HOLDINGS_HEADERS = ['Broker Name', 'Account', 'Stock', 'Quantity', 'Price', 'Total Value', 'Account Total']
+ORDERS_HEADERS = config['header_settings']['orders_headers']
+HOLDINGS_HEADERS = config['header_settings']['holdings_headers']
 EXCLUDED_BROKERS = config.get('excluded_brokers', {})
 
 excel_log_file = get_excel_file_path()
@@ -129,9 +129,9 @@ def save_holdings_to_csv(parsed_holdings):
                 reader = csv.DictReader(file)
                 existing_holdings = list(reader)
 
-        # Create a set of unique keys to track existing entries (based on "Broker Name", "Account", and "Stock")
+        # Create a set of unique keys to track existing entries (based on "Key")
         existing_keys = set(
-            (holding['Broker Name'], holding['Account'], holding['Stock'])
+            (holding['Key'], holding['Broker Name'], holding['Broker Number'], holding['Account Number'], holding['Stock'])
             for holding in existing_holdings
         )
 
@@ -139,7 +139,7 @@ def save_holdings_to_csv(parsed_holdings):
         new_holdings = []
         for holding in parsed_holdings:
             holding_dict = dict(zip(HOLDINGS_HEADERS, holding))  # Convert list to dictionary
-            holding_key = (holding_dict['Broker Name'], holding_dict['Account'], holding_dict['Stock'])
+            holding_key = (holding_dict['Key'], holding_dict['Broker Name'], holding_dict['Broker Number'], holding_dict['Account Number'], holding_dict['Stock'])
             
             if holding_key not in existing_keys:  # Check if this combination already exists
                 new_holdings.append(holding_dict)  # If not, add it to new holdings
@@ -155,7 +155,7 @@ def save_holdings_to_csv(parsed_holdings):
 
     except Exception as e:
         logging.error(f"Error saving holdings: {e}")
-
+        
 def clear_holdings_log(filename):
     """
     Clears all holdings from the CSV file, preserving only the headers.
