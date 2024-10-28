@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
+import discord
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config)
@@ -91,7 +92,7 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
                 if stock == ticker and quantity > 0:
                     holdings[broker_key][account_number] = f"Active position in {ticker}."
                 else:
-                    holdings[broker_key][account_number] = f"{ticker} not found."
+                    holdings[broker_key][account_number] = f"No position in {ticker}."
 
         # If a specific broker is provided, show details for that broker
         if specific_broker:
@@ -102,14 +103,14 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
                 # Iterate through each group and account for the specified broker
                 for group_number, accounts in broker_data.items():
                     for account_number, account_nickname in accounts.items():
-                        holding_status = holdings.get(specific_broker.capitalize(), {}).get(account_number[-4:], "Does not hold")
+                        holding_status = holdings.get(specific_broker.capitalize(), {}).get(account_number[-4:], f"No position in {ticker}")
                         message += f"{account_nickname}: {holding_status}\n"
             else:
                 message += f"No broker found for {specific_broker.capitalize()}."
 
         else:
             # Default behavior: Aggregate across all brokers
-            message = f"**{ticker} Holdings - All Brokerages**\n**=============================**\n"
+            title = f"**{ticker} Holdings - All Brokerages**\n**\n"
             for broker_name, group_data in account_mapping.items():
                 total_accounts = sum(len(accounts) for accounts in group_data.values())
                 held_accounts = len([acc for acc in holdings.get(broker_name, {}).values() if acc == "Holds"])

@@ -47,8 +47,8 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
 
     # Full paths for today's and tomorrow's files
-    today_excel_file = os.path.join(os.path.normpath(directory), f"{filename}.{today}.xlsx")
-    tomorrow_excel_file = os.path.join(os.path.normpath(directory), f"{filename}.{tomorrow}.xlsx")
+    today_excel_file = os.path.join(os.path.normpath(directory), f"Backup_{filename}.{today}.xlsx")
+    tomorrow_excel_file = os.path.join(os.path.normpath(directory), f"Backup_{filename}.{tomorrow}.xlsx")
     
     # Path to the base template file (without date)
     base_excel_file = os.path.join(os.path.normpath(EXCEL_FILE_DIRECTORY), (BASE_EXCEL_FILE))
@@ -63,14 +63,20 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
     
     # Ensure tomorrow's file exists
     if not os.path.exists(tomorrow_excel_file):
-        if os.path.exists(base_excel_file):
-            shutil.copy(base_excel_file, tomorrow_excel_file)
+        if os.path.exists(today_excel_file):
+            shutil.copy(today_excel_file, tomorrow_excel_file)
             print(f"Created tomorrow's Excel log: {tomorrow_excel_file}")
         else:
             print(f"Base Excel file {base_excel_file} not found.")
-    
+        if not os.path.exists(tomorrow_excel_file):
+            if os.path.exists(base_excel_file):
+                shutil.copy(base_excel_file, today_excel_file)
+                print(f"Created today's backup Excel log: {today_excel_file}")
+        else:
+            print(f"Base Excel file {base_excel_file} not found.")
+
     # Return the path to today's file
-    return today_excel_file
+    return base_excel_file
 
 excel_log_file = get_excel_file_path()
 
@@ -299,11 +305,13 @@ async def add_stock_to_excel_log(ctx, ticker, split_date):
         # Find the next available columns for the ticker and split ratio
         ticker_col = last_filled_column + 1
         split_ratio_col = ticker_col + 1
+        spacer_col = split_ratio_col +1
         print(f"Next columns: ticker_col={ticker_col}, split_ratio_col={split_ratio_col}")
 
         # Copy the previous columns to maintain formatting
         copy_column(ws, last_filled_column, ticker_col)
         copy_column(ws, last_filled_column + 1, split_ratio_col)
+        copy_column(ws, last_filled_column + 1, spacer_col)
 
         # Set the stock ticker and split ratio placeholder in the new columns
         ws.cell(row=stock_row, column=ticker_col).value = ticker
