@@ -47,7 +47,7 @@ excel_log_settings:
   account_start_row: 4  # Account names are saved to EVERY row, starting at 'account_start_row'
   account_start_column: 1 # Account names are saved to EVERY SUBSEQUENT row to 'account_start_row' in 'account_start_column'
   split_ratio_placeholder: "S:S"  # Placeholder entered into EVERY EMPTY cell in 'stock_row' - functionality WIP
-  days_keep_backup: 3    # Number of days to keep backup files
+  days_keep_backup: 2    # Number of days to keep backup files
 
 # Paths for logs and other files
 paths:
