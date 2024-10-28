@@ -129,7 +129,7 @@ def save_holdings_to_csv(parsed_holdings):
                 reader = csv.DictReader(file)
                 existing_holdings = list(reader)
 
-        # Create a set of unique keys to track existing entries (based on "Key")
+        # Create a set of unique keys to track existing entries (based on "Key", "Broker Name", "Broker Number", "Account Number", and "Stock")
         existing_keys = set(
             (holding['Key'], holding['Broker Name'], holding['Broker Number'], holding['Account Number'], holding['Stock'])
             for holding in existing_holdings
@@ -146,12 +146,15 @@ def save_holdings_to_csv(parsed_holdings):
                 existing_keys.add(holding_key)     # Add the key to avoid future duplicates
 
         # Write updated holdings list back to the CSV
-        with open(HOLDINGS_LOG_CSV, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
-            writer.writeheader()  # Ensure headers are written
-            writer.writerows(existing_holdings + new_holdings)  # Write the combined list
+        if new_holdings:  # Proceed only if there are new holdings to add
+            with open(HOLDINGS_LOG_CSV, mode='w', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
+                writer.writeheader()  # Ensure headers are written
+                writer.writerows(existing_holdings + new_holdings)  # Write the combined list
 
-        print(f"Holdings saved, with {len(new_holdings)} new entries added.")
+            print(f"Holdings saved, with {len(new_holdings)} new entries added.")
+        else:
+            print("No new holdings to add.")
 
     except Exception as e:
         logging.error(f"Error saving holdings: {e}")
