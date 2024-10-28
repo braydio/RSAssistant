@@ -19,8 +19,8 @@ HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ORDERS_CSV_FILE = config['paths']['orders_log']
 
 # Order headers
-ORDERS_HEADERS = ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
-HOLDINGS_HEADERS = ['Key', 'Broker Name', 'Broker Number', 'Account', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
+ORDERS_HEADERS = config['header_settings']['orders_headers']
+HOLDINGS_HEADERS = config['header_settings']['holdings_headers']
 
 # Centralized function for standardizing broker names
 def standardize_broker_name(broker_name):
@@ -403,6 +403,7 @@ def parse_general_embed_message(embed):
                 holding.append(account_total)
 
         parsed_holdings.extend(new_holdings)
+        print(parsed_holdings)
 
     return parsed_holdings
 
