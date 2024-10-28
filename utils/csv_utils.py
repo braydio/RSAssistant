@@ -156,6 +156,32 @@ def save_holdings_to_csv(parsed_holdings):
     except Exception as e:
         logging.error(f"Error saving holdings: {e}")
 
+def clear_holdings_log(filename):
+    """
+    Clears all holdings from the CSV file, preserving only the headers.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        # Check if the file exists
+        if not os.path.exists(filename):
+            return False, f'Holdings at: "{filename}" does not exist.'
+
+        # Read the headers from the file
+        with open(filename, mode='r') as file:
+            reader = csv.reader(file)
+            headers = next(reader, None)  # Get the headers from the first row
+
+        if headers:
+            # Write only the headers back to the file, clearing the data
+            with open(filename, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(headers)  # Write the headers back
+            return True, f'Holdings at: "{filename}" has been cleared. Run !rsa holdings to repopulate.'
+        else:
+            return False, f'Holdings at: "{filename}" is empty or improperly formatted.'
+    except Exception as e:
+        return False, f"Error clearing holdings log: {e}"
+
 # -- Deprecate below functions as outdated
 
 def update_holdings_data(order_type, broker_name, account_number, stock, quantity, price):
@@ -205,7 +231,7 @@ def update_holdings_data(order_type, broker_name, account_number, stock, quantit
 
     except Exception as e:
         logging.error(f"Error updating holdings data: {e}")
-        
+
 def read_holdings_log(file_path=HOLDINGS_LOG_CSV):
     """Reads holdings log to avoid duplicates."""
     holdings_data = {}
