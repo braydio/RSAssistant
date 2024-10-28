@@ -1,532 +1,268 @@
+import asyncio
 import csv
 import json
 import logging
-import re
-from datetime import datetime
+import os
+from collections import defaultdict
+from datetime import datetime, timedelta
 
-from discord import embeds
+import discord
+import pandas as pd
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
-                                load_config)
-from utils.csv_utils import (get_holdings_for_summary, read_holdings_log,
-                             save_holdings_to_csv, save_order_to_csv)
-from utils.watch_utils import update_watchlist
+                                load_config, send_large_message_chunks,
+                                should_skip, get_last_stock_price)
+from utils.excel_utils import add_stock_to_excel_log, get_excel_file_path
 
-# Load configuration
+# Load configuration and paths from settings
 config = load_config()
+WATCH_FILE = config['paths']['watch_list']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
-ORDERS_CSV_FILE = config['paths']['orders_log']
+TARGET_CHANNEL_ID = config['discord_ids']['channel_id']  # change to ['discord_ids']['reminder_channel_id']
+excluded_brokers = config.get('excluded_brokers', {})
 
-# Order headers
-ORDERS_HEADERS = config['header_settings']['orders_headers']
-HOLDINGS_HEADERS = config['header_settings']['holdings_headers']
+excel_log_file = get_excel_file_path()
 
-# Centralized function for standardizing broker names
-def standardize_broker_name(broker_name):
-    """Standardize broker names to a consistent format."""
-    broker_name_mapping = {
-        'WELLSFARGO': 'Wellsfargo',
-        'SCHWAB': 'Schwab',
-        'FIDELITY': 'Fidelity',
-        'ROBINHOOD': 'Robinhood',
-        'BBAE' : 'BBAE'
-        # Add any other broker mappings as needed
-    }
+# Dictionary to track the watch list for specific tickers across accounts
+watch_list = defaultdict(lambda: defaultdict(dict))
 
-    # Return the mapped name, or capitalize properly if not in mapping
-    return broker_name_mapping.get(broker_name.upper(), broker_name.capitalize())
+# Helper functions
+def save_watch_list():
+    """Save the current watch list to a JSON file."""
+    with open(WATCH_FILE, 'w') as file:
+        json.dump(watch_list, file, default=str)
+    logging.info("Watch list saved.")
 
-# Store incomplete orders
-incomplete_orders = {}
-
-# Regex patterns for various brokers
-patterns = {
-    'robinhood': r'(Robinhood\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
-    'fidelity': r'(Fidelity\s\d+)\saccount\s(?:xxxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
-    'tradier_verification': r'(Tradier)\saccount\s(?:xxxx)?(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+):\s(ok|failed)',
-    'webull_buy': r'(Webull\s\d+):\sbuying\s(\d+\.?\d*)\sof\s(\w+)',
-    'wellsfargo': r'(WELLSFARGO\s\d+)\s\*\*\*(\d+):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
-    'webull_sell': r'(Webull\s\d+):\ssell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\w+):\s(Success|Failed)',
-    'fennel': r'(Fennel\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)',
-    'public': r'(Public\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)',
-    'schwab_order': r'(Schwab\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
-    'tradier_order': r'(Tradier\s\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s(\w+)',
-    'chase_order': r'(Chase\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)',
-    'schwab_verification': r'(Schwab\s\d+)\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
-    'schwab_failure': r"Schwab\s\d+\saccount\s(\w+):\sThe order verification produced the following messages:",
-    'chase_verification': r'(Chase\s\d+)\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
-    'firstrade_order': r"(Firstrade\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s([A-Z]+)\s@\s(market|limit)",
-    'firstrade_verification': r"(Firstrade\s\d+)\saccount\sxxxx(\d{4}):\sThe order verification was\s(successful|unsuccessful)",
-    'firstrade_failure': r"Firstrade\s\d+\saccount\s(\w+):\sThe order verification produced the following messages:",
-    'bbae': r'(?i)(BBAE\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
-}
-
-
-def parse_order_message(content):
-    """Parses an order message and extracts relevant details based on broker formats."""
-    for broker, pattern in patterns.items():
-        match = re.match(pattern, content)
-        if match:
-            # Split the broker into broker_name and broker_number if applicable
-            broker_split = match.group(0).split()  # Use the first matched group (broker) to split
-            broker_name = broker_split[0]  # Extract broker name (e.g., 'Fidelity')
-            broker_number = broker_split[1] if len(broker_split) > 1 else "N/A"  # Extract broker number or set as "N/A"
-            print(f'Matching {broker_name} broker number {broker_number} to mapped accounts.')
-
-            if broker in ['schwab_order', 'chase_order', 'firstrade_order', 'tradier_order']:
-                print(f"Processing incomplete order for {broker_name} {broker_number}")
-                handle_incomplete_order(match, broker_name, broker_number)
-            elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification', 'tradier_verification']:
-                print(f"Received verification message for {broker_name} broker number {broker_number}")
-                handle_verification(match, broker_name, broker_number)
-            elif broker in ['schwab_failure', 'firstrade_failure']:
-                print("Received failure message, removing failed account...")
-                handle_failed_order(match, broker_name, broker_number)
-            else:
-                # For complete orders, pass broker_name and broker_number to handle_complete_order
-                handle_complete_order(match, broker_name, broker_number)
-            return
-    print(f"Failed to parse order message: {content}")
-        
-
-def handle_incomplete_order(match, broker_name, broker_number):
-    """Handles incomplete buy/sell orders for Chase, Schwab, Tradier, and Firstrade."""
-    print(f"Initialized verification for {broker_name} broker number: {broker_number}")
-    try:
-        # Print matched groups for debugging
-        print(f"Matched groups for {broker_name} {broker_number}: {match.groups()[0:4]}")
-
-        # Get other values from match groups
-        action, quantity, stock = match.groups()[1:4]
-        print(f"Temporary orders for all accounts in {broker_name} {broker_number}, details: {action} {quantity} {stock}")
-
-        # Ensure none of the variables are missing
-        if not action or not quantity or not stock:
-            raise ValueError(f"Missing values: action={action}, quantity={quantity}, stock={stock}")
-
-        # Load the account mapping
-        account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-
-        # Check if the broker exists in the mapping
-        if broker_name in account_mapping:
-            broker_level_names = account_mapping[broker_name]
-
-            # Check if the group number (broker_number) exists in the broker's accounts
-            if broker_number in broker_level_names:
-                account_level_numbers = broker_level_names[broker_number]
-
-                # Iterate through accounts in the group
-                for account_number, nickname in account_level_numbers.items():
-                    print(f"Generating temporary order for {nickname} - last four: {account_number}.")
-
-                    # Populate incomplete_orders with broker_name, broker_number, action, quantity, and stock
-                    incomplete_orders[(stock, account_number)] = {
-                        'broker_name': broker_name,
-                        'broker_number': broker_number,
-                        'account_number': account_number,
-                        'nickname': nickname,
-                        'action': action,
-                        'quantity': quantity,
-                        'stock': stock
-                    }
-                    print(f"Saved placeholder order for account {account_number} ({nickname}): {incomplete_orders[(stock, account_number)]}")
-            else:
-                print(f"Group number {broker_number} not found for broker {broker_name}.")
-        else:
-            print(f"Broker {broker_name} not found in account mapping.")
-
-    except ValueError as e:
-        print(f"Error in handle_incomplete_order: {e}")
-
-
-def handle_verification(match, broker_name, broker_number):
-    """Processes order verification for Chase, Schwab, and Firstrade."""
-    print(f"Verification order passed for {broker_name} {broker_number}")
-    
-    # Load the account mapping
-    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-    
-    # Extract the account number from the matched groups
-    account_number = match.groups()[1]
-    
-    # Check if the broker exists in the mapping
-    if broker_name in account_mapping:
-        broker_accounts = account_mapping[broker_name]
-        
-        # Check if the group number (broker_number) exists in the broker's accounts
-        if broker_number in broker_accounts:
-            temp_orders_account_level = broker_accounts[broker_number]
-            
-            # Check if the account number is in the group
-            if account_number in temp_orders_account_level:
-                print(f"Account {account_number} found for {broker_name} {broker_number}. Processing verification.")
-                # Call process_verified_orders with the relevant accounts
-                process_verified_orders(broker_name, account_number, temp_orders_account_level)
-            else:
-                print(f"Account {account_number} not found for {broker_name} {broker_number}.")
-        else:
-            print(f"Group number {broker_number} not found for broker {broker_name}.")
+def load_watch_list():
+    """Load the watch list from a JSON file."""
+    global watch_list
+    if os.path.exists(WATCH_FILE):
+        with open(WATCH_FILE, 'r') as file:
+            watch_list.update(json.load(file))
+        logging.info("Watch list loaded.")
     else:
-        print(f"Broker {broker_name} not found in account mapping.")
+        logging.info("No watch list file found, starting fresh.")
+
+def update_watchlist_with_stock(ticker):
+    """Adds a stock ticker to the Excel log."""
+    ticker = ticker.upper()
+    try:
+        
+        logging.info(f"Successfully added {ticker} to the watchlist and Excel log.")
+    except Exception as e:
+        logging.error(f"Error updating watchlist: {e}")
 
 
-def process_verified_orders(broker_name, account_number, temp_orders_account_level):
-    """Processes verified orders for the specified broker."""
-    print(f"Processing verified orders for {broker_name}, account number: {account_number}")
+# -- Main functions
+
+async def watch_ticker(ctx, ticker: str, split_date: str):
+    """Add a stock ticker with a split date to the watch list."""
+    ticker = ticker.upper()
     
-    # Ensure that account_list contains valid account data
-    if not temp_orders_account_level:
-        print(f"No placeholder orders found for broker {broker_name}.")
-        return
-    
-    # Iterate through incomplete orders to find matching stock and account
-    for (stock, account), order in list(incomplete_orders.items()):
-        # Check if the broker name, account number, and action match the placeholder order
-        if order['broker_name'] == broker_name and order['account_number'] == account_number:
-            # Account has been found; remove the verified order from the incomplete list
-            del incomplete_orders[(stock, account)]
-
-            # Retrieve broker_number from the order data
-            broker_number = order.get('broker_number')
-
-            # Save the verified order to CSV using the provided broker_name, broker_number, account_number, etc.
-            save_order_to_csv(broker_name, broker_number, account_number, order['action'], order['quantity'], stock)
-
-            # Log the successful processing of the verified order
-            print(f"Verified order {order['action']} {order['quantity']} of {stock} for {broker_name} {broker_number}, Account: {account_number}")
-            break
-        else:
-            print(f"Order for {broker_name} {account_number} not found in incomplete orders.")
-
-
-def handle_complete_order(match, broker_name, broker_number):
-    """Handles complete buy and sell orders."""
-    try:
-        # Initialize variables with default values
-        account_number = None
-        action = None
-        quantity = None
-        stock = None
-
-        print(f"Processing order for broker: {broker_name} {broker_number}, match: {match.groups()}")
-
-        # Extract data from the match groups based on the broker
-        if broker_name.lower() in ['robinhood', 'public', 'bbae', 'fennel']:
-            # Specific to these brokers
-            action, quantity, stock, account_number = match.groups()[1:5]
-        elif broker_name.lower() == 'webull':
-            # Webull-specific sell
-            if 'sell' in match.group(0).lower():
-                # Webull-specific sell
-                quantity, stock, account_number = match.groups()[1:4]
-                action = 'sell'
-            elif 'buy' in match.group(0).lower():
-                # Webull-specific buy
-                quantity, stock = match.groups()[1:3]
-                account_number = 'N/A'
-                action = 'buy'
-        elif broker_name.lower() in ['fidelity', 'wellsfargo']:
-            # Fidelity/Wells Fargo extract account and action
-            account_number, action, quantity, stock = match.groups()[1:5]
-        else:
-            raise ValueError(f"Broker {broker_name} not recognized in complete order handler.")
-
-        # If it's a sell order, mark it as pending closure
-        if action == 'sell':
-            update_watchlist(broker_name, account_number, stock, 0, order_type='sell')  # Use quantity=0 for pending closure
-
-        # Save the order with the broker and broker_number
-        save_order_to_csv(broker_name, broker_number, account_number, action, quantity, stock)
-        print(f"{broker_name} {broker_number}, Account {account_number}, {action.capitalize()} {quantity} of {stock}")
-
-    except Exception as e:
-        print(f"Error handling complete order: {e}")
-
-def handle_failed_order(match, broker_name, broker_number):
-    """Handles failed orders by removing incomplete entries."""
-    try:
-        account_number = match.group(1)
-        to_remove = [(stock, account) for (stock, account), order in incomplete_orders.items()
-                     if order['broker'] == broker_name and account == account_number]
-        
-        for item in to_remove:
-            del incomplete_orders[item]
-            print(f"Removed failed order for {broker_name} {account_number}")
-
-    except Exception as e:
-        print(f"Error handling failed order: {e}")
-
-def parse_manual_order_message(content):
-    """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
-    try:
-        parts = content.split()
-        if len(parts) != 7:
-            raise ValueError("Invalid format. Expected 'manual Broker BrokerNumber Account OrderType Stock Price'.")
-
-        return {
-            'broker_name': parts[1],
-            'group_number': parts[2],  # Broker Number
-            'account': parts[3],      # Account
-            'order_type': parts[4],   # Order type (buy/sell)
-            'stock': parts[5],        # Stock ticker symbol
-            'price': float(parts[6])  # Price
+    if ticker not in watch_list:
+        watch_list[ticker] = {
+            'split_date': split_date,
+            'reminder_sent': False
         }
-    except Exception as e:
-        print(f"Error parsing manual order: {e}")
-        return None
-
-def handle_failed_order(match, broker):
-    try:
-        # Extract the account number from the failure message
-        account_number = match.group(1)
-        
-        # Loop through incomplete orders and remove the one matching the account number
-        to_remove = []
-        for (stock, account), order in incomplete_orders.items():
-            if order['broker'] == 'Firstrade' and account == account_number:
-                to_remove.append((stock, account))
-                print(f"Removing Firstrade order for account {account_number} due to failure.")
-
-        # Remove failed accounts from incomplete_orders
-        for item in to_remove:
-            del incomplete_orders[item]
-
-    except Exception as e:
-        print(f"Error handling failed order: {e}")
-
-def parse_manual_order_message(content):
-    """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
-    try:
-        parts = content.split()
-        for part in parts:
-            print(f"Part: {part}")
-        
-        # Expected format length check (7 parts now: manual, broker, broker_number, account, order_type, stock, price)
-        if len(parts) != 7:
-            raise ValueError("Invalid format. Expected 'manual Broker BrokerNumber Account OrderType Stock Price'.")
-
-        # Returning the parsed values
-        return {
-            'broker_name': parts[1],
-            'group_number': parts[2],  # Combining Broker and BrokerNumber
-            'account': parts[3],      # Account
-            'order_type': parts[4],   # Order type (e.g., 'buy' or 'sell')
-            'stock': parts[5],        # Stock ticker symbol
-            'price': float(parts[6])  # Price converted to float
-        }
-    except Exception as e:
-        print(f"Error parsing manual order: {e}")
-        return None
-
-# -- Parsing Messages for Account Holdings
-
-
-def parse_embed_message(embed):
-    """
-    Handles a new order message by parsing it and saving the holdings to CSV.
-    """
-    # Step 1: Parse the holdings from the embed message
-    parsed_holdings = main_embed_message(embed)
-    # Step 2: Save the parsed holdings to CSV
-    save_holdings_to_csv(parsed_holdings)
-
-    print("Holdings have been successfully parsed and saved.")
-
-
-def main_embed_message(embed):
-    """
-    Parses an embed message based on the broker name.
-    Dispatches to specific handler functions or general handler based on broker.
-    Returns parsed holdings data.
-    """
-    broker_name = embed.fields[0].name.split(' ')[0]
-
-    if broker_name.lower() == 'webull':
-        return parse_webull_embed_message(embed)
-    elif broker_name.lower() == 'fennel':
-        return parse_fennel_message(embed)
-    else:
-        return parse_general_embed_message(embed)
-
-
-def parse_general_embed_message(embed):
-    """
-    Parses an embed message and returns parsed holdings data for general brokers.
-    """
-    parsed_holdings = []
-
-    for field in embed.fields:
-        name_field = field.name
-        value_field = field.value
-        embed_split = name_field.split(' ')
-        broker_name = embed_split[0]
-       
-               # Correct capitalization for specific brokers
-        if broker_name.upper() == 'WELLSFARGO':
-            broker_name = 'Wellsfargo'
-        elif broker_name.upper() == 'VANGUARD':
-            broker_name = 'Vanguard'
-
-        group_number = embed_split[1] if len(embed_split) > 1 else '1'
-        account_number_match = re.search(r'x+(\d+)', name_field)
-
-        if not account_number_match:
-            account_number_match = re.search(r'\((\d+)\)', name_field)
-
-        account_number = account_number_match.group(1) if account_number_match else None
-
-        if not account_number:
-            continue
-
-        account_nickname = get_account_nickname_or_default(broker_name, group_number, account_number)
-        account_key = f"{broker_name} {account_nickname}"
-
-        new_holdings = []
-        account_total = None
-        for line in value_field.splitlines():
-            if "No holdings in Account" in line:
-                continue
-            match = re.match(r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
-            if match:
-                stock = match.group(1).strip()
-                quantity = match.group(2)
-                price = match.group(3)
-                total_value = match.group(4)
-                new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
-
-            if "Total:" in line:
-                account_total = line.split(": $")[1].strip()
-
-        if account_total:
-            for holding in new_holdings:
-                holding.append(account_total)
-
-        parsed_holdings.extend(new_holdings)
-        print(parsed_holdings)
-
-    return parsed_holdings
-
-
-def parse_webull_embed_message(embed):
-    """
-    Parses an embed message and returns parsed holdings data for Webull accounts.
-    """
-    parsed_holdings = []
-
-    for field in embed.fields:
-        name_field = field.name
-        value_field = field.value
-        embed_split = name_field.split(' ')
-        broker_name = embed_split[0]
-
-        group_number = embed_split[1] if len(embed_split) > 1 else '1'
-        account_number_match = re.search(r'xxxx([\dA-Z]+)', name_field)
-
-        account_number = account_number_match.group(1) if account_number_match else None
-
-        if not account_number:
-            continue
-
-        if account_number.isdigit():
-            account_number = account_number.zfill(4)
-
-        account_nickname = get_account_nickname_or_default(broker_name, group_number, account_number)
-        account_key = f"{broker_name} {account_nickname}"
-
-        new_holdings = []
-        account_total = None
-        for line in value_field.splitlines():
-            if "No holdings in Account" in line:
-                continue
-            match = re.match(r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
-            if match:
-                stock = match.group(1).strip()
-                quantity = match.group(2)
-                price = match.group(3)
-                total_value = match.group(4)
-                new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
-
-            if "Total:" in line:
-                account_total = line.split(": $")[1].strip()
-
-        if account_total:
-            for holding in new_holdings:
-                holding.append(account_total)
-
-        parsed_holdings.extend(new_holdings)
-
-    return parsed_holdings
-
-def parse_fennel_message(embed):
-    """
-    Parses an embed message and returns parsed holdings data for Fennel accounts.
-    """
-    parsed_holdings = []
-
-    for field in embed.fields:
-        name_field = field.name
-        value_field = field.value
-        embed_split = name_field.split(' ')
-        broker_name = embed_split[0]  # Keep broker_name as-is (no normalization)
-        group_number = embed_split[1] if len(embed_split) > 1 else '1'
-
-        # Correct capitalization for specific brokers
-        if broker_name.upper() == 'WELLSFARGO':
-            broker_name = 'Wellsfargo'
-        elif broker_name.upper() == 'VANGUARD':
-            broker_name = 'Vanguard'
-
-        # Extract account number
-        account_number_match = re.search(r'\(Account (\d+)\)', name_field)
-        account_number = account_number_match.group(1) if account_number_match else None
-
-        if not account_number:
-            continue
-
-        # Get account nickname, or return account number if no mapping found
         try:
-            account_nickname = get_account_nickname(broker_name, group_number, account_number)
-        except KeyError:
-            account_nickname = "AccountNotMapped"
-
-        # Construct account key
-        account_key = f"{broker_name} {account_nickname}"
-
-        new_holdings = []
-        account_total = None
-
-        for line in value_field.splitlines():
-            if "No holdings in Account" in line:
-                continue
-            match = re.match(r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line)
-            if match:
-                stock = match.group(1).strip()
-                quantity = match.group(2)
-                price = match.group(3)
-                total_value = match.group(4)
-                new_holdings.append([account_key, broker_name, group_number, account_number, stock, quantity, price, total_value])
-
-            if "Total:" in line:
-                account_total = line.split(": $")[1].strip()
-
-        if account_total:
-            for holding in new_holdings:
-                holding.append(account_total)
-
-        parsed_holdings.extend(new_holdings)
-
-    return parsed_holdings
+            # Ensure the async function is awaited
+            await add_stock_to_excel_log(ticker, split_date, excel_log_file)
+            logging.info("Added stock to watchlist and passed to excel utils.")
+        except Exception as e:
+            await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")
+            logging.error(f"Error adding stock {ticker} to Excel: {str(e)}")
+            return
+    
+    await ctx.send(f"Watching {ticker} with a reverse split date on {split_date}.")
+    save_watch_list()
 
 
-def get_account_nickname_or_default(broker_name, group_number, account_number):
-    """
-    Returns the account nickname if found, otherwise returns 'AccountNotMapped'.
-    """
-    try:
-        # Assuming get_account_nickname is the existing function to retrieve the account nickname
-        return get_account_nickname(broker_name, group_number, account_number)
-    except KeyError:
-        # If the account is not found, return 'AccountNotMapped'
-        return 'AccountNotMapped'
+def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=None):
+    """This function has been deprecated and no longer updates the watchlist."""
+    print(f"update_watchlist called for stock: {stock}, but this function is deprecated.")
+    # You could even raise a warning to make sure it’s not used inadvertently in the future.
+    # import warnings
+    # warnings.warn("update_watchlist is deprecated and no longer updates the watchlist", DeprecationWarning)
 
+
+async def get_watch_status(ctx, ticker: str):
+    """Get the status of a specific stock ticker across all accounts."""
+    ticker = ticker.upper()
+    account_mapping = load_account_mappings()
+
+    if ticker in watch_list:
+        status = f"Status for {ticker}:\n"
+        for broker_name, broker_accounts in account_mapping.items():
+            total_accounts = len(broker_accounts)
+            holding_count = sum(1 for acc_number in broker_accounts if watch_list[ticker][broker_name].get(acc_number, {}).get('steps_completed', 0) >= 2)
+
+            if holding_count > 0:
+                status += f"{broker_name}: Position in {holding_count} of {total_accounts} accounts\n"
+            else:
+                status += f"{broker_name}: No position in {total_accounts} accounts\n"
+
+        await send_large_message_chunks(ctx, status)
+    else:
+        await ctx.send(f"{ticker} is not being watched.")
+
+async def list_watched_tickers(ctx):
+    """List all currently watched stock tickers with their split dates using an embed."""
+    if not watch_list:
+        await ctx.send("No tickers are being watched.")
+    else:
+        embed = discord.Embed(
+            title="Watchlist",
+            description="All tickers and split dates:",
+            color=discord.Color.blue()
+        )
+        
+        for ticker, data in watch_list.items():
+            split_date = data.get('split_date', 'N/A')
+            last_price = get_last_stock_price(ticker)
+            embed.add_field(name=f"{ticker} **|** ${last_price:.2f}", value=f" **|** Split Date: {split_date} \n", inline=True)
+        
+        await ctx.send(embed=embed)
+
+async def send_reminder_message_embed(ctx):
+    # --- Message content: 
+    embed = discord.Embed(
+    title="**Watchlist - Upcoming Split Dates: **",
+    description=" ",
+    color=discord.Color.blue()
+    )
+    
+    # Prepare a list to store tickers and their days left until the split
+    sorted_tickers = []
+
+    # Add each ticker and its days left as a field in the embed
+    for ticker, data in watch_list.items():
+        split_date_str = data['split_date']
+        days_left = calculate_days_left(split_date_str)
+
+        # Only include stocks with split dates within 21 days
+        if days_left <= 21:
+            sorted_tickers.append((days_left, ticker, split_date_str))
+
+    # Sort the list by days_left (first element of the tuple)
+    sorted_tickers.sort(key=lambda x: x[0])
+
+    # Add the sorted tickers to the embed
+    for days_left, ticker, split_date_str in sorted_tickers:
+        embed.add_field(
+            name=f"**| {ticker}** - Effective on {split_date_str}",
+            value=f"*|>* Must purchase within **{days_left}** day(s).\n",
+            inline=False
+        )
+      
+    embed.set_footer(text="Automated message will repeat.")
+    # --- End message content
+    # Replace with your bot channel
+
+    await ctx.send(embed=embed)
+
+async def send_reminder_message(bot):
+    # reminders = []
+
+    # reminders.append(f"**Upcoming split dates from watchlist: **\n")
+    
+    # for ticker, data in watch_list.items():
+    #     split_date_str = data['split_date']
+    #     days_left = calculate_days_left(split_date_str)  # No need to await
+
+    #     if days_left <= 21:
+    #         reminders.append(f"** | {ticker}** - Effective on {split_date_str}\n *|>* Purchase within {days_left} day(s).")
+    
+    # reminder_message = "\n".join(reminders)
+    # --
+    embed = discord.Embed(
+    title="**Watchlist - Upcoming Split Dates: **",
+    description=" ",
+    color=discord.Color.blue()  # You can customize the color
+    )
+    
+    # Prepare a list to store tickers and their days left until the split
+    sorted_tickers = []
+
+    # Add each ticker and its days left as a field in the embed
+    for ticker, data in watch_list.items():
+        split_date_str = data['split_date']
+        days_left = calculate_days_left(split_date_str)
+
+        # Only include stocks with split dates within 21 days
+        if days_left <= 21:
+            sorted_tickers.append((days_left, ticker, split_date_str))
+
+    # Sort the list by days_left (first element of the tuple)
+    sorted_tickers.sort(key=lambda x: x[0])
+
+    # Add the sorted tickers to the embed
+    for days_left, ticker, split_date_str in sorted_tickers:
+        embed.add_field(
+            name=f"**| {ticker}** - Effective on {split_date_str}",
+            value=f"*|>* Must purchase within **{days_left}** day(s).\n",
+            inline=False
+        )
+    
+    embed.set_footer(text="Automated message will repeat.")
+    
+    # Replace with your bot channel
+    channel = bot.get_channel(TARGET_CHANNEL_ID)  # Replace with correct channel ID
+    if channel:
+        await channel.send(embed=embed)
+    else:
+        print("Channel not found")
+
+def get_seconds_until_next_reminder(target_hour, target_minute):
+    """Calculate the number of seconds until the next occurrence of a specific time (HH:MM)."""
+    now = datetime.now()
+    target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+    
+    if now > target_time:
+        # If the target time has already passed today, schedule it for tomorrow
+        target_time += timedelta(days=1)
+    
+    return (target_time - now).total_seconds()
+
+async def periodic_check(bot):
+    """Checks watchlist and sends reminders at 9:15 AM and 3:45 PM."""
+    while True:
+        now = datetime.now()
+        
+        # Wait until 9:15 AM for the first reminder
+        if now.hour < 9 or (now.hour == 9 and now.minute < 15):
+            seconds_until_915 = get_seconds_until_next_reminder(9, 15)
+            await asyncio.sleep(seconds_until_915)
+            await send_reminder_message(bot)
+        
+        # Wait until 3:45 PM for the next reminder
+        seconds_until_345 = get_seconds_until_next_reminder(16, 15)
+        # seconds_until_345 = get_seconds_until_next_reminder(15, 45)
+        await asyncio.sleep(seconds_until_345)
+        await send_reminder_message(bot)
+        
+        # After 3:45 PM, calculate how long until 9:15 AM the next day
+        seconds_until_next_day = get_seconds_until_next_reminder(9, 15)
+        await asyncio.sleep(seconds_until_next_day)
+
+def calculate_days_left(split_date_str):
+    # Regular function, no await needed
+    today = datetime.now().date()
+    split_date = datetime.strptime(split_date_str, '%m/%d').replace(year=today.year).date()
+    if split_date < today:
+        split_date = split_date.replace(year=today.year + 1)
+    days_left = (split_date - today).days
+    return days_left
+
+async def stop_watching(ctx, ticker: str):
+    """Stop watching a stock ticker across all accounts."""
+    ticker = ticker.upper()
+
+    if ticker in watch_list:
+        del watch_list[ticker]
+        save_watch_list()
+        await ctx.send(f"Stopped watching {ticker} across all accounts.")
+        logging.info(f"Stopped watching {ticker}.")
+    else:
+        await ctx.send(f"{ticker} is not being watched.")
+        logging.info(f"{ticker} was not being watched.")
