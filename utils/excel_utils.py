@@ -37,68 +37,50 @@ config_days_keep_backup = config['excel_log_settings']['days_keep_backup']
 # -- Setup and Initialize Excel File
 
 def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
-    print("How many times is this file being loaded? - brayden")
     """
-    Returns the path of the Excel file with today's date.
-    If the file doesn't exist, it creates one based on the template file ReverseSplitLog.xslx
-    Also ensures that a file for tomorrow's date exists.
+    Returns the path of the base Excel file (without date).
+    If today's backup or tomorrow's backup doesn't exist, it creates them from the base file or today's file.
     """
     today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
 
-    # Full paths for today's and tomorrow's files
+    # Full paths for today's and tomorrow's backup files
     today_excel_file = os.path.join(os.path.normpath(directory), f"Backup_{filename}.{today}.xlsx")
     tomorrow_excel_file = os.path.join(os.path.normpath(directory), f"Backup_{filename}.{tomorrow}.xlsx")
     
-    # Path to the base template file (without date)
-    base_excel_file = os.path.join(os.path.normpath(EXCEL_FILE_DIRECTORY), (BASE_EXCEL_FILE))
+    # Path to the base file (this is the file we will use for reading/writing)
+    base_excel_file = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
     
-    # Ensure today's file exists
+    # Ensure today's backup file exists (copy from base file if needed)
     if not os.path.exists(today_excel_file):
         if os.path.exists(base_excel_file):
             shutil.copy(base_excel_file, today_excel_file)
-            print(f"Created today's Excel log: {today_excel_file}")
-        else:
-            print(f"Base Excel file {base_excel_file} not found.")
-    
-    # Ensure tomorrow's file exists
-    if not os.path.exists(tomorrow_excel_file):
-        if os.path.exists(today_excel_file):
-            shutil.copy(today_excel_file, tomorrow_excel_file)
-            print(f"Created tomorrow's Excel log: {tomorrow_excel_file}")
-        else:
-            print(f"Base Excel file {base_excel_file} not found.")
-        if not os.path.exists(tomorrow_excel_file):
-            if os.path.exists(base_excel_file):
-                shutil.copy(base_excel_file, today_excel_file)
-                print(f"Created today's backup Excel log: {today_excel_file}")
+            print(f"Created today's backup Excel file: {today_excel_file}")
         else:
             print(f"Base Excel file {base_excel_file} not found.")
 
-    # Return the path to today's file
+    # Ensure tomorrow's backup file exists (copy from today's backup if needed)
+    if not os.path.exists(tomorrow_excel_file):
+        if os.path.exists(today_excel_file):
+            shutil.copy(today_excel_file, tomorrow_excel_file)
+            print(f"Created tomorrow's backup Excel file: {tomorrow_excel_file}")
+        else:
+            print(f"Today's backup file {today_excel_file} not found.")
+
+    # Return the path to the base file (this is the file you will use)
     return base_excel_file
 
 excel_log_file = get_excel_file_path()
 
 def load_excel_log(file_path):
     """Loads an Excel workbook, creates a new one if the file doesn't exist."""
-    # Check if the file already exists
+    # Check if the base file exists
     if os.path.exists(file_path):
+        print(f"Loading base Excel file: {file_path}")
         return openpyxl.load_workbook(file_path)
     else:
-        logging.error(f"Excel log not found: {file_path}")
-        
-        # Check if the base file exists and copy it to create a new one
-        base_file_path = os.path.join(os.path.dirname(EXCEL_FILE_DIRECTORY), BASE_EXCEL_FILE)
-        print()
-        if os.path.exists(base_file_path):
-            # Copy the base file to the new file path
-            shutil.copy(base_file_path, file_path)
-            logging.info(f"Created new Excel log: {file_path} from base template.")
-            return openpyxl.load_workbook(file_path)
-        else:
-            logging.error(f"Base Excel file not found: {base_file_path}")
-            return None
+        logging.error(f"Base Excel log not found: {file_path}")
+        return None
 
 
 # -- Update Account Mappings
@@ -188,12 +170,24 @@ async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_account
     with open(mapped_accounts_json, 'r') as f:
         account_mappings = json.load(f)
 
-    # Load configuration settings
-    # config_account_start_row = config['excel_log_settings']['account_start_row']
-    # config_account_start_column = config['excel_log_settings']['account_start_column']
-
     try:
-        # Count the total number of accounts in the mappings
+        # Step 1: Find rows that contain 'Totals' (case-insensitive) and mark them as protected
+        protected_rows = set()  # To store the protected rows (Totals, and the rows above and below)
+
+        # Loop through the entire sheet to find 'Totals'
+        for row in range(1, reverse_split_log.max_row + 1):
+            for col in range(1, reverse_split_log.max_column + 1):
+                cell_value = reverse_split_log.cell(row=row, column=col).value
+                if cell_value and isinstance(cell_value, str) and 'totals' in cell_value.lower():
+                    # Add the row with 'Totals' and the rows above and below to the protected set
+                    protected_rows.add(row)  # The row with 'Totals'
+                    if row > 1:  # Protect the row above if it exists
+                        protected_rows.add(row - 1)
+                    if row < reverse_split_log.max_row:  # Protect the row below if it exists
+                        protected_rows.add(row + 1)
+                    break  # Stop checking other columns once 'Totals' is found in the row
+
+        # Step 2: Count the total number of accounts in the mappings
         total_accounts = sum(len(accounts) for broker_groups in account_mappings.values() for accounts in broker_groups.values())
 
         # Insert the required number of new rows above the start row
@@ -201,10 +195,14 @@ async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_account
 
         current_row = config_account_start_row
 
-        # Iterate through brokers, group numbers, and accounts in the mapping
+        # Step 3: Iterate through brokers, group numbers, and accounts in the mapping
         for broker, broker_groups in account_mappings.items():
             for group_number, accounts in broker_groups.items():
                 for account_number, nickname in accounts.items():
+                    # Skip copying into protected rows
+                    while current_row in protected_rows:
+                        current_row += 1  # Move to the next unprotected row
+
                     # Insert the account name in the new rows
                     reverse_split_log.cell(row=current_row, column=config_account_start_column, value=f"{broker} {nickname}")
 
@@ -213,9 +211,11 @@ async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_account
                     for row in range(config_account_start_row + total_accounts, reverse_split_log.max_row + 1):
                         account_in_log = reverse_split_log.cell(row=row, column=config_account_start_column).value
                         if account_in_log == f"{broker} {nickname}":
-                            account_found = True
-                            # Copy both values and formatting from the original row to the new row
-                            copy_values_and_formatting(reverse_split_log, row, current_row)
+                            # Ensure we don't overwrite protected rows during copying
+                            if row not in protected_rows:
+                                account_found = True
+                                # Copy both values and formatting from the original row to the new row
+                                copy_values_and_formatting(reverse_split_log, row, current_row)
                             break
 
                     if not account_found:
@@ -225,8 +225,10 @@ async def map_accounts_in_excel_log(ctx, filename=excel_log_file, mapped_account
 
                     current_row += 1  # Move to the next row for the next account
 
-        # Delete the original rows after transferring data
-        reverse_split_log.delete_rows(config_account_start_row + total_accounts, reverse_split_log.max_row)
+        # Step 4: Delete the original rows after transferring data, skipping protected rows
+        rows_to_delete = set(range(config_account_start_row + total_accounts, reverse_split_log.max_row + 1)) - protected_rows
+        for row in sorted(rows_to_delete, reverse=True):
+            reverse_split_log.delete_rows(row)
 
     except KeyError as e:
         await ctx.send(f"Missing key in account mappings: {e}")
@@ -272,7 +274,6 @@ def copy_values_and_formatting(worksheet, source_row, target_row):
             target_cell.border = copy(source_cell.border)
             target_cell.alignment = copy(source_cell.alignment)
             target_cell.number_format = source_cell.number_format
-
 
 # -- Watchlist New Stock Functions
 
@@ -358,10 +359,11 @@ def find_last_filled_column(ws, row):
 
 # -- Logger Functions and Erroring
 
-def update_excel_log(orders, order_type, filename=excel_log_file, error_log_file=ERROR_LOG_FILE, error_order_file=ERROR_ORDER_DETAILS_FILE, days_to_keep=config_days_keep_backup):
+def update_excel_log(orders, order_type, filename=excel_log_file, config=config):
     """Update the Excel log with the buy or sell orders, save with a date-based filename, and manage backups."""
-    
+
     wb = None  # Initialize wb to None to avoid UnboundLocalError
+    error_log_file = ERROR_LOG_FILE
 
     try:
         # Load the Excel workbook
@@ -369,11 +371,20 @@ def update_excel_log(orders, order_type, filename=excel_log_file, error_log_file
         if not wb:
             logging.error(f"Workbook could not be loaded: {filename}")
             return
-        ws = wb.active  # Assuming the relevant sheet is the active one
+
+        # Ensure we're working with the 'Reverse Split Log' sheet
+        if "Reverse Split Log" in wb.sheetnames:
+            ws = wb["Reverse Split Log"]
+        else:
+            # Create the sheet if it doesn't exist
+            ws = wb.create_sheet("Reverse Split Log")
+            logging.info(f"'Reverse Split Log' sheet was missing, created a new one.")
 
         # Use the globally loaded config object to get values like account_start_row and stock_row
-        accounts_row = config_account_start_row
-        stock_row = config_stock_row
+        accounts_row = config['excel_log_settings']['account_start_row']
+        stock_row = config['excel_log_settings']['stock_row']
+        account_start_column = config['excel_log_settings']['account_start_column']
+        days_keep_backup = config['excel_log_settings']['days_keep_backup']
 
         print(orders)  # Debugging: Print the orders to verify they are correct
 
@@ -395,15 +406,25 @@ def update_excel_log(orders, order_type, filename=excel_log_file, error_log_file
 
                 print(f"Excel - processing {order_type} order for {account_nickname}, stock: {stock}, price: {price}")
 
-                # Find the row for the account in Column B
+                # Find the row for the account in Column A (using the config value)
                 account_row = None
                 for row in range(accounts_row, ws.max_row + 1):
-                    if ws[f'B{row}'].value == account_nickname:
+                    # Ensure we are checking Column A
+                    print(f"Checking column A, row {row}: {ws[f'A{row}'].value}")
+                    cell_value = ws[f'A{row}'].value
+                    # Check if the cell value is a string before using strip
+                    if isinstance(cell_value, str):
+                        cell_value = cell_value.strip()  # Strip whitespace if it's a string
+                    else:
+                        cell_value = str(cell_value) if cell_value is not None else ''  # Convert non-string to string
+
+                    print(f"Checking row {row}: {cell_value}")  # Debugging: Print the cell value being checked
+                    if cell_value.lower() == account_nickname.strip().lower():  # Case-insensitive comparison
                         account_row = row
                         break
 
                 if account_row:
-                    # Find the stock column in the specified stock row
+                    # Find the stock column in the specified stock row (using the config value)
                     stock_col = None
                     for col in range(3, ws.max_column + 1, 2):
                         if ws.cell(row=stock_row, column=col).value == stock:
@@ -423,7 +444,7 @@ def update_excel_log(orders, order_type, filename=excel_log_file, error_log_file
                         log_error_message(error_message, error_order, error_log_file)
                 else:
                     error_message = f"Account {account_nickname} not found in Excel."
-                    print(error_message)
+                    print(f"Account not found: {account_nickname}")  # Debugging: Print the account name
                     log_error_message(error_message, error_order, error_log_file)
 
             except ValueError as e:
@@ -437,8 +458,8 @@ def update_excel_log(orders, order_type, filename=excel_log_file, error_log_file
             print(f"Saved Excel file: {filename}")
             logging.info(f"Successfully saved the Excel log: {filename}")
 
-            # Manage backups by removing stale ones
-            delete_stale_backups(EXCEL_FILE_DIRECTORY, days_to_keep)
+            # Manage backups by removing stale ones (using the config value)
+            delete_stale_backups(EXCEL_FILE_DIRECTORY, days_keep_backup)
 
         except Exception as e:
             error_message = f"Failed to save Excel file: {filename}. Error: {str(e)}"
@@ -446,11 +467,14 @@ def update_excel_log(orders, order_type, filename=excel_log_file, error_log_file
             log_error_message(error_message, "Excel save error", error_log_file)
 
     except Exception as e:
-        logging.error(f"An error occurred while updating the Excel log: {e}")
+        # Catch any encoding-related errors here
+        logging.error(f"An error occurred while updating the Excel log: {str(e)}")
 
     finally:
         if wb:  # Check if wb is not None before closing
             wb.close()
+
+
 
 def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, days_to_keep=config_days_keep_backup):
     """Delete backup files older than the specified number of days."""
@@ -460,7 +484,7 @@ def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, days_to_keep=config_day
     # Iterate through files in the directory
     for filename in os.listdir(directory):
         # Match files that follow the "ReverseSplitLog.MM-DD.xlsx" format
-        if filename.startswith("ReverseSplitLog.") and filename.endswith(".xlsx"):
+        if filename.startswith("Backup") and filename.endswith(".xlsx"):
             # Extract the date part (MM-DD) from the filename
             try:
                 date_part = filename.split("ReverseSplitLog.")[1].split(".xlsx")[0]
