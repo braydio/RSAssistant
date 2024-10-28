@@ -67,7 +67,7 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
         }
         try:
             # Ensure the async function is awaited
-            await add_stock_to_excel_log(ticker, split_date, excel_log_file)
+            await add_stock_to_excel_log(ctx, ticker, split_date)
             logging.info("Added stock to watchlist and passed to excel utils.")
         except Exception as e:
             await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")

@@ -270,7 +270,7 @@ def copy_values_and_formatting(worksheet, source_row, target_row):
 
 # -- Watchlist New Stock Functions
 
-async def add_stock_to_excel_log(ticker, split_date):
+async def add_stock_to_excel_log(ctx, ticker, split_date):
     """Add the given stock ticker to the next available spot in the Excel log and copy formatting from the previous columns."""
     
     try:
@@ -315,6 +315,8 @@ async def add_stock_to_excel_log(ticker, split_date):
         # Save the workbook and close it (no await)
         wb.save(excel_log_file)
         logging.info(f"Added {ticker} to Excel log at column {get_column_letter(ticker_col)} with split date {split_date}.")
+        
+        await ctx.send(f"Added {ticker} to Excel log at column {get_column_letter(ticker_col)} with split date {split_date}.")
 
     except Exception as e:
         logging.error(f"Error adding stock to Excel log: {e}")
