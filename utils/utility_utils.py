@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
+import discord
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config)
@@ -51,8 +52,6 @@ async def profile(ctx, broker_name):
     # Send the summary message to Discord
     await send_large_message_chunks(ctx, "\n".join(summary_message))
 
-import discord
-
 async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=None, holding_logs_file=HOLDINGS_LOG_CSV, account_mapping_file=ACCOUNT_MAPPING_FILE):
     """
     Track which accounts hold or do not hold the specified ticker, aggregating at the broker level.
@@ -89,9 +88,9 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
 
                 # Track if the account holds the ticker
                 if stock == ticker and quantity > 0:
-                    holdings[broker_key][account_number] = f"Active position in {ticker}."
+                    holdings[broker_key][account_number] = "✅"
                 else:
-                    holdings[broker_key][account_number] = f"No position in {ticker}."
+                    holdings[broker_key][account_number] = "❌"
 
         # Create a Discord embed message
         embed = discord.Embed(
@@ -105,9 +104,6 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
             broker_name = specific_broker.capitalize()
             embed.title = f"**{ticker} - {broker_name} Holdings**"
 
-            # Debugging: Check what account_mapping[broker_name] returns
-            print(f"account_mapping[{broker_name}] = {account_mapping.get(broker_name)}")
-            
             # Ensure that broker_name is a valid dictionary
             if broker_name in account_mapping:
                 broker_data = account_mapping[broker_name]
@@ -115,10 +111,10 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
                     for group_number, accounts in broker_data.items():
                         if isinstance(accounts, dict):  # Ensure accounts is a dictionary
                             for account_number, account_nickname in accounts.items():
-                                holding_status = holdings.get(broker_name, {}).get(account_number[-4:], f"No position in {ticker}.")
+                                status_icon = holdings.get(broker_name, {}).get(account_number[-4:], "❌")
                                 embed.add_field(
-                                    name=f"{account_nickname}",
-                                    value=holding_status,
+                                    name=f"{account_nickname} {status_icon}",  # Icon next to nickname
+                                    value=f"Account: {account_number[-4:]}",  # Shows the account number
                                     inline=True
                                 )
                         else:
@@ -128,19 +124,33 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
             else:
                 embed.description = f"No broker found for {broker_name}."
         else:
-            # Aggregate behavior: Show all brokers
+            # Aggregate behavior: Show all brokers with icons based on account positions
             for broker_name, group_data in account_mapping.items():
                 if isinstance(group_data, dict):  # Check if group_data is a dictionary
                     total_accounts = sum(len(accounts) for accounts in group_data.values())
-                    held_accounts = len([acc for acc in holdings.get(broker_name, {}).values() if "Active" in acc])
+                    held_accounts = len([acc for acc in holdings.get(broker_name, {}).values() if acc == "✅"])
+
+                    # Set the status icon based on the percentage of accounts holding the position
+                    if held_accounts == total_accounts:
+                        status_icon = "✅"  # All accounts hold the position
+                    elif held_accounts == 0:
+                        status_icon = "❌"  # No accounts hold the position
+                    else:
+                        status_icon = "🟡"  # Some accounts hold the position
 
                     embed.add_field(
-                        name=f"{broker_name}",
+                        name=f"{broker_name} {status_icon}",
                         value=f"Position in {held_accounts} of {total_accounts} accounts",
                         inline=True
                     )
                 else:
                     await ctx.send(f"Error: Expected group data for {broker_name} to be a dictionary, got {type(group_data)}.")
+
+        # Set the footer conditionally based on the `show_details` argument
+        if show_details:
+            embed.set_footer(text=f"Detailed view of {ticker}")
+        else:
+            embed.set_footer(text=f"Try: '..brokerwith {ticker} <broker>' for details.")
 
         # Send the embed message
         await ctx.send(embed=embed)
@@ -151,7 +161,6 @@ async def track_ticker_summary(ctx, ticker, show_details=False, specific_broker=
         await ctx.send(f"Error: Missing expected column in CSV: {e}")
     except Exception as e:
         await ctx.send(f"Error: {e}")
-
 
 
 
