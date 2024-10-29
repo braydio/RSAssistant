@@ -44,23 +44,36 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
     today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
 
+    # Debugging: Print directory and filename values
+    print(f"DEBUG: directory={directory}, filename={filename}")
+
+    archive_dir = os.path.join(str(directory), "archive")
+    print(f"DEBUG: archive_dir={archive_dir}")
+
     # Full paths for today's and tomorrow's backup files
-    today_excel_file = os.path.join(os.path.normpath(directory), f"Backup_{filename}.{today}.xlsx")
-    tomorrow_excel_file = os.path.join(os.path.normpath(directory), f"Backup_{filename}.{tomorrow}.xlsx")
+    archive_dir = os.path.join(directory, "archive")
+    today_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{today}.xlsx")
+    tomorrow_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{tomorrow}.xlsx")
     
     # Path to the base file (this is the file we will use for reading/writing)
     base_excel_file = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
-    
-    # Ensure today's backup file exists (copy from base file if needed)
+
+    # Ensure the archive directory exists
+    if not os.path.exists(archive_dir):
+        os.makedirs(archive_dir)
+
+    # Check if today's backup file exists
     if not os.path.exists(today_excel_file):
+        # If not, copy from the base file
         if os.path.exists(base_excel_file):
             shutil.copy(base_excel_file, today_excel_file)
             print(f"Created today's backup Excel file: {today_excel_file}")
         else:
             print(f"Base Excel file {base_excel_file} not found.")
 
-    # Ensure tomorrow's backup file exists (copy from today's backup if needed)
+    # Check if tomorrow's backup file exists
     if not os.path.exists(tomorrow_excel_file):
+        # If not, copy from today's backup if it exists
         if os.path.exists(today_excel_file):
             shutil.copy(today_excel_file, tomorrow_excel_file)
             print(f"Created tomorrow's backup Excel file: {tomorrow_excel_file}")
@@ -380,11 +393,11 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
             ws = wb.create_sheet("Reverse Split Log")
             logging.info(f"'Reverse Split Log' sheet was missing, created a new one.")
 
-        # Use the globally loaded config object to get values like account_start_row and stock_row
-        accounts_row = config['excel_log_settings']['account_start_row']
-        stock_row = config['excel_log_settings']['stock_row']
-        account_start_column = config['excel_log_settings']['account_start_column']
-        days_keep_backup = config['excel_log_settings']['days_keep_backup']
+        # # Use the globally loaded config object to get values like account_start_row and stock_row
+        # config_account_start_row = config['excel_log_settings']['account_start_row']
+        # config_stock_row = config['excel_log_settings']['stock_row']
+        # config_account_start_column = config['excel_log_settings']['account_start_column']
+        # config_days_keep_backup = config['excel_log_settings']['days_keep_backup']
 
         print(orders)  # Debugging: Print the orders to verify they are correct
 
@@ -408,7 +421,7 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
 
                 # Find the row for the account in Column A (using the config value)
                 account_row = None
-                for row in range(accounts_row, ws.max_row + 1):
+                for row in range(config_account_start_row, ws.max_row + 1):
                     # Ensure we are checking Column A
                     # print(f"Checking column A, row {row}: {ws[f'A{row}'].value}") # Debugging: Print the cell value being checked
                     cell_value = ws[f'A{row}'].value
@@ -427,7 +440,7 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
                     # Find the stock column in the specified stock row (using the config value)
                     stock_col = None
                     for col in range(3, ws.max_column + 1, 2):
-                        if ws.cell(row=stock_row, column=col).value == stock:
+                        if ws.cell(row=config_stock_row, column=col).value == stock:
                             stock_col = col + 1 if order_type.lower() == 'sell' else col
                             break
 
@@ -459,7 +472,7 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
             logging.info(f"Successfully saved the Excel log: {filename}")
 
             # Manage backups by removing stale ones (using the config value)
-            delete_stale_backups(EXCEL_FILE_DIRECTORY, days_keep_backup)
+            delete_stale_backups(EXCEL_FILE_DIRECTORY, 'archive', config_days_keep_backup)
 
         except Exception as e:
             error_message = f"Failed to save Excel file: {filename}. Error: {str(e)}"
@@ -474,27 +487,47 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
         if wb:  # Check if wb is not None before closing
             wb.close()
 
-
-def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, days_to_keep=config_days_keep_backup):
+def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, archive_folder="archive", days_to_keep=config_days_keep_backup):
     """Delete backup files older than the specified number of days."""
     now = datetime.now()
     cutoff = now - timedelta(days=days_to_keep)
-    
-    # Iterate through files in the directory
-    for filename in os.listdir(directory):
-        # Match files that follow the "ReverseSplitLog.MM-DD.xlsx" format
+
+        # Debugging: Print directory and archive_folder values
+    print(f"DEBUG: directory={directory}, archive_folder={archive_folder}")
+
+    # Target the archive directory within the specified directory
+    archive_dir = os.path.join(str(directory), str(archive_folder))
+    print(f"DEBUG: archive_dir={archive_dir}")
+
+    # Ensure the archive directory exists
+    if not os.path.exists(archive_dir):
+        logging.warning(f"Archive directory does not exist: {archive_dir}")
+        return
+
+    # Target the archive directory within the specified directory
+    archive_dir = os.path.join(str(directory), str(archive_folder))
+
+    # Ensure the archive directory exists
+    if not os.path.exists(archive_dir):
+        logging.warning(f"Archive directory does not exist: {archive_dir}")
+        return
+
+    # Iterate through files in the archive directory
+    for filename in os.listdir(archive_dir):
+        # Match files that follow the "Backup_{filename}.{MM-DD}.xlsx" format
         if filename.startswith("Backup") and filename.endswith(".xlsx"):
             # Extract the date part (MM-DD) from the filename
             try:
-                date_part = filename.split("ReverseSplitLog.")[1].split(".xlsx")[0]
+                # Assuming the format is "Backup_{filename}.{MM-DD}.xlsx"
+                date_part = filename.split(".")[-2]  # Extract the date (MM-DD)
                 file_date = datetime.strptime(date_part, "%m-%d")
-                
+
                 # Update the file date to the current year for comparison
                 file_date = file_date.replace(year=now.year)
-                
+
                 # Check if the file is older than the cutoff date
                 if file_date < cutoff:
-                    file_path = os.path.join(directory, filename)
+                    file_path = os.path.join(archive_dir, str(filename))
                     print(f"Deleting old backup file: {filename}")
                     os.remove(file_path)
                     logging.info(f"Deleted old backup file: {filename}")
@@ -502,6 +535,7 @@ def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, days_to_keep=config_day
             except ValueError:
                 logging.error(f"Failed to parse date from filename: {filename}")
                 continue
+
 
 def log_error_message(error_message, order_details, error_log_file=ERROR_LOG_FILE):
     """Log an error message to the specified log file and avoid duplicate entries."""
@@ -557,7 +591,6 @@ def log_error_order_details(order_details):
 
     # Log formatted order for consistency
     logging.info(formatted_order)
-
 
 def remove_from_file(file_path, identifier):
     print(f'Removing {identifier} from {file_path}')
