@@ -59,6 +59,8 @@ patterns = {
     'firstrade_order': r"(Firstrade\s\d+)\s(buying|selling)\s(\d+\.?\d*)\s([A-Z]+)\s@\s(market|limit)",
     'firstrade_verification': r"(Firstrade\s\d+)\saccount\sxxxx(\d{4}):\sThe order verification was\s(successful|unsuccessful)",
     'firstrade_failure': r"Firstrade\s\d+\saccount\s(\w+):\sThe order verification produced the following messages:",
+    'vanguard_order': r'(Vanguard\s\d+)\s(selling|buying)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
+    'vanguard_verification': r'(Vanguard\s\d+)\saccount\s(?:xxxx)?(\d+):\sThe order verification was successful',
     'bbae': r'(?i)(BBAE\s\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d+):\s(Success|Failed)'
 }
 
@@ -74,10 +76,10 @@ def parse_order_message(content):
             broker_number = broker_split[1] if len(broker_split) > 1 else "N/A"  # Extract broker number or set as "N/A"
             print(f'Matching {broker_name} broker number {broker_number} to mapped accounts.')
 
-            if broker in ['schwab_order', 'chase_order', 'firstrade_order', 'tradier_order']:
+            if broker in ['schwab_order', 'chase_order', 'firstrade_order', 'tradier_order', 'vanguard_order']:
                 print(f"Processing incomplete order for {broker_name} {broker_number}")
                 handle_incomplete_order(match, broker_name, broker_number)
-            elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification', 'tradier_verification']:
+            elif broker in ['schwab_verification', 'chase_verification', 'firstrade_verification', 'tradier_verification', 'vanguard_verification']:
                 print(f"Received verification message for {broker_name} broker number {broker_number}")
                 handle_verification(match, broker_name, broker_number)
             elif broker in ['schwab_failure', 'firstrade_failure']:
@@ -256,6 +258,7 @@ def handle_failed_order(match, broker_name, broker_number):
 
     except Exception as e:
         print(f"Error handling failed order: {e}")
+
 
 def parse_manual_order_message(content):
     """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
