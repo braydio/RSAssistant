@@ -241,7 +241,7 @@ async def brokerlist(ctx, broker: str = None, account_info: str = None):
         await ctx.send(f"An error occurred: {str(e)}")
 
 # Command to show the summary for a broker
-@bot.command(name='grouplist', help='Shows daily reminder')
+@bot.command(name='grouplist', help='Summary by account owner')
 async def brokers_groups(ctx):
     await all_brokers_groups(ctx)
 
