@@ -410,7 +410,7 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
                 account_row = None
                 for row in range(accounts_row, ws.max_row + 1):
                     # Ensure we are checking Column A
-                    print(f"Checking column A, row {row}: {ws[f'A{row}'].value}")
+                    # print(f"Checking column A, row {row}: {ws[f'A{row}'].value}") # Debugging: Print the cell value being checked
                     cell_value = ws[f'A{row}'].value
                     # Check if the cell value is a string before using strip
                     if isinstance(cell_value, str):
@@ -418,7 +418,7 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
                     else:
                         cell_value = str(cell_value) if cell_value is not None else ''  # Convert non-string to string
 
-                    print(f"Checking row {row}: {cell_value}")  # Debugging: Print the cell value being checked
+                    # print(f"Checking row {row}: {cell_value}")  # Debugging: Print the cell value being checked
                     if cell_value.lower() == account_nickname.strip().lower():  # Case-insensitive comparison
                         account_row = row
                         break
@@ -475,7 +475,6 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
             wb.close()
 
 
-
 def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, days_to_keep=config_days_keep_backup):
     """Delete backup files older than the specified number of days."""
     now = datetime.now()
@@ -530,7 +529,8 @@ def log_error_message(error_message, order_details, error_log_file=ERROR_LOG_FIL
     log_error_order_details(order_details)
 
 def log_error_order_details(order_details):
-    print(order_details)
+    print(order_details)  # Ensure this is not outputting the raw dictionary with colons
+    
     """Log the order details for later manual entry for errors in a separate file."""
     try:
         logging.info(order_details)
@@ -539,11 +539,25 @@ def log_error_order_details(order_details):
     except FileNotFoundError:
         existing_orders = ""
 
+    # Format order_details as a clean string to avoid colons
+    formatted_order = (
+        f"Broker: {order_details['broker_name']}, "
+        f"Group Number: {order_details['group_number']}, "
+        f"Account: {order_details['account']}, "
+        f"Order Type: {order_details['order_type']}, "
+        f"Stock: {order_details['stock']}, "
+        f"Price: {order_details['price']}"
+    )
+
     # Avoid logging duplicate orders
-    if order_details not in existing_orders:
+    if formatted_order not in existing_orders:
         with open(ERROR_ORDER_DETAILS_FILE, 'a') as order_file:
-            order_file.write(order_details + '\n')
+            order_file.write(formatted_order + '\n')
         logging.info(f"Order details saved to {ERROR_ORDER_DETAILS_FILE}")
+
+    # Log formatted order for consistency
+    logging.info(formatted_order)
+
 
 def remove_from_file(file_path, identifier):
     print(f'Removing {identifier} from {file_path}')
@@ -554,11 +568,21 @@ def remove_from_file(file_path, identifier):
         with open(file_path, 'w') as file:
             block_to_skip = False
             for line in lines:
-                if "--- Error at" in line:
+                # Use strip() to remove extra whitespace/newlines for comparison
+                stripped_line = line.strip()
+
+                # Reset block skipping when encountering "--- Error at"
+                if "--- Error at" in stripped_line:
                     block_to_skip = False
-                if f"Order Details: {identifier}" in line:
+
+                # Identify the specific block to skip using the identifier
+                if f"Order Details: {identifier}" in stripped_line:
                     block_to_skip = True
+                    print(f"Skipping block with identifier: {identifier}")
+
+                # Write lines that are not part of the block to be skipped
                 if not block_to_skip:
                     file.write(line)
+                    
     except FileNotFoundError:
         logging.info(f"{file_path} not found. No need to remove anything.")
