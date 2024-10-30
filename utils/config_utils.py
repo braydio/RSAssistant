@@ -36,12 +36,35 @@ ACCOUNT_OWNERS = config.get('account_owners', {})
 
 # -- Mapping Config
 
+import os
+import json
+import logging
+
 def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
-    """Loads account mappings from the JSON file."""
+    """Loads account mappings from the JSON file and ensures the data structure is valid."""
     if os.path.exists(filename):
         try:
             with open(filename, 'r') as file:
-                return json.load(file)
+                data = json.load(file)
+                
+                # Validate that the data is a dictionary of dictionaries
+                if not isinstance(data, dict):
+                    logging.error(f"Error: Account mapping is not valid. Expected a dictionary but got {type(data).__name__}.")
+                    return {}
+
+                # Validate that each broker contains groups that are dictionaries
+                for broker, broker_data in data.items():
+                    if not isinstance(broker_data, dict):
+                        logging.error(f"Error: Broker '{broker}' data is not a dictionary.")
+                        continue
+
+                    for group, accounts in broker_data.items():
+                        if not isinstance(accounts, dict):
+                            logging.error(f"Error: Group '{group}' under broker '{broker}' is not a dictionary of accounts.")
+                            broker_data[group] = {}  # Handle invalid structure
+
+                return data
+
         except json.JSONDecodeError as e:
             logging.error(f"Error decoding JSON from {filename}: {e}")
             return {}
@@ -90,30 +113,15 @@ account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
 # -- Account Indexing and Commands
 
 async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
-    """
-    Returns a list of active brokers based on the updated account mapping structure, 
-    with each embed containing up to 9 brokers.
-    """
     try:
-        # Load account mappings from the JSON file synchronously
-        with open(filename, 'r') as f:
-            data = f.read()
+        # Load account mappings from the JSON file
+        account_mapping = load_account_mappings(filename)
 
-            # Check if the file is empty
-            if not data.strip():
-                await ctx.send("Error: Account mapping file is empty.")
-                return
-
-            # Parse JSON data
-            account_mapping = json.loads(data)
-
-            # Ensure account_mapping is a valid dictionary
-            if not isinstance(account_mapping, dict):
-                await ctx.send("Error: Account mapping is not valid.")
-                return
-
+        # Check loaded mapping and log it
+        print(f"Loaded account mapping: {account_mapping}")
+        
         active_brokers = list(account_mapping.keys())
-        chunk_size = 9  # Maximum number of brokers per embed
+        chunk_size = 9
         total_brokers = len(active_brokers)
 
         for i in range(0, total_brokers, chunk_size):
@@ -122,43 +130,45 @@ async def all_brokers(ctx, filename=ACCOUNT_MAPPING_FILE):
                 description="",
                 color=discord.Color.blue()
             )
-            chunk_brokers = active_brokers[i:i+chunk_size]
+            chunk_brokers = active_brokers[i:i + chunk_size]
 
             for broker in chunk_brokers:
-                # Ensure broker_data is valid
                 broker_data = account_mapping.get(broker)
                 if broker_data is None:
-                    await ctx.send(f"Error: Broker '{broker}' has no data (None).")
+                    await ctx.send(f"Error: Broker '{broker}' has no data.")
                     continue
                 
-                if not isinstance(broker_data, dict):
-                    await ctx.send(f"Error: Broker '{broker}' data is not in the expected format.")
-                    continue
+                # Log broker data for debugging
+                print(f"Broker data for {broker}: {broker_data}")
 
                 total_holdings = 0
                 account_count = 0
 
-                # Iterate through each group under the broker
                 for group_number, accounts in broker_data.items():
-                    # Sum account totals for each group
-                    group_account_count, group_total = sum_account_totals(broker, group_number, accounts)
-                    account_count += group_account_count
-                    total_holdings += group_total
+                    # Debugging log
+                    print(f"Processing group {group_number} for broker {broker} with accounts: {accounts}")
 
-                # Prepare broker's information for display
-                plural_check = "account" if account_count == 1 else "accounts"
+                    # Sum account totals and catch errors related to float conversion
+                    try:
+                        group_account_count, group_total = sum_account_totals(broker, group_number, accounts)
+                        account_count += group_account_count
+                        total_holdings += group_total
+                    except ValueError as ve:
+                        print(f"ValueError for {broker} group {group_number}: {ve}")
+                        continue
+                
                 embed.add_field(
                     name=broker,
-                    value=(f"{account_count} {plural_check}\nTotal: ${total_holdings:,.2f}"),
+                    value=(f"{account_count} accounts\nTotal: ${total_holdings:,.2f}"),
                     inline=True
                 )
 
-            embed.set_footer(text="Try: '..brokerlist <broker>' to list accounts.")
             await ctx.send(embed=embed)
 
     except Exception as e:
         await ctx.send(f"Error loading account mappings: {e}")
         print(f"Exception: {e}")
+
 
 async def all_brokers_groups(ctx):
     """
@@ -205,7 +215,6 @@ async def all_brokers_groups(ctx):
 
     # Send the embed message
     await ctx.send(embed=embed)
-
 
 def account_totals_by_group_number(broker, config, account_mapping):
     """
@@ -300,10 +309,19 @@ def sum_account_totals(broker, group_number, accounts):
     # Sum the totals of all accounts in the group
     for account_number in accounts.keys():
         if account_number in account_totals:
-            total_sum += account_totals[account_number]
-            account_count += 1
+            # Fetch the account total
+            total_value = account_totals[account_number]
+            
+            # Ensure the total is a float, handle potential errors
+            try:
+                total_sum += float(total_value)  # Safely convert to float
+                account_count += 1
+            except ValueError:
+                print(f"Warning: Account total for '{account_number}' is not a number: {total_value}")
+                continue
 
     return account_count, total_sum
+
 
 def calculate_broker_totals(account_mapping):
     """

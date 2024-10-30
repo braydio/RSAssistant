@@ -1,13 +1,22 @@
+# environment stuff
+venv/
 .venv/
-utils/__pycache__
-excel/ReverseSplitLog.xlsx
-test*
-*venv/
-.vscode/
-*.zip
+
+# config / settings
 config/settings.yaml
 config/account_mapping.json
-logs/
 utils/watch_list.json
-utils/parsing_utils_testing_groupno.py
-manual_order_entry.txt
+todiscord.txt
+logs/
+
+# excel stuff
+excel/
+!excel/example-ReverseSplitLog.xlsx
+
+# other system stuff
+utils/__pycache__
+test*
+.vscode/
+*.zip
+
+
