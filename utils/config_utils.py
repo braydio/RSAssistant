@@ -183,7 +183,7 @@ async def all_brokers_groups(ctx):
     embed = discord.Embed(
         title="**All Active Brokers**",
         description="",
-        color=discord.Color.blue()
+        color=discord.Color.red()
     )
 
     # Loop through active brokers and add them as fields in the embed
