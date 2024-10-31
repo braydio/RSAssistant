@@ -65,7 +65,7 @@ paths:
 
 header_settings:
   orders_headers : ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
-  holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total']
+  holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
 
 # Watchlist settings
 watch_list:

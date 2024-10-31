@@ -120,7 +120,11 @@ def save_order_to_csv(broker_name, broker_number, account_number, order_type, qu
 
 
 def save_holdings_to_csv(parsed_holdings):
-    """Saves holdings data to CSV, ensuring no duplicates are saved."""
+    """Saves holdings data to CSV, ensuring no duplicates are saved, quantities are valid floats, and a timestamp is added."""
+    
+    # Generate the current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     try:
         # Load existing holdings from the CSV
         existing_holdings = []
@@ -135,12 +139,28 @@ def save_holdings_to_csv(parsed_holdings):
             for holding in existing_holdings
         )
 
-        # Convert parsed_holdings (list of lists) into a list of dictionaries and filter out duplicates
+        # Add "Timestamp" to HOLDINGS_HEADERS if not present
+        if "Timestamp" not in HOLDINGS_HEADERS:
+            HOLDINGS_HEADERS.append("Timestamp")
+
+        # Convert parsed_holdings into a list of dictionaries and filter out duplicates
         new_holdings = []
         for holding in parsed_holdings:
             holding_dict = dict(zip(HOLDINGS_HEADERS, holding))  # Convert list to dictionary
             holding_key = (holding_dict['Key'], holding_dict['Broker Name'], holding_dict['Broker Number'], holding_dict['Account Number'], holding_dict['Stock'])
-            
+
+            # Ensure that 'Quantity', 'Price', and other numeric fields are valid floats
+            try:
+                holding_dict['Quantity'] = float(holding_dict['Quantity'])
+                holding_dict['Price'] = float(holding_dict['Price'])  # Assuming you have a Price field to validate
+                holding_dict['Position Value'] = float(holding_dict['Position Value'])  # Assuming this field as well
+            except (ValueError, KeyError):
+                logging.warning(f"Invalid numeric value in holding: {holding_dict}")
+                continue  # Skip this entry if the values are not valid floats
+
+            # Add timestamp to each new holding
+            holding_dict["Timestamp"] = timestamp
+
             if holding_key not in existing_keys:  # Check if this combination already exists
                 new_holdings.append(holding_dict)  # If not, add it to new holdings
                 existing_keys.add(holding_key)     # Add the key to avoid future duplicates
@@ -179,7 +199,7 @@ def clear_holdings_log(filename):
             with open(filename, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(headers)  # Write the headers back
-            return True, f'Holdings at: "{filename}" has been cleared. Run !rsa holdings to repopulate.'
+            return True, f'Holdings at: "{filename}" has been cleared. Run `!rsa holdings` to repopulate.'
         else:
             return False, f'Holdings at: "{filename}" is empty or improperly formatted.'
     except Exception as e:
