@@ -33,12 +33,12 @@ account_owners:
 # Brokers / Accounts to be excluded from the summarized views
 # See below example formatting and update as needed
 excluded_brokers:
-  Sofi: []    # No excluded accounts (shoutout NelsonDane & the auto-rsa team for the new addition lfg)
-  Plynk: null   # Exclude all accounts (explicit null)
-  Fidelity:
-    accounts:
-      - "Cash Account 1"
-    exclude_all: false  # Optionally say you are not excluding all Fidelity accounts
+  #Sofi: []    # No excluded accounts (shoutout NelsonDane & the auto-rsa team for the new addition lfg)
+  # Plynk: null   # Exclude all accounts (explicit null)
+  # Fidelity:
+  #  accounts:
+  #    - "Cash Account 1"
+  #  exclude_all: false  # Optionally say you are not excluding all Fidelity accounts
 
 # Settings for excel logging index values
 excel_log_settings:
