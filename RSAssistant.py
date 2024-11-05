@@ -16,12 +16,12 @@ from discord.ext import commands
 # Import utility functions
 from utils.config_utils import (all_account_nicknames, all_account_numbers,
                                 all_brokers, all_brokers_groups, load_config)
-from utils.csv_utils import read_holdings_log, save_holdings_to_csv, clear_holdings_log
+from utils.csv_utils import clear_holdings_log
 from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, update_excel_log, clear_account_mappings
 from utils.parsing_utils import (parse_embed_message,
                                  parse_manual_order_message,
                                  parse_order_message)
-from utils.utility_utils import print_to_discord, profile, track_ticker_summary
+from utils.utility_utils import print_to_discord, track_ticker_summary
 from utils.watch_utils import (list_watched_tickers,
                                load_watch_list, periodic_check,
                                send_reminder_message,
@@ -30,7 +30,6 @@ from utils.watch_utils import (list_watched_tickers,
 
 # Load configuration and holdings data
 config = load_config()
-holdings_data = read_holdings_log()
 excel_log_file = get_excel_file_path()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 MANUAL_ORDER_ENTRY_TXT = config['paths']['manual_orders']
@@ -103,17 +102,21 @@ async def on_ready():
 
 # Replace 'bot' with your instance of commands.Bot or commands.AutoShardedBot
 @bot.command(name="restart")
-# @commands.is_owner()  # Only allow the bot owner to use this command
 async def restart(ctx):
     """Restarts the bot by terminating the current process and starting a new one."""
     await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
     
-    # Wait a moment to ensure the message is sent before restarting
-    # await asyncio.sleep(1)
-    python = sys.executable
+    # Log the restart attempt
+    await asyncio.sleep(1)
+    print("Attempting to restart the bot...")
+    
+    try:
+        python = sys.executable
+        os.execv(python, [python] + sys.argv)
+    except Exception as e:
+        print(f"Error during restart: {e}")
+        await ctx.send("An error occurred while attempting to restart the bot.")
 
-    # Properly terminate the current bot process and replace it with a new one
-    os.execv(python, [python] + sys.argv)
 
 async def reminder_message():
     """Checks watchlist against saved holdings for stock purchases."""
@@ -151,35 +154,16 @@ async def clear_mapping_command(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred during the clearing process: {str(e)}")
 
-# Command to show the summary for a broker
-@bot.command(name='broker', help='Summary totals for a broker')
-async def broker_profile(ctx, broker_name: str):
-    await profile(ctx, broker_name)
-
-# --
       
 # Event triggered when a message is received
 @bot.event
 async def on_message(message):
     print(message.content.lower())
-    if message.channel.id == TARGET_CHANNEL_ID: #and message.author.id == TARGET_BOT_ID:
+    if message.channel.id: # #and message.author.id == TARGET_BOT_ID:
         # Check for 'manual' keyword to handle manual order updates
         if message.content.lower().startswith("manual"):
             # Parse the manual order details
-            order_details = parse_manual_order_message(message.content)
-            if order_details:
-                # Prepare the order tuple and update Excel
-                orders = [(
-                    order_details['broker_name'],
-                    order_details['group_number'],
-                    order_details['account'],
-                    order_details['order_type'],
-                    order_details['stock'],
-                    None,  # quantity not needed
-                    None,  # date not needed
-                    order_details['price']
-                )]
-                update_excel_log(orders, order_details['order_type'], excel_log_file)
+            parse_manual_order_message(message.content)
         elif message.content.lower().startswith("**"):
             print("No ")
         else:

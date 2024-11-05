@@ -36,10 +36,6 @@ ACCOUNT_OWNERS = config.get('account_owners', {})
 
 # -- Mapping Config
 
-import os
-import json
-import logging
-
 def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
     """Loads account mappings from the JSON file and ensures the data structure is valid."""
     if os.path.exists(filename):
@@ -83,25 +79,27 @@ def get_account_nickname(broker, group_number, account_number):
         logging.error("Account mappings are empty or not loaded.")
         return account_number
 
-    # Ensure account_number is padded to 4 digits
-    padded_account_number = str(account_number).zfill(4)
+    # Convert account_number and group_number to strings for consistency with JSON structure
+    account_number_str = str(account_number)
+    group_number_str = str(group_number)
 
     # Get the broker data
     broker_accounts = account_mapping.get(broker, {})
 
     if not broker_accounts:
         logging.warning(f"No account mappings found for broker: {broker}. Returning account number.")
-        return padded_account_number
+        return account_number_str
 
     # Get the group data
-    group_accounts = broker_accounts.get(group_number, {})
+    group_accounts = broker_accounts.get(group_number_str, {})
 
     if not group_accounts:
         logging.warning(f"No account mappings found for broker: {broker} and group number: {group_number}.")
-        return padded_account_number
+        return account_number_str
 
-    # Get the account nickname or return the padded account number if not found
-    return group_accounts.get(padded_account_number, padded_account_number)
+    # Return the nickname if it exists, otherwise the account number
+    return group_accounts.get(account_number_str, account_number_str)
+
     
 def save_account_mappings(mappings):
     """Save the account mappings to the JSON file."""
