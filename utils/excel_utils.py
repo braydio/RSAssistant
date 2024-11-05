@@ -459,13 +459,17 @@ def update_excel_log(order_data, order_type=None, filename=excel_log_file, confi
                 error_message = f"ValueError: {str(e)}"
                 log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
 
-        # Save the workbook
-        wb.save(filename)
-        print(f"Saved Excel file: {filename}")
-        logging.info(f"Successfully saved the Excel log: {filename}")
+        try:
+            wb.save(filename)
+            print(f"Saved Excel file: {filename}")
+            logging.info(f"Successfully saved the Excel log: {filename}")
 
-    except Exception as e:
-        logging.error(f"An error occurred while updating the Excel log: {str(e)}")
+            # Manage backups by removing stale ones (using the config value)
+            delete_stale_backups(EXCEL_FILE_DIRECTORY, 'archive', config_days_keep_backup)
+        
+
+        except Exception as e:
+            logging.error(f"An error occurred while updating the Excel log: {str(e)}")
 
     finally:
         if wb:

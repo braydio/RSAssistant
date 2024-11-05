@@ -1,80 +1,92 @@
-# ----SETTINGS SETUP -----
-# MAKE ANY UPDATES AND RE-SAVE AS
-# settings.yaml
-# -------------------------------
-# Filepath:
-# config/settings.yaml
+# INSTRUCTIONS FOR UPDATING SETTINGS
+
+# 1. Copy the settings block below, starting from "BEGIN COPY BLOCK" to "END COPY BLOCK".
+# 2. Paste this block into your EXISTING settings.yaml file, and overwrite ONLY the sections within the COPY BLOCK.
+# 3. Each field in this block is configurable per comments. Feel free to make changes to these settings after the script has been initialized with the default settings.
+# 4. IMPORTANT: Do NOT overwrite sections marked as "USER SPECIFIC SETTINGS" unless updating your personal IDs and account details.
+
+# -------------------------------------------------------------------
+# BEGIN COPY BLOCK
+# -------------------------------------------------------------------
 
 # General settings
 app_name: RSAssistant
 
-# Discord ID's
+# Settings for excel logging index values - These values define how log information is recorded within the 'Reverse Split Log' sheet in the Excel file.
+excel_log_settings:
+  stock_row: 1                  # Row where stock tickers are saved in every other column
+  date_row: 2                   # Row where dates are saved in every other column
+  account_start_row: 4          # Starting row for account names
+  account_start_column: 1       # Starting column for account names
+  split_ratio_placeholder: "S:S"  # Placeholder for empty cells in 'stock_row' (functionality WIP)
+  days_keep_backup: 2           # Number of days to keep backup files
+
+# Paths for logs and other files - Paths can be adjusted based on your project directory structure, but likely do not need to be changed.
+paths:
+  orders_log: "logs/orders_log.csv"           # Log file for orders
+  holdings_log: "logs/holdings_log.csv"       # Log file for holdings
+  account_mapping: "config/account_mapping.json" # Broker account nicknames file
+  excel_directory: "excel/"                   # Directory for Excel logs
+  excel_file_name: "ReverseSplitLog"          # Excel log file for tracking reverse splits
+  base_excel_file: "ReverseSplitLog.xlsx"
+  watch_list: "utils/watch_list.json"         # JSON file for watchlist data
+  manual_orders: "todiscord.txt"              # Enter order confirmation messages to send to discord
+  holdings_data: "logs/holdings_data.csv"     # (not yet implemented)
+  error_log: "logs/error_log.txt"             # Error log for excel logging errors
+  error_order: "logs/error_details.txt"       # Detailed order error log for manual orders
+
+# Header settings for logs - Customize headers if needed.
+header_settings:
+  orders_headers: ['Broker Name', 'Broker Number', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Price', 'Date', 'Timestamp']
+  holdings_headers: ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
+
+# Watchlist settings - Customize auto-update and notification interval.
+watch_list:
+  auto_update: true             # Automatically update watchlist at specified intervals
+  notification_interval: 3600   # Time between notifications in seconds (default: 1 hour)
+
+# Logging settings - Adjust logging levels and rotation settings.
+logging:
+  level: "INFO"                 # Logging level options: DEBUG, INFO, WARNING, ERROR
+  file: "logs/app.log"          # Log file location
+  max_size: 10MB                # Maximum log file size before rotation
+  backup_count: 2               # Number of old log files to retain (adjustable)
+
+# -------------------------------------------------------------------
+# END COPY BLOCK
+# -------------------------------------------------------------------
+
+# USER SPECIFIC SETTINGS -- DO NOT OVERWRITE ONCE SET UP:
+
+# Discord ID settings
 discord_ids:
-  channel_id: ID_OF_YOUR_DISCORD_CHANNEL
-  target_bot: ID_OF_AUTO-RSA_BOT
-  my_id: YOUR_DISCORD_ID
+  channel_id: YOUR_DISCORD_CHANNEL_ID
+  target_bot: YOUR_AUTO_RSA_BOT_ID
+  my_id: YOUR_DISCORD_USER_ID
 
 # Discord bot settings
 discord:
-  token: "NEW_ASSISTER_BOT_TOKEN"   # Token "WITH QUOTES" around it
+  token: "YOUR_DISCORD_BOT_TOKEN"   # Token must be in "quotes"
   prefix: ".."
   intents:
     message_content: true
     guilds: true
     members: true
 
-# Account Owners List - Please specify account ownership with Account Nickname per excel log > Account Details
-# EG. 'Cash Account 1 AO1' will be assigned 'account_owner_1'
+# Account Owners List - Specify account ownership with Account Nicknames as per your Excel log > Account Details
 account_owners:
-  1 : account_owner_1
-  2 : account_owner_2
-  3 : account_owner_3
+  1: account_owner_1
+  2: account_owner_2
+  3: account_owner_3
 
-# Brokers / Accounts to be excluded from the summarized views
-# See below example formatting and update as needed
+# Brokers / Accounts to exclude from summary views - Adjust as needed
 excluded_brokers:
-  #Sofi: []    # No excluded accounts (shoutout NelsonDane & the auto-rsa team for the new addition lfg)
-  # Plynk: null   # Exclude all accounts (explicit null)
-  # Fidelity:
-  #  accounts:
-  #    - "Cash Account 1"
-  #  exclude_all: false  # Optionally say you are not excluding all Fidelity accounts
+  # Example format:
+  # BrokerName: []          # Exclude no accounts
+  # BrokerName: null        # Exclude all accounts for this broker
+  # BrokerName:
+  #   accounts:
+  #     - "Account Nickname"
+  #   exclude_all: false     # Set to true to exclude all accounts for this broker
 
-# Settings for excel logging index values
-excel_log_settings:
-  stock_row: 1 # Stock tickers saved to EVERY OTHER column of 'stock_row'
-  date_row: 2 # Dates saved to EVERY OTEHR column of 'date_row'
-  account_start_row: 4  # Account names are saved to EVERY row, starting at 'account_start_row'
-  account_start_column: 1 # Account names are saved to EVERY SUBSEQUENT row to 'account_start_row' in 'account_start_column'
-  split_ratio_placeholder: "S:S"  # Placeholder entered into EVERY EMPTY cell in 'stock_row' - functionality WIP
-  days_keep_backup: 2    # Number of days to keep backup files
-
-# Paths for logs and other files
-paths:
-  orders_log: "logs/orders_log.csv"           # Log file for orders
-  holdings_log: "logs/holdings_log.csv"       # Log file for holdings
-  account_mapping: "config/account_mapping.json" # File that stores broker account nicknames
-  excel_directory: "excel/"                   # Directory where Excel logs are stored
-  excel_file_name: "ReverseSplitLog"          # Excel file for tracking reverse split logs
-  base_excel_file: "ReverseSplitLog.xlsx"
-  watch_list: "utils/watch_list.json"         # JSON file for watch list data
-  manual_orders: "todiscord.txt"              # Enter order confirmation messages to send to discord
-  holdings_data: "logs/holdings_data.csv"     # Not implemented
-  error_log: "logs/error_log.txt"             # Error log for errors in excel logging
-  error_order: "logs/error_details.txt"  # Order details for errors, formatted for manual order
-
-header_settings:
-  orders_headers : ['Broker Name', 'Broker Number', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Price', 'Date', 'Timestamp']
-  holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
-
-# Watchlist settings
-watch_list:
-  auto_update: true  # Automatically update watchlist every interval
-  notification_interval: 3600  # Time between notifications in seconds (1 hour)
-
-# Logging settings
-logging:
-  level: "INFO"            # Logging level, can be DEBUG, INFO, WARNING, ERROR
-  file: "logs/app.log"      # Log file location
-  max_size: 10MB           # Maximum size before log rotation
-  backup_count: 5          # Number of old log files to retain
+# NOTE: Do NOT modify the "USER SPECIFIC SETTINGS" unless updating your personal IDs and account mappings.
