@@ -418,6 +418,8 @@ def update_excel_log(order_data, order_type=None, filename=excel_log_file, confi
                 price = float(order['Price'])  # Convert np.float64 to regular float
                 date = order['Date']
 
+                error_order = f"manual {broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
+
                 account_nickname = get_account_nickname(broker_name, broker_number, account_number)
                 excel_nickname = f"{broker_name} {account_nickname}"
                 print(f"Processing {order_type} order for {excel_nickname}, stock: {stock}, price: {price}")
@@ -443,6 +445,9 @@ def update_excel_log(order_data, order_type=None, filename=excel_log_file, confi
                     if stock_col:
                         ws.cell(row=account_row, column=stock_col).value = price
                         print(f"{excel_nickname}: Updated column {stock_col}, row {account_row} with {price} for {order_type} on {stock}.")
+                        # Remove the corresponding error from the error logs if the order was successfully processed
+                        remove_from_file(error_log_file, error_order)
+                        remove_from_file(ERROR_ORDER_DETAILS_FILE, error_order)
                     else:
                         error_message = f"Stock {stock} not found for account {account_nickname}."
                         log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
