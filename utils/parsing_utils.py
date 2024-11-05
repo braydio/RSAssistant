@@ -49,7 +49,7 @@ order_patterns = {
         'Firstrade': r'(Firstrade)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful',
         'Vanguard': r'(Vanguard)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful',
         'Chase': r'(Chase)\s(\d+)\saccount\s(\d{4}):\sThe\sorder\sverification\swas\ssuccessful',
-        'Tradier': r'(Tradier)\saccount\sxxxx(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+):\s(ok|failed)',
+        'Tradier': r'(Tradier)\s(\d+)\saccount\sxxxx(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+):\s(ok|failed)',
         'Webull': r'(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sxxxx(\w+):\s(Success|Failed)'
     }
 }
@@ -83,7 +83,6 @@ def normalize_order_data(broker_name, broker_number, action, quantity, stock, ac
     quantity = float(quantity)
 
     return broker_name, broker_number, action, quantity, stock, account_number
-
 
 def handle_complete_order(match, broker_name, broker_number):
     """Processes complete buy/sell orders after normalization and saves to CSV."""
@@ -224,7 +223,7 @@ def handle_verification(match, broker_name, broker_number):
 
         # Normalize data
         broker_name, broker_number, action, _, _, account_number = normalize_order_data(
-            broker_name, broker_number, action, 0, '', account_number
+            broker_name, broker_number, action, 1, '', account_number
         )
 
         print(f"Verification received for {broker_name} {broker_number}, Account {account_number}")
@@ -248,15 +247,24 @@ def handle_verification(match, broker_name, broker_number):
         print(f"Error in handle_verification: {e}")
 
 def process_verified_orders(broker_name, account_number, order):
-    """Processes and finalizes a verified order."""
+    """Processes and finalizes a verified order by passing it to handle_complete_order."""
     print(f"Verified order processed for {broker_name}, Account {account_number}:")
-    print(f"Action: {order['action'].capitalize()}, Quantity: {order['quantity']}, Stock: {order['stock']}")
-    print("Order has been finalized and logged.")
+
+    # Call handle_complete_order to complete and save the order to CSV
+    handle_complete_order(
+        broker_name,
+        order['broker_number'],
+        account_number,
+        order['action'],
+        order['quantity'],
+        order['stock']
+    )
+    print("Order has been finalized and saved to CSV.")
 
 def parse_order_message(content):
     """Parses incoming messages and routes them to the correct handler based on type."""
     for order_type, patterns in order_patterns.items():
-        for broker, pattern in patterns.items():
+        for broker_name, pattern in patterns.items():
             match = re.match(pattern, content, re.IGNORECASE)
             if match:
                 broker_name = match.group(1)
