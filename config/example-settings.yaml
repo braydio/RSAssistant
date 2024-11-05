@@ -64,7 +64,7 @@ paths:
   error_order: "logs/error_details.txt"  # Order details for errors, formatted for manual order
 
 header_settings:
-  orders_headers : ['Broker Name', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Date']
+  orders_headers : ['Broker Name', 'Broker Number', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Price', 'Date', 'Timestamp']
   holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
 
 # Watchlist settings
