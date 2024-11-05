@@ -159,7 +159,7 @@ async def clear_mapping_command(ctx):
 @bot.event
 async def on_message(message):
     print(message.content.lower())
-    if message.channel.id: # #and message.author.id == TARGET_BOT_ID:
+    if message.channel.id == TARGET_CHANNEL_ID: #and message.author.id == TARGET_BOT_ID:
         # Check for 'manual' keyword to handle manual order updates
         if message.content.lower().startswith("manual"):
             # Parse the manual order details

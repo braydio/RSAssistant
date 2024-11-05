@@ -101,7 +101,7 @@ def handle_complete_order(match, broker_name, broker_number):
             quantity = match.group(4)
             stock = match.group(5)
         
-        elif broker_name == 'wellsfargo':
+        elif broker_name == 'WELLSFARGO':
             account_number = match.group(3)
             action = match.group(4)
             quantity = match.group(5)
