@@ -5,14 +5,15 @@ import logging
 import os
 from datetime import datetime, timedelta
 import discord
+import warnings
+import functools
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config)
-from utils.csv_utils import read_holdings_log
+
 
 # Load configuration and holdings data
 config = load_config()
-holdings_data = read_holdings_log()
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ORDERS_CSV_FILE = config['paths']['orders_log']
@@ -33,40 +34,35 @@ def get_latest_timestamp_from_holdings(filename):
 
 HOLDINGS_TIMESTAMP = get_latest_timestamp_from_holdings(HOLDINGS_LOG_CSV)
 
-async def profile(ctx, broker_name):
-    """Generates a profile summary for a broker and sends it to Discord."""
-    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
-    holdings_log = read_holdings_log(HOLDINGS_LOG_CSV)  # Load the holdings data
+def deprecated(reason=None):
+    """
+    A decorator to mark functions as deprecated.
 
-    broker_name = broker_name.capitalize()
-    broker_accounts = account_mapping.get(broker_name, {})
+    Parameters:
+    - reason (str): Optional. A message providing details on the deprecation reason or alternative function.
 
-    if not broker_accounts:
-        await ctx.send(f"No accounts found for {broker_name}.")
-        return
+    Usage:
+    @deprecated("Use 'new_function' instead.")
+    def old_function():
+        pass
+    """
+    def decorator(func):
+        message = f"The function '{func.__name__}' is deprecated."
+        if reason:
+            message += f" {reason}"
 
-    # Initialize variables
-    summary_message = []
-    processed_accounts = set()
-    total_holdings = 0
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            warnings.warn(
+                message,
+                category=DeprecationWarning,
+                stacklevel=2
+            )
+            return func(*args, **kwargs)
+        
+        return wrapper
 
-    for key, row in holdings_log.items():
-        log_broker, account = key[:2]
-        account_total = float(row[5])  # Convert to float
-
-        if log_broker != broker_name or account in processed_accounts:
-            continue
-
-        processed_accounts.add(account)
-        total_holdings += account_total
-        summary_message.append(f"| Account: {account}: ${account_total:.2f}")
-
-    # Add total holdings to the message
-    summary_message.insert(0, f"{broker_name} - Broker Summary\n${total_holdings:.2f} in {len(processed_accounts)} Accounts \n===========================")
-
-    # Send the summary message to Discord
-    await send_large_message_chunks(ctx, "\n".join(summary_message))
-
+    return decorator
 
 # -- BROKERWITH TICKER Command
 

@@ -6,6 +6,7 @@ from copy import copy
 from datetime import datetime, timedelta
 
 import openpyxl
+from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
@@ -372,72 +373,67 @@ def find_last_filled_column(ws, row):
 
 # -- Logger Functions and Erroring
 
-def update_excel_log(orders, order_type, filename=excel_log_file, config=config):
-    """Update the Excel log with the buy or sell orders, save with a date-based filename, and manage backups."""
-
-    wb = None  # Initialize wb to None to avoid UnboundLocalError
+def update_excel_log(order_data, order_type=None, filename=excel_log_file, config=config):
+    """Update the Excel log with buy or sell orders, handling single or multiple orders."""
+    
+    wb = None
     error_log_file = ERROR_LOG_FILE
+
+    # Convert order_data to a list if it's a single dictionary
+    if isinstance(order_data, dict):
+        order_data = [order_data]
 
     try:
         # Load the Excel workbook
-        wb = load_excel_log(filename)  # Function that loads the workbook
+        wb = load_workbook(filename)
         if not wb:
             logging.error(f"Workbook could not be loaded: {filename}")
             return
+        
+        # Validate and normalize order_data
+        try:
+            order_data = validate_order_data(order_data)
+        except TypeError as e:
+            logging.error(f"Invalid order_data format: {str(e)}")
+            return  # Exit function if validation fails
 
-        # Ensure we're working with the 'Reverse Split Log' sheet
+        # Access or create the "Reverse Split Log" sheet
         if "Reverse Split Log" in wb.sheetnames:
             ws = wb["Reverse Split Log"]
         else:
-            # Create the sheet if it doesn't exist
             ws = wb.create_sheet("Reverse Split Log")
             logging.info(f"'Reverse Split Log' sheet was missing, created a new one.")
 
-        # # Use the globally loaded config object to get values like account_start_row and stock_row
-        # config_account_start_row = config['excel_log_settings']['account_start_row']
-        # config_stock_row = config['excel_log_settings']['stock_row']
-        # config_account_start_column = config['excel_log_settings']['account_start_column']
-        # config_days_keep_backup = config['excel_log_settings']['days_keep_backup']
+        print(order_data)  # Debugging: Print the orders to verify they are correct
 
-        print(orders)  # Debugging: Print the orders to verify they are correct
-
-        for order in orders:
+        for order in order_data:
             try:
-                broker_name, broker_number, account, order_type, stock, _, _, price = order
-                error_order = f"manual {broker_name} {broker_number} {account} {order_type} {stock} {price}"
-                print(error_order)
+                # Extract details and get the account nickname
+                broker_name = order['Broker Name']
+                broker_number = order['Broker Number']
+                account_number = order['Account Number']
+                order_type = order_type or order['Order Type']
+                stock = order['Stock']
+                quantity = order['Quantity']
+                price = float(order['Price'])  # Convert np.float64 to regular float
+                date = order['Date']
 
-                # Normalize order type values
-                if order_type == 'selling':
-                    order_type = 'sell'
-                elif order_type == 'buying':
-                    order_type = 'buy'
+                account_nickname = get_account_nickname(broker_name, broker_number, account_number)
+                excel_nickname = f"{broker_name} {account_nickname}"
+                print(f"Processing {order_type} order for {excel_nickname}, stock: {stock}, price: {price}")
 
-                # Get the account nickname based on the broker and account pair
-                mapped_name = get_account_nickname(broker_name, broker_number, account)
-                account_nickname = f"{broker_name} {mapped_name}"
-
-                print(f"Excel - processing {order_type} order for {account_nickname}, stock: {stock}, price: {price}")
-
-                # Find the row for the account in Column A (using the config value)
+                # Locate the row for the account in Column A based on account_nickname
                 account_row = None
                 for row in range(config_account_start_row, ws.max_row + 1):
-                    # Ensure we are checking Column A
-                    # print(f"Checking column A, row {row}: {ws[f'A{row}'].value}") # Debugging: Print the cell value being checked
                     cell_value = ws[f'A{row}'].value
-                    # Check if the cell value is a string before using strip
-                    if isinstance(cell_value, str):
-                        cell_value = cell_value.strip()  # Strip whitespace if it's a string
-                    else:
-                        cell_value = str(cell_value) if cell_value is not None else ''  # Convert non-string to string
+                    cell_value = cell_value.strip() if isinstance(cell_value, str) else str(cell_value or '')
 
-                    # print(f"Checking row {row}: {cell_value}")  # Debugging: Print the cell value being checked
-                    if cell_value.lower() == account_nickname.strip().lower():  # Case-insensitive comparison
+                    if cell_value.lower() == excel_nickname.strip().lower():
                         account_row = row
                         break
 
                 if account_row:
-                    # Find the stock column in the specified stock row (using the config value)
+                    # Locate the stock column in the specified stock row
                     stock_col = None
                     for col in range(3, ws.max_column + 1, 2):
                         if ws.cell(row=config_stock_row, column=col).value == stock:
@@ -445,47 +441,53 @@ def update_excel_log(orders, order_type, filename=excel_log_file, config=config)
                             break
 
                     if stock_col:
-                        # Update the price in the appropriate cell
                         ws.cell(row=account_row, column=stock_col).value = price
-                        print(f"{account_nickname}: Updated column {stock_col}, row {account_row} with {price} for {order_type} on {stock}.")
-
-                        # Remove the corresponding error from the error logs if the order was successfully processed
-                        remove_from_file(error_log_file, error_order)
-                        remove_from_file(ERROR_ORDER_DETAILS_FILE, error_order)
+                        print(f"{excel_nickname}: Updated column {stock_col}, row {account_row} with {price} for {order_type} on {stock}.")
                     else:
                         error_message = f"Stock {stock} not found for account {account_nickname}."
-                        log_error_message(error_message, error_order, error_log_file)
+                        log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
                 else:
-                    error_message = f"Account {account_nickname} not found in Excel."
-                    print(f"Account not found: {account_nickname}")  # Debugging: Print the account name
-                    log_error_message(error_message, error_order, error_log_file)
+                    error_message = f"{broker_name} - {account_nickname} not found in Excel."
+                    log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
 
             except ValueError as e:
                 error_message = f"ValueError: {str(e)}"
-                log_error_message(error_message, error_order, error_log_file)
-                return None
+                log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
 
-        # Save changes to the Excel file
-        try:
-            wb.save(filename)
-            print(f"Saved Excel file: {filename}")
-            logging.info(f"Successfully saved the Excel log: {filename}")
-
-            # Manage backups by removing stale ones (using the config value)
-            delete_stale_backups(EXCEL_FILE_DIRECTORY, 'archive', config_days_keep_backup)
-
-        except Exception as e:
-            error_message = f"Failed to save Excel file: {filename}. Error: {str(e)}"
-            print(error_message)
-            log_error_message(error_message, "Excel save error", error_log_file)
+        # Save the workbook
+        wb.save(filename)
+        print(f"Saved Excel file: {filename}")
+        logging.info(f"Successfully saved the Excel log: {filename}")
 
     except Exception as e:
-        # Catch any encoding-related errors here
         logging.error(f"An error occurred while updating the Excel log: {str(e)}")
 
     finally:
-        if wb:  # Check if wb is not None before closing
+        if wb:
             wb.close()
+
+def validate_order_data(order_data):
+    """
+    Validates that order_data is either a dictionary (representing a single order)
+    or a list of dictionaries (for multiple orders). Raises a TypeError if the format is incorrect.
+    
+    Parameters:
+    - order_data: The data to validate, expected to be a dictionary or a list of dictionaries.
+    
+    Returns:
+    - order_data as a list of dictionaries for consistent handling in other functions.
+    """
+    if isinstance(order_data, dict):
+        # Convert single dictionary to a list for consistency
+        return [order_data]
+    elif isinstance(order_data, list) and all(isinstance(order, dict) for order in order_data):
+        # If it's already a list of dictionaries, return as-is
+        return order_data
+    else:
+        # Raise an error if the structure is incorrect
+        raise TypeError("Expected order_data to be a dictionary or a list of dictionaries.")
+
+
 
 def delete_stale_backups(directory=EXCEL_FILE_DIRECTORY, archive_folder="archive", days_to_keep=config_days_keep_backup):
     """Delete backup files older than the specified number of days."""
