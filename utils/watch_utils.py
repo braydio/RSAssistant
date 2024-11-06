@@ -40,7 +40,7 @@ def load_watch_list():
     if os.path.exists(WATCH_FILE):
         with open(WATCH_FILE, 'r') as file:
             watch_list.update(json.load(file))
-        logging.info("Watch list loaded.")
+        logging.info("Watch list loaded.\n ( •́ _ •̀ )")
     else:
         logging.info("No watch list file found, starting fresh.")
 

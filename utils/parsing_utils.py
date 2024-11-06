@@ -377,7 +377,6 @@ def parse_embed_message(embed):
 
     print("Holdings have been successfully parsed and saved.")
 
-
 def main_embed_message(embed):
     """
     Parses an embed message based on the broker name.
@@ -392,7 +391,6 @@ def main_embed_message(embed):
         return parse_fennel_message(embed)
     else:
         return parse_general_embed_message(embed)
-
 
 def parse_general_embed_message(embed):
     """
@@ -450,7 +448,6 @@ def parse_general_embed_message(embed):
         print(parsed_holdings)
 
     return parsed_holdings
-
 
 def parse_webull_embed_message(embed):
     """
