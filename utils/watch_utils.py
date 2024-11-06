@@ -11,7 +11,7 @@ import pandas as pd
 
 from utils.config_utils import (get_account_nickname, load_account_mappings,
                                 load_config, send_large_message_chunks,
-                                should_skip, get_last_stock_price)
+                                get_last_stock_price)
 from utils.excel_utils import add_stock_to_excel_log, get_excel_file_path
 
 # Load configuration and paths from settings
