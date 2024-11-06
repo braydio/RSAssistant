@@ -60,15 +60,17 @@ async def watch_ticker(ctx, ticker: str, split_date: str):
     """Add a stock ticker with a split date to the watch list."""
     ticker = ticker.upper()
     
+    # Only add the ticker if it's not already in the watch list
     if ticker not in watch_list:
+        # Add ticker with only split_date
         watch_list[ticker] = {
-            'split_date': split_date,
-            'reminder_sent': False
+            'split_date': split_date
         }
+        
         try:
-            # Ensure the async function is awaited
+            # Pass the ticker and split_date to an external log, such as an Excel file
             await add_stock_to_excel_log(ctx, ticker, split_date)
-            logging.info("Added stock to watchlist and passed to excel utils.")
+            logging.info(f"Added {ticker} to watchlist and passed to Excel utils.")
         except Exception as e:
             await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")
             logging.error(f"Error adding stock {ticker} to Excel: {str(e)}")
@@ -120,7 +122,13 @@ async def list_watched_tickers(ctx):
         for ticker, data in watch_list.items():
             split_date = data.get('split_date', 'N/A')
             last_price = get_last_stock_price(ticker)
-            embed.add_field(name=f"{ticker} **|** ${last_price:.2f}", value=f" **|** Split Date: {split_date} \n", inline=True)
+            # Use a default value if last_price is None
+            last_price_display = f"{last_price:.2f}" if last_price is not None else "N/A"
+            embed.add_field(
+                name=f"{ticker} **|** ${last_price_display}",
+                value=f" **|** Split Date: {split_date} \n",
+                inline=True
+            )
         
         await ctx.send(embed=embed)
 
