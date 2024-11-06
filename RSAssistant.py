@@ -34,6 +34,8 @@ excel_log_file = get_excel_file_path()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 MANUAL_ORDER_ENTRY_TXT = config['paths']['manual_orders']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
+FILE_VERSION = config['general_settings']['file_version']
+FILE_NAME = config['general_settings']['app_name']
 task = None
 
 # Set up the bot intents
@@ -62,7 +64,7 @@ load_watch_list()
 async def on_ready():
     # Bot initialized
     channel = bot.get_channel(TARGET_CHANNEL_ID)
-    ready_message = f'\nRSAssistant-bot watching for order activity...\n (✪‿✪)' 
+    ready_message = f'...watching for order activity...\n(✪‿✪)' 
     
 # Check if the account_mapping.json file exists and has content
     try:
@@ -77,7 +79,7 @@ async def on_ready():
         if not account_mappings:  # Empty dictionary
             ready_message = account_setup_message
         else:
-            ready_message = f'\nWatching for order activity...\n\n'# (✪‿✪)
+            ready_message = f'...watching for order activity...\n(✪‿✪)'
 
     except FileNotFoundError:
             ready_message = account_setup_message
@@ -91,7 +93,9 @@ async def on_ready():
         print(f"Could not find channel with ID: {TARGET_CHANNEL_ID}")
 
     global task
+    print(f'Initializing from {FILE_NAME} - version {FILE_VERSION}.')
     print(f'{bot.user} has connected to Discord!')
+
 
     if task is None:
         task = asyncio.create_task(periodic_check(bot))
