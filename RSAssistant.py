@@ -1,34 +1,28 @@
 import asyncio
-# Imports from standard libraries
 import os
 import json
 import sys
 from datetime import datetime
 
-# Imports from third-party libraries
+# Third-party imports
 import discord
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
 
-# Imports from local utility modules
-# Import utility functions
-from utils.config_utils import (all_account_nicknames, all_account_numbers,
-                                all_brokers, all_brokers_groups, load_config)
+# Local utility imports
+from utils.config_utils import (all_account_nicknames, generate_broker_summary_embed, all_brokers_summary_by_owner,
+                                all_brokers, load_config, account_mapping)
 from utils.csv_utils import clear_holdings_log
-from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, update_excel_log, clear_account_mappings
-from utils.parsing_utils import (parse_embed_message,
-                                 parse_manual_order_message,
-                                 parse_order_message)
+from utils.excel_utils import index_account_details, get_excel_file_path, map_accounts_in_excel_log, clear_account_mappings
+from utils.parsing_utils import parse_embed_message, parse_manual_order_message, parse_order_message
 from utils.utility_utils import print_to_discord, track_ticker_summary
-from utils.watch_utils import (list_watched_tickers,
-                               load_watch_list, periodic_check,
-                               send_reminder_message,
-                               send_reminder_message_embed, stop_watching,
+from utils.watch_utils import (list_watched_tickers, load_watch_list, periodic_check,
+                               send_reminder_message, send_reminder_message_embed, stop_watching,
                                watch_ticker)
 
-# Load configuration and holdings data
+# Load configuration and initialize paths
 config = load_config()
 excel_log_file = get_excel_file_path()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
@@ -38,55 +32,38 @@ FILE_VERSION = config['general_settings']['file_version']
 FILE_NAME = config['general_settings']['app_name']
 task = None
 
-# Set up the bot intents
+# Set up bot intents
 intents = discord.Intents.default()
 intents.message_content = config['discord']['intents']['message_content']
 intents.guilds = config['discord']['intents']['guilds']
 intents.members = config['discord']['intents']['members']
 
-# Initialize the bot with prefix and intents
+# Initialize bot
 bot = commands.Bot(command_prefix=config['discord']['prefix'], case_insensitive=True, intents=intents)
 
-# Discord IDs
+# Discord IDs and paths
 TARGET_CHANNEL_ID = config['discord_ids']['channel_id']  
 PERSONAL_USER_ID = config['discord_ids']['my_id']
 TARGET_BOT_ID = config['discord_ids']['target_bot']  
-
-# Ensure the logs folder exists
 LOGS_FOLDER = 'logs'
 os.makedirs(LOGS_FOLDER, exist_ok=True)
 
-# Load the watchlist when the bot starts
+# Load the watchlist when bot starts
 load_watch_list()
 
-# Event triggered when the bot is ready
 @bot.event
 async def on_ready():
-    # Bot initialized
+    """Triggered when the bot is ready."""
     channel = bot.get_channel(TARGET_CHANNEL_ID)
-    ready_message = f'...watching for order activity...\n(✪‿✪)' 
+    account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{excel_log_file}`\n\nThen run: `..loadmap` and `..loadlog`."
     
-# Check if the account_mapping.json file exists and has content
     try:
-        account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{excel_log_file}`\n\nThen run: `..loadmap` and `..loadlog`."
-        
         with open(ACCOUNT_MAPPING_FILE, 'r') as file:
-            account_mappings = (json.load(file))
-        
-        # ( •́ _ •̀ )  (⌐■_■)  (ಥ﹏ಥ)   (-.-)Zzz...
+            account_mappings = json.load(file)
+        ready_message = account_setup_message if not account_mappings else '...watching for order activity...\n(✪‿✪)'
+    except (FileNotFoundError, json.JSONDecodeError):
+        ready_message = account_setup_message
 
-        # Check if there are mappings present in the file
-        if not account_mappings:  # Empty dictionary
-            ready_message = account_setup_message
-        else:
-            ready_message = f'...watching for order activity...\n(✪‿✪)'
-
-    except FileNotFoundError:
-            ready_message = account_setup_message
-    except json.JSONDecodeError:
-            ready_message = account_setup_message
-
-    # Send the message to the channel
     if channel:
         await channel.send(ready_message)
     else:
@@ -96,7 +73,6 @@ async def on_ready():
     print(f'Initializing from {FILE_NAME} - version {FILE_VERSION}.')
     print(f'{bot.user} has connected to Discord!')
 
-
     if task is None:
         task = asyncio.create_task(periodic_check(bot))
         print("Periodic task started.")
@@ -104,16 +80,12 @@ async def on_ready():
         print("Periodic task already running.")
 
 
-# Replace 'bot' with your instance of commands.Bot or commands.AutoShardedBot
 @bot.command(name="restart")
 async def restart(ctx):
     """Restarts the bot by terminating the current process and starting a new one."""
     await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
-    
-    # Log the restart attempt
     await asyncio.sleep(1)
     print("Attempting to restart the bot...")
-    
     try:
         python = sys.executable
         os.execv(python, [python] + sys.argv)
@@ -122,15 +94,9 @@ async def restart(ctx):
         await ctx.send("An error occurred while attempting to restart the bot.")
 
 
-async def reminder_message():
-    """Checks watchlist against saved holdings for stock purchases."""
-    while True:
-        await()
-
-# -- CURRENTLY WORKING ON
-
 @bot.command(name='loadmap', help='Maps accounts from Account Details excel sheet')
-async def excel_details_to_json(ctx):
+async def load_account_mappings_command(ctx):
+    """Maps account details from the Excel sheet to JSON."""
     try:
         await ctx.send("Mapping account details...")
         await index_account_details(ctx)
@@ -140,17 +106,19 @@ async def excel_details_to_json(ctx):
 
 
 @bot.command(name='loadlog', help='Updates excel log with mapped accounts')
-async def excel_details_to_json(ctx):
+async def update_log_with_mappings(ctx):
+    """Updates the Excel log with mapped accounts."""
     try:
-        await ctx.send("Updating log with mapped accounts")
+        await ctx.send("Updating log with mapped accounts...")
         await map_accounts_in_excel_log(ctx)
-        await ctx.send("Complete")
+        await ctx.send("Complete.")
     except Exception as e:
         await ctx.send(f"An error occurred during update: {str(e)}")
 
-# Command to clear account mappings
+
 @bot.command(name='clearmap', help='Clears all account mappings from the account_mapping.json file')
 async def clear_mapping_command(ctx):
+    """Clears all account mappings from the JSON file."""
     try:
         await ctx.send("Clearing account mappings...")
         await clear_account_mappings(ctx)
@@ -158,128 +126,87 @@ async def clear_mapping_command(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred during the clearing process: {str(e)}")
 
-      
-# Event triggered when a message is received
+
 @bot.event
 async def on_message(message):
-    print(message.content.lower())
-    if message.channel.id == TARGET_CHANNEL_ID: #and message.author.id == TARGET_BOT_ID:
-        # Check for 'manual' keyword to handle manual order updates
+    """Triggered when a message is received in the target channel."""
+    if message.channel.id == TARGET_CHANNEL_ID:
         if message.content.lower().startswith("manual"):
-            # Parse the manual order details
             parse_manual_order_message(message.content)
-        elif message.content.lower().startswith("**"):
-            print("No ")
+        elif message.embeds:
+            parse_embed_message(message.embeds[0])
         else:
-            # Call the regular order parsing function for non-manual messages
             parse_order_message(message.content)
-
-        # Handle embedded messages (updates holdings)
-        if message.embeds:
-            embed = message.embeds[0]
-            print("Embeds here:")
-            print(embed)
-            parse_embed_message(embed)
-            print(f"Holdings data saved to CSV for broker {embed.title.split(' Holdings')[0]}.")
-
     await bot.process_commands(message)
 
-# Command to show the summary for a broker
+
 @bot.command(name='reminder', help='Shows daily reminder')
-async def show_message(ctx):
+async def show_reminder(ctx):
+    """Shows a daily reminder message."""
     await send_reminder_message_embed(ctx)
 
-# Command to show the summary for a broker
-@bot.command(name='clearholdings', help='Clears entries in holdings_log.csv, repop. with !rsa holdings')
-async def clear_holdings(ctx, filename=HOLDINGS_LOG_CSV):
-    """
-    Command to clear all holdings from the CSV file, preserving only the headers.
-    """
-    success, message = clear_holdings_log(filename)  # Call the function from csv_utils
-    if success:
-        await ctx.send(message)  # Send success message
-    else:
-        await ctx.send(f"Failed to clear holdings log: {message}")  # Send failure message
+
+@bot.command(name='clearholdings', help='Clears entries in holdings_log.csv')
+async def clear_holdings(ctx):
+    """Clears all holdings from the CSV file."""
+    success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
+    await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
 
-# Command to show the summary for a broker
-@bot.command(name='brokerlist', help='List all active brokers. Optional arg: Broker ')
-async def brokerlist(ctx, broker: str = None, account_info: str = None):
-    """
-    Command to list all brokers or the accounts for a specific broker.
-    Usage:
-    - ..brokerlist: Lists all brokers.
-    - ..brokerlist 'broker' : Lists the accounts for broker.
-    """
+@bot.command(name='brokerlist', help='List all active brokers. Optional arg: Broker')
+async def brokerlist(ctx, broker: str = None):
+    """Lists all brokers or accounts for a specific broker."""
     try:
-        # If no broker is provided, list all brokers
         if broker is None:
             await all_brokers(ctx)
-            # await ctx.send(f"Available brokers: {brokers}")
-            # return
-        
-        # If broker and 'accounts' is provided, list account nicknames or numbers
         else:
             await all_account_nicknames(ctx, broker)
-        
-        # If the command is invalid, send an error message
-            
     except Exception as e:
-        # Handle any unexpected errors
         await ctx.send(f"An error occurred: {str(e)}")
 
-# Command to show the summary for a broker
-@bot.command(name='grouplist', help='Summary by account owner')
-async def brokers_groups(ctx):
-    await all_brokers_groups(ctx)
 
-@bot.command(name='brokerwith', help=' > brokerwith <ticker> (details) ')
+@bot.command(name='grouplist', help='Summary by account owner. Optional: specify a broker.')
+async def brokers_groups(ctx, broker: str = None):
+    """
+    Displays account owner summary for a specific broker or all brokers if no broker is specified.
+    """
+    embed = generate_broker_summary_embed(config, account_mapping, broker)
+    await ctx.send(embed=embed if embed else "An error occurred while generating the broker summary.")
+
+
+@bot.command(name='brokerwith', help=' > brokerwith <ticker> (details)')
 async def broker_has(ctx, ticker: str, *args):
-    specific_broker = None
-
-    # Check if a specific broker was provided
-    if args:
-        specific_broker = args[0]  # First argument after ticker is the broker name
-
-    # Call the function with the specific broker if provided
-    await track_ticker_summary(ctx, ticker, show_details=True if specific_broker else False, specific_broker=specific_broker)
+    """Shows broker-level summary for a specific ticker."""
+    specific_broker = args[0] if args else None
+    await track_ticker_summary(ctx, ticker, show_details=bool(specific_broker), specific_broker=specific_broker)
 
 
-# Command to watch a stock
 @bot.command(name='watch', help='Adds a ticker to the watchlist for tracking.')
 async def watch(ctx, ticker: str, split_date: str = None):
-    # Check if the split date is provided
+    """Adds a ticker to the watchlist with an optional split date."""
     if not split_date:
         await ctx.send("Please include split date: * mm/dd *")
         return
-    
     await watch_ticker(ctx, ticker, split_date)
 
-# Command to list all watched tickers
+
 @bot.command(name='watchlist', help='Lists all tickers currently being watched.')
 async def allwatching(ctx):
+    """Lists all tickers being watched."""
     await list_watched_tickers(ctx)
 
-# Command to stop watching a stock ticker
+
 @bot.command(name='watched', help='Removes a ticker from the watchlist.')
 async def watched_ticker(ctx, ticker: str):
+    """Removes a ticker from the watchlist."""
     await stop_watching(ctx, ticker)
 
-# Command to trigger printing a file to Discord one line at a time, useful for manual orders
+
 @bot.command(name='todiscord', help='Prints text file one line at a time')
 async def print_by_line(ctx):
-    # Call the function to print the file to Discord
+    """Prints contents of a file to Discord, one line at a time."""
     await print_to_discord(ctx)
 
-
-# WIP Commands: 
-
-
-""" # Command to get the status of a specific ticker
-@bot.command(name='watchstatus', help='Displays a broker-level summary for a ticker.')
-async def watchstatus(ctx, ticker: str):
-    await get_watch_status(ctx, ticker)
- """
 
 # Start the bot with the token from the config
 if __name__ == "__main__":
