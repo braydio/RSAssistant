@@ -186,6 +186,13 @@ async def get_detailed_broker_view(ctx, ticker, specific_broker, holdings, accou
     - Accounts not holding the position.
     """
     broker_name = specific_broker.capitalize()
+    print(f"looking up {broker_name} in mapping")
+    
+    if specific_broker.upper() == "BBAE":
+        broker_name = "BBAE"  # Ensures 'BBAE' is always in all caps for the lookup
+    
+    print(f"looking up{broker_name}")
+
     accounts_with_position = []
     accounts_without_position = []
 

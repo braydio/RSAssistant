@@ -279,20 +279,24 @@ def parse_manual_order_message(content):
         print(f"Error parsing manual order: {e}")
         return None
 
-def handle_failed_order(match, broker_name, broker_number):
-    """Handles failed orders by removing incomplete entries."""
+def handle_failed_order(match, broker):
     try:
+        # Extract the account number from the failure message
         account_number = match.group(1)
-        to_remove = [(stock, account) for (stock, account), order in incomplete_orders.items()
-                     if order['broker_name'] == broker_name and account == account_number]
         
+        # Loop through incomplete orders and remove the one matching the account number
+        to_remove = []
+        for (stock, account), order in incomplete_orders.items():
+            if order['broker'] == 'Firstrade' and account == account_number:
+                to_remove.append((stock, account))
+                print(f"Removing Firstrade order for account {account_number} due to failure.")
+
+        # Remove failed accounts from incomplete_orders
         for item in to_remove:
             del incomplete_orders[item]
-            print(f"Removed failed order for {broker_name} {account_number} with broker number {broker_number}")
 
     except Exception as e:
         print(f"Error handling failed order: {e}")
-
 
 def parse_manual_order_message(content):
     """Parses a manual order message. Expected format: 'manual Broker BrokerNumber Account OrderType Stock Price'"""
@@ -513,6 +517,7 @@ def parse_fennel_message(embed):
         parsed_holdings.extend(new_holdings)
 
     return parsed_holdings
+
 
 def get_account_nickname_or_default(broker_name, group_number, account_number):
     """

@@ -35,6 +35,8 @@ excel_log_file = get_excel_file_path()
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 MANUAL_ORDER_ENTRY_TXT = config['paths']['manual_orders']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
+FILE_VERSION = config['general_settings']['file_version']
+FILE_NAME = config['general_settings']['app_name']
 task = None
 
 # Set up the bot intents
@@ -79,7 +81,7 @@ async def on_ready():
             ready_message = account_setup_message
         else:
             ready_message = f'\nWatching for order activity...\n\n'# (✪‿✪)
-
+    
     except FileNotFoundError:
             ready_message = account_setup_message
     except json.JSONDecodeError:
@@ -92,7 +94,10 @@ async def on_ready():
         print(f"Could not find channel with ID: {TARGET_CHANNEL_ID}")
 
     global task
+    print(f'Initializing from {FILE_NAME} - version {FILE_VERSION}.')
     print(f'{bot.user} has connected to Discord!')
+
+
 
     if task is None:
         task = asyncio.create_task(periodic_check(bot))
