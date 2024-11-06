@@ -10,7 +10,10 @@
 # -------------------------------------------------------------------
 
 # General settings
-app_name: RSAssistant
+general_settings:
+  app_name:  '(⌐■_■)   (ಥ﹏ಥ)'
+  file_version: '1.0'
+
 
 # Settings for excel logging index values - These values define how log information is recorded within the 'Reverse Split Log' sheet in the Excel file.
 excel_log_settings:
@@ -37,8 +40,8 @@ paths:
 
 # Header settings for logs - Customize headers if needed.
 header_settings:
-  orders_headers: ['Broker Name', 'Broker Number', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Price', 'Date', 'Timestamp']
-  holdings_headers: ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
+  orders_headers : ['Broker Name', 'Broker Number', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Price', 'Date', 'Timestamp']
+  holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
 
 # Watchlist settings - Customize auto-update and notification interval.
 watch_list:
@@ -74,11 +77,11 @@ discord:
     members: true
 
 # Account Owners List - Specify account ownership with Account Nicknames as per your Excel log > Account Details
-account_owners:
-  1: account_owner_1
-  2: account_owner_2
-  3: account_owner_3
-
+account_owners : {
+  '1': 'account_owner_1',
+  '2': 'account_owner_2',
+  '3': 'account_owner_3',
+}
 # Brokers / Accounts to exclude from summary views - Adjust as needed
 excluded_brokers:
   # Example format:

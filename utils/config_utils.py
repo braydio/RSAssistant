@@ -15,7 +15,8 @@ def load_config(config_path=CONFIG_PATH):
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found at {config_path}")
 
-    with open(config_path, 'r') as config_file:
+    # Open the config file with UTF-8 encoding
+    with open(config_path, 'r', encoding='utf-8') as config_file:
         config = yaml.safe_load(config_file)
 
     # Load environment variables if needed

@@ -9,8 +9,6 @@ from discord import embeds
 from utils.config_utils import (account_mapping, get_account_nickname, load_account_mappings,
                                 load_config, get_last_stock_price)
 from utils.csv_utils import (save_holdings_to_csv, save_order_to_csv)
-from utils.watch_utils import update_watchlist
-from utils.utility_utils import deprecated
 
 # Load configuration
 config = load_config()
@@ -35,7 +33,9 @@ order_patterns = {
         'WELLSFARGO': r'(WELLSFARGO)\s(\d+)\s\*\*\*(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
         'Fidelity': r'(Fidelity)\s(\d+)\saccount\s(?:xxxxx)?(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)',
         'Webull': r'(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sxxxx(\w+):\s(Success|Failed)',
-        'DSPAC': r'(DSPAC)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)'
+        'DSPAC': r'(DSPAC)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)',
+        'Plynk': r'(Plynk)\s(\d+)\sAccount\s(?P<account_number>\d{4}) (?P<action>buy|sell) (?P<stock>\w+)'
+
     },
     'incomplete': {
         'Schwab': r'(Schwab)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)',
