@@ -17,7 +17,7 @@ config = load_config()
 EXCEL_FILE_DIRECTORY = config['paths']['excel_directory']
 EXCEL_FILE_NAME = config['paths']['excel_file_name']
 BASE_EXCEL_FILE = config['paths']['base_excel_file']
-ORDERS_LOG_CSV = config['paths']['orders_log']
+ACCOUNT_MAPPING = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ACCOUNT_MAPPING = config['paths']['account_mapping']
 ERROR_LOG_FILE = config['paths']['error_log']
@@ -320,13 +320,13 @@ async def add_stock_to_excel_log(ctx, ticker, split_date):
         # Find the next available columns for the ticker and split ratio
         ticker_col = last_filled_column + 1
         split_ratio_col = ticker_col + 1
-        spacer_col = split_ratio_col +1
+        spacer_col = split_ratio_col + 1
         print(f"Next columns: ticker_col={ticker_col}, split_ratio_col={split_ratio_col}")
 
         # Copy the previous columns to maintain formatting
-        copy_column(ws, last_filled_column, ticker_col)
-        copy_column(ws, last_filled_column + 1, split_ratio_col)
-        copy_column(ws, last_filled_column + 1, spacer_col)
+        copy_column(ws, ticker_col, spacer_col)
+        copy_column(ws, ticker_col, split_ratio_col)
+        copy_column(ws, ticker_col, spacer_col)
 
         # Set the stock ticker and split ratio placeholder in the new columns
         ws.cell(row=stock_row, column=ticker_col).value = ticker
@@ -410,7 +410,7 @@ def update_excel_log(order_data, order_type=None, filename=excel_log_file, confi
             try:
                 # Extract details and get the account nickname
                 broker_name = order['Broker Name']
-                broker_number = order['Broker Number']
+                broker_number = int(order['Broker Number'])
                 account_number = order['Account Number']
                 order_type = order_type or order['Order Type']
                 stock = order['Stock']
