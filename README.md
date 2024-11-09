@@ -9,22 +9,22 @@ RSAssistant is a tracking system designed to run in a discord channel alongside 
 
 ## Setup
 
-1. Rename files with the 'example-' prefix by removing the prefix (e.g., example-settings.yaml to settings.yaml).
+1. Remove the 'eample-' prefix from config files and excel log (config/account_mapping.json & config/settings.yaml & excel/ReverseSplitLog.xlsx).
 2. Follow [the instructions per this guide to set up a discord bot](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) where it can see the output from the auto-rsa script.
-3. Create a copy of [example-settings.yaml](https://github.com/braydio/RSAssistant/blob/master/config/example-settings.yaml) and remove the prefix 'example-'
-4. Save your discord channel ID, auto-rsa bot ID, and your discord ID per per below along with the token of your new RSAssistant bot
+3. Save your discord channel ID, auto-rsa bot ID, and your discord ID per per below along with the token of your new RSAssistant bot
 ```
 # Discord ID's
 discord_ids:
-  channel_id: ID_OF_YOUR_DISCORD_CHANNEL
-  target_bot: ID_OF_AUTO-RSA_BOT
-  my_id: YOUR_DISCORD_ID
+  channel_id: "ID_OF_YOUR_DISCORD_CHANNEL"
+  target_bot: "ID_OF_AUTO-RSA_BOT"
+  my_id: "YOUR_DISCORD_ID"
 
 # Discord bot settings
 discord:
-  token: NEW_ASSISTER_BOT_TOKEN
+  token: "NEW_ASSISTER_BOT_TOKEN"
 ```
-Once the settings are set, initialize the bot with the following commands: 
+4. Save your accounts information to Account Details sheet in excel/RevereseSplitLog.xlsx
+5. Once the settings are set, initialize the bot with the following commands: 
 ```   
 python -m venv venv
 venv/Scripts/activate
