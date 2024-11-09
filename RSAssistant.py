@@ -30,7 +30,14 @@ MANUAL_ORDER_ENTRY_TXT = config['paths']['manual_orders']
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 FILE_VERSION = config['general_settings']['file_version']
 FILE_NAME = config['general_settings']['app_name']
+
+# Extract shortcuts and prefix
+shortcuts = config.get('shortcuts', {})
+prefix = config['discord']['prefix']
 task = None
+
+# Ensure that shortcuts use the correct prefix dynamically (optional step)
+shortcuts = {f"{prefix}{key[len(prefix):]}": value for key, value in shortcuts.items()}
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -47,6 +54,8 @@ PERSONAL_USER_ID = config['discord_ids']['my_id']
 TARGET_BOT_ID = config['discord_ids']['target_bot']  
 LOGS_FOLDER = 'logs'
 os.makedirs(LOGS_FOLDER, exist_ok=True)
+
+
 
 # Load the watchlist when bot starts
 load_watch_list()
@@ -94,49 +103,28 @@ async def restart(ctx):
         await ctx.send("An error occurred while attempting to restart the bot.")
 
 
-@bot.command(name='loadmap', help='Maps accounts from Account Details excel sheet')
-async def load_account_mappings_command(ctx):
-    """Maps account details from the Excel sheet to JSON."""
-    try:
-        await ctx.send("Mapping account details...")
-        await index_account_details(ctx)
-        await ctx.send("Mapping complete.\n Run `..loadlog` to save mapped accounts to the excel logger.")
-    except Exception as e:
-        await ctx.send(f"An error occurred during update: {str(e)}")
-
-
-@bot.command(name='loadlog', help='Updates excel log with mapped accounts')
-async def update_log_with_mappings(ctx):
-    """Updates the Excel log with mapped accounts."""
-    try:
-        await ctx.send("Updating log with mapped accounts...")
-        await map_accounts_in_excel_log(ctx)
-        await ctx.send("Complete.")
-    except Exception as e:
-        await ctx.send(f"An error occurred during update: {str(e)}")
-
-
-@bot.command(name='clearmap', help='Clears all account mappings from the account_mapping.json file')
-async def clear_mapping_command(ctx):
-    """Clears all account mappings from the JSON file."""
-    try:
-        await ctx.send("Clearing account mappings...")
-        await clear_account_mappings(ctx)
-        await ctx.send("Account mappings have been cleared.")
-    except Exception as e:
-        await ctx.send(f"An error occurred during the clearing process: {str(e)}")
-
-
 @bot.event
 async def on_message(message):
     """Triggered when a message is received in the target channel."""
+    if message.author == bot.user:
+        return  # Prevents the bot from responding to itself
+
+    # Check if the message was sent in the target channel
     if message.channel.id == TARGET_CHANNEL_ID:
+        # Check if the message content matches any shortcut
+        if message.content in shortcuts:
+            # Replace the shortcut with its mapped full command
+            message.content = shortcuts[message.content]
+
+        # Continue with existing specific checks
         if message.content.lower().startswith("manual"):
             parse_manual_order_message(message.content)
         elif message.embeds:
             parse_embed_message(message.embeds[0])
         else:
             parse_order_message(message.content)
+
+    # Pass the message to the command processing so bot commands work
     await bot.process_commands(message)
 
 
@@ -144,13 +132,6 @@ async def on_message(message):
 async def show_reminder(ctx):
     """Shows a daily reminder message."""
     await send_reminder_message_embed(ctx)
-
-
-@bot.command(name='clearholdings', help='Clears entries in holdings_log.csv')
-async def clear_holdings(ctx):
-    """Clears all holdings from the CSV file."""
-    success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
-    await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
 
 @bot.command(name='brokerlist', help='List all active brokers. Optional arg: Broker')
@@ -206,6 +187,46 @@ async def watched_ticker(ctx, ticker: str):
 async def print_by_line(ctx):
     """Prints contents of a file to Discord, one line at a time."""
     await print_to_discord(ctx)
+
+
+@bot.command(name='loadmap', help='Maps accounts from Account Details excel sheet')
+async def load_account_mappings_command(ctx):
+    """Maps account details from the Excel sheet to JSON."""
+    try:
+        await ctx.send("Mapping account details...")
+        await index_account_details(ctx)
+        await ctx.send("Mapping complete.\n Run `..loadlog` to save mapped accounts to the excel logger.")
+    except Exception as e:
+        await ctx.send(f"An error occurred during update: {str(e)}")
+
+
+@bot.command(name='loadlog', help='Updates excel log with mapped accounts')
+async def update_log_with_mappings(ctx):
+    """Updates the Excel log with mapped accounts."""
+    try:
+        await ctx.send("Updating log with mapped accounts...")
+        await map_accounts_in_excel_log(ctx)
+        await ctx.send("Complete.")
+    except Exception as e:
+        await ctx.send(f"An error occurred during update: {str(e)}")
+
+
+@bot.command(name='clearmap', help='Clears all account mappings from the account_mapping.json file')
+async def clear_mapping_command(ctx):
+    """Clears all account mappings from the JSON file."""
+    try:
+        await ctx.send("Clearing account mappings...")
+        await clear_account_mappings(ctx)
+        await ctx.send("Account mappings have been cleared.")
+    except Exception as e:
+        await ctx.send(f"An error occurred during the clearing process: {str(e)}")
+
+
+@bot.command(name='clearholdings', help='Clears entries in holdings_log.csv')
+async def clear_holdings(ctx):
+    """Clears all holdings from the CSV file."""
+    success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
+    await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
 
 # Start the bot with the token from the config
