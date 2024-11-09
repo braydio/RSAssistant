@@ -14,6 +14,13 @@ general_settings:
   app_name:  '(⌐■_■)   (ಥ﹏ಥ)'
   file_version: '1.0'
 
+# Mapping of shortcuts to full command names
+shortcuts:
+  '..bb': '..brokerlist'
+  '..bw': '..brokerwith'
+  '..bg': '..grouplist'
+  '..rr': '..reminder'
+  '..ww': '..watchlist'
 
 # Settings for excel logging index values - These values define how log information is recorded within the 'Reverse Split Log' sheet in the Excel file.
 excel_log_settings:
