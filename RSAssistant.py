@@ -2,6 +2,7 @@ import asyncio
 import os
 import json
 import sys
+from dotenv import load_dotenv
 from datetime import datetime
 
 # Third-party imports
@@ -11,19 +12,18 @@ from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
 
-# Local utility imports
-from utils.config_utils import (
-    all_account_nicknames,
-    generate_broker_summary_embed,
-    all_brokers_summary_by_owner,
-    all_brokers,
+from utils.init import (
     load_config,
-    account_mapping,
+    load_account_mappings,
+    EXCEL_FILE_MAIN_PATH,
+    
 )
+
+# Local utility imports
+
 from utils.csv_utils import clear_holdings_log
 from utils.excel_utils import (
     index_account_details,
-    get_excel_file_path,
     map_accounts_in_excel_log,
     clear_account_mappings,
 )
@@ -32,33 +32,37 @@ from utils.parsing_utils import (
     parse_manual_order_message,
     parse_order_message,
 )
-from utils.utility_utils import print_to_discord, track_ticker_summary
+from utils.utility_utils import (
+    print_to_discord,
+    track_ticker_summary,
+    all_account_nicknames,
+    generate_broker_summary_embed,
+    all_brokers
+)
 from utils.watch_utils import (
     list_watched_tickers,
     load_watch_list,
     periodic_check,
-    send_reminder_message,
     send_reminder_message_embed,
     stop_watching,
     watch_ticker,
+    watch_ratio
 )
 
-# Load configuration and initialize paths
+load_dotenv()
 config = load_config()
-excel_log_file = get_excel_file_path()
+
+# Load configuration and initialize paths
 HOLDINGS_LOG_CSV = config["paths"]["holdings_log"]
 MANUAL_ORDER_ENTRY_TXT = config["paths"]["manual_orders"]
 ACCOUNT_MAPPING_FILE = config["paths"]["account_mapping"]
 FILE_VERSION = config["general_settings"]["file_version"]
-FILE_NAME = config["general_settings"]["app_name"]
+APP_NAME = config["general_settings"]["app_name"]
 
 # Extract shortcuts and prefix
 shortcuts = config.get("shortcuts", {})
 prefix = config["discord"]["prefix"]
 task = None
-
-# Ensure that shortcuts use the correct prefix dynamically (optional step)
-shortcuts = {f"{prefix}{key[len(prefix):]}": value for key, value in shortcuts.items()}
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -71,23 +75,25 @@ bot = commands.Bot(
     command_prefix=config["discord"]["prefix"], case_insensitive=True, intents=intents
 )
 
-# Discord IDs and paths
-TARGET_CHANNEL_ID = config["discord_ids"]["channel_id"]
+# Discord variables from .env
+MY_ID = os.getenv("MY_ID")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+TARGET_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 PERSONAL_USER_ID = config["discord_ids"]["my_id"]
 TARGET_BOT_ID = config["discord_ids"]["target_bot"]
 LOGS_FOLDER = "logs"
 os.makedirs(LOGS_FOLDER, exist_ok=True)
 
+account_mapping = load_account_mappings()
 
 # Load the watchlist when bot starts
 load_watch_list()
-
 
 @bot.event
 async def on_ready():
     """Triggered when the bot is ready."""
     channel = bot.get_channel(TARGET_CHANNEL_ID)
-    account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{excel_log_file}`\n\nThen run: `..loadmap` and `..loadlog`."
+    account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_MAIN_PATH}`\n\nThen run: `..loadmap` and `..loadlog`."
 
     try:
         with open(ACCOUNT_MAPPING_FILE, "r") as file:
@@ -106,7 +112,7 @@ async def on_ready():
         print(f"Could not find channel with ID: {TARGET_CHANNEL_ID}")
 
     global task
-    print(f"Initializing from {FILE_NAME} - version {FILE_VERSION}.")
+    print(f"Initializing from {APP_NAME} - version {FILE_VERSION}.")
     print(f"{bot.user} has connected to Discord!")
 
     if task is None:
@@ -188,7 +194,7 @@ async def brokers_groups(ctx, broker: str = None):
     )
 
 
-@bot.command(name="brokerwith", help=" > brokerwith <ticker> (details)")
+@bot.command(name="brokerwith", help="All brokers with specified tickers > brokerwith <ticker> (details)")
 async def broker_has(ctx, ticker: str, *args):
     """Shows broker-level summary for a specific ticker."""
     specific_broker = args[0] if args else None
@@ -197,13 +203,36 @@ async def broker_has(ctx, ticker: str, *args):
     )
 
 
-@bot.command(name="watch", help="Adds a ticker to the watchlist for tracking.")
-async def watch(ctx, ticker: str, split_date: str = None):
-    """Adds a ticker to the watchlist with an optional split date."""
+@bot.command(name="watch", help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'")
+async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
+    """Adds a ticker to the watchlist with an optional split date and split ratio."""
+    try:
+        if split_date:
+            datetime.strptime(split_date, '%m/%d')  # Validates the format as mm/dd
+    except ValueError:
+        await ctx.send("Invalid date format. Please use * mm/dd * e.g., 11/4.")
+        return
+    
     if not split_date:
         await ctx.send("Please include split date: * mm/dd *")
         return
-    await watch_ticker(ctx, ticker, split_date)
+    
+    if split_ratio and not split_ratio.count('-') == 1:
+        await ctx.send("Invalid split ratio format. Use 'X-Y' format (e.g., 1-10).")
+        return
+    
+    await watch_ticker(ctx, ticker, split_date, split_ratio)
+
+
+@bot.command(name="addratio", help="Adds or updates the split ratio for an existing ticker in the watchlist.")
+async def add_ratio(ctx, ticker: str, split_ratio: str):
+
+    if not split_ratio:
+        await ctx.send("Please include split ratio: * X-Y *")
+        return
+
+    await watch_ratio(ctx, ticker, split_ratio)
+
 
 
 @bot.command(name="watchlist", help="Lists all tickers currently being watched.")
@@ -269,6 +298,6 @@ async def clear_holdings(ctx):
     await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
 
-# Start the bot with the token from the config
+# Start the bot with the token from the .env
 if __name__ == "__main__":
-    bot.run(config["discord"]["token"])
+    bot.run(BOT_TOKEN)

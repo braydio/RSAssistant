@@ -1,30 +1,97 @@
 import csv
 import json
-import logging
 import os
 import asyncio
 import discord
 import yaml
 import yfinance as yf
-from datetime import datetime
+import shutil
+from datetime import datetime, timedelta
+import logging
+from logging.handlers import RotatingFileHandler
 
+import os
+import shutil
+import yaml
+
+# Define default paths for configuration and example files
+CONFIG_INIT = "RSAssistant/config/example-settings.yaml"
 CONFIG_PATH = "config/settings.yaml"
 
+def parse_size(size_str):
+    """Parse a human-readable size string (e.g., '10MB') and return its size in bytes."""
+    size_str = str(size_str).strip().upper()
+    if size_str.endswith("KB"):
+        return int(size_str[:-2]) * 1024
+    elif size_str.endswith("MB"):
+        return int(size_str[:-2]) * 1024 * 1024
+    elif size_str.endswith("GB"):
+        return int(size_str[:-2]) * 1024 * 1024 * 1024
+    else:
+        return int(size_str)  # Assume it's already in bytes if no suffix
+
+# Define the setup_logging function to initialize logging at the beginning
+def setup_logging(config=None):
+    """Set up logging based on the given configuration."""
+    # Use default logging values if config is not yet loaded
+    log_level = config.get('logging', {}).get('level', 'INFO').upper() if config else 'INFO'
+    log_file = config.get('logging', {}).get('file', 'logs/app.log') if config else 'logs/app.log'
+    max_size = parse_size(config.get('logging', {}).get('max_size', '10MB')) if config else 10485760
+    backup_count = config.get('logging', {}).get('backup_count', 2) if config else 2
+
+    # Ensure the logs directory exists
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+    # Clear existing handlers to avoid duplicate logs
+    logging.getLogger().handlers.clear()
+
+    # Set up file handler
+    handler = RotatingFileHandler(log_file, maxBytes=max_size, backupCount=backup_count)
+    handler.setLevel(getattr(logging, log_level, logging.INFO))
+
+    # Set up console handler with UTF-8 encoding
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(getattr(logging, log_level, logging.INFO))
+    console_handler.stream = open(1, 'w', encoding='utf-8', closefd=False)
+
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[handler, console_handler]
+    )
+
+# Initialize logging before any other operations
+setup_logging()
+def initialize_file_if_missing(log_path_example, log_path_working, filename):
+    """Copy src to dest if dest does not exist, and notify if it already exists."""
+    if not os.path.exists(log_path_working):
+        shutil.copyfile(log_path_example, log_path_working)
+        logging.info(f'Initialized new local {filename} from "{log_path_example}"')
+    else:
+        logging.info(f"{filename} already exists at {log_path_working}.")
+    return log_path_working
+
+# Initialize if the config path doesn't exist
+if not os.path.exists(CONFIG_PATH):
+    initialize_file_if_missing(CONFIG_INIT, CONFIG_PATH, 'settings.yaml')
 
 # Load and validate configuration
 def load_config(config_path=CONFIG_PATH):
     """Loads the YAML config file and returns it as a dictionary."""
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Config file not found at {config_path}")
+        initialize_file_if_missing(CONFIG_INIT, CONFIG_PATH, 'settings.yaml')
+    else:
+        logging.info(f"Loading config from {config_path}.")
+        # Uncomment if you want an error if the file can't be found or created
+        # raise FileNotFoundError(f"Config file not found at {config_path}")
 
     with open(config_path, "r", encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
 
-    config["discord"]["token"] = os.getenv(
-        "DISCORD_TOKEN", config["discord"].get("token")
-    )
+    # Load Discord token from environment if available
+    config["discord"]["token"] = os.getenv("DISCORD_TOKEN", config["discord"].get("token"))
     return config
-
 
 # Load the configuration (make sure the config is loaded before accessing its keys)
 config = load_config()
@@ -37,19 +104,25 @@ ACCOUNT_OWNERS = config.get("account_owners", {})
 
 # Account Mapping / Nicknames
 
+def save_config(config, config_file="config/settings.yaml"):
+    """Save the configuration to the specified YAML file."""
+    # Ensure the config directory exists
+    os.makedirs(os.path.dirname(config_file), exist_ok=True)
+    with open(config_file, 'w') as f:
+        yaml.dump(config, f)
 
-def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
+def load_account_mappings():
     """Loads account mappings from the JSON file and ensures the data structure is valid."""
-    if not os.path.exists(filename):
-        logging.error(f"Account mapping file {filename} not found.")
+    if not os.path.exists(ACCOUNT_MAPPING_FILE):
+        logging.error(f"Account mapping file {ACCOUNT_MAPPING_FILE} not found.")
         return {}
 
     try:
-        with open(filename, "r", encoding="utf-8") as file:
+        with open(ACCOUNT_MAPPING_FILE, "r", encoding="utf-8") as file:
             data = json.load(file)
 
             if not isinstance(data, dict):
-                logging.error(f"Invalid account mapping structure in {filename}.")
+                logging.error(f"Invalid account mapping structure in {ACCOUNT_MAPPING_FILE}.")
                 return {}
 
             for broker, broker_data in data.items():
@@ -67,18 +140,13 @@ def load_account_mappings(filename=ACCOUNT_MAPPING_FILE):
             return data
 
     except json.JSONDecodeError as e:
-        logging.error(f"Error decoding JSON from {filename}: {e}")
+        logging.error(f"Error decoding JSON from {ACCOUNT_MAPPING_FILE}: {e}")
         return {}
-
 
 def save_account_mappings(mappings):
     """Save the account mappings to the JSON file."""
     with open(ACCOUNT_MAPPING_FILE, "w", encoding="utf-8") as f:
         json.dump(mappings, f, indent=4)
-
-
-account_mapping = load_account_mappings()
-
 
 def get_account_nickname(broker, group_number, account_number):
     """
@@ -98,12 +166,22 @@ def get_account_nickname(broker, group_number, account_number):
     group_accounts = broker_accounts.get(group_number_str, {})
     return group_accounts.get(account_number_str, account_number_str)
 
+# -- Misc utility functions
+
+def get_today():
+    """Return today's date in MM-DD format."""
+    return datetime.now().strftime("%m-%d")
+
+def get_tomorrow():
+    """Return tomorrow's date in MM-DD format."""
+    return (datetime.now() + timedelta(days=1)).strftime("%m-%d")
 
 # -- Account Indexing and Commands
 
-
+#Copied in from config
 # Discord Command: Display Active Brokers
 async def all_brokers(ctx):
+    account_mapping = load_account_mappings()
     try:
         active_brokers = list(account_mapping.keys())
         chunk_size = 9
