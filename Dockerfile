@@ -1,17 +1,15 @@
-# Use a lightweight Python image
-FROM python:3.9-slim
+# Build from python slim image
+FROM python:3.12-slim
 
-# Set the working directory in the container
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements file into the container
-COPY requirements.txt /app/requirements.txt
+# Copy only necessary files to the container (excluding /logs)
+COPY . /app
+RUN mkdir -p /app/logs
 
-# Install the Python dependencies
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Install any required Python packages
+RUN pip install -r requirements.txt
 
-# Copy the source code directory and the config file into the container
-COPY src/ /app/src/
-
-# Set the command to run your Discord bot script
-CMD ["python", "/app/src/RSAssistant.py"]
+# Run your main script
+CMD ["python", "RSAssistant.py"]
