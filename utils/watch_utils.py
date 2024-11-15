@@ -9,10 +9,8 @@ from datetime import datetime, timedelta
 import discord
 import pandas as pd
 
-from utils.config_utils import (get_account_nickname, load_account_mappings,
-                                load_config, send_large_message_chunks,
-                                get_last_stock_price)
-from utils.excel_utils import add_stock_to_excel_log, get_excel_file_path
+from utils.excel_utils import add_stock_to_excel_log
+from utils.init import *
 
 # Load configuration and paths from settings
 config = load_config()
@@ -21,8 +19,6 @@ ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 TARGET_CHANNEL_ID = config['discord_ids']['channel_id']  # change to ['discord_ids']['reminder_channel_id']
 excluded_brokers = config.get('excluded_brokers', {})
-
-excel_log_file = get_excel_file_path()
 
 # Dictionary to track the watch list for specific tickers across accounts
 watch_list = defaultdict(lambda: defaultdict(dict))
@@ -40,7 +36,7 @@ def load_watch_list():
     if os.path.exists(WATCH_FILE):
         with open(WATCH_FILE, 'r') as file:
             watch_list.update(json.load(file))
-        logging.info("Watch list loaded.\n ( •́ _ •̀ )")
+        logging.info("Watch list loaded.")
     else:
         logging.info("No watch list file found, starting fresh.")
 
@@ -56,29 +52,57 @@ def update_watchlist_with_stock(ticker):
 
 # -- Main functions
 
-async def watch_ticker(ctx, ticker: str, split_date: str):
-    """Add a stock ticker with a split date to the watch list."""
+async def watch_ticker(ctx, ticker: str, split_date: str, split_ratio: str = None):
+    """Add a stock ticker with a split date and optional split ratio to the watch list."""
     ticker = ticker.upper()
     
-    # Only add the ticker if it's not already in the watch list
+    # Check if the ticker is already in the watch list
     if ticker not in watch_list:
-        # Add ticker with only split_date
+        # Add ticker with split_date and optional split_ratio
         watch_list[ticker] = {
-            'split_date': split_date
+            'split_date': split_date,
+            'split_ratio': split_ratio if split_ratio else 'N/A'  # Default if not provided
         }
         
         try:
-            # Pass the ticker and split_date to an external log, such as an Excel file
-            await add_stock_to_excel_log(ctx, ticker, split_date)
-            logging.info(f"Added {ticker} to watchlist and passed to Excel utils.")
+            # Update Excel log for the new ticker
+            if split_ratio: 
+                await add_stock_to_excel_log(ctx, ticker, split_date, split_ratio="N/A")
+                logging.info(f"Added {ticker} with split ratio to watchlist and passed to Excel utils.")
+            else:
+                await add_stock_to_excel_log(ctx, ticker, split_date, split_ratio)
         except Exception as e:
             await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")
             logging.error(f"Error adding stock {ticker} to Excel: {str(e)}")
             return
     
-    await ctx.send(f"Watching {ticker} with a reverse split date on {split_date}.")
+    # Confirm message based on the presence of split_ratio
+    watch_confirmation = f"Watching {ticker} with a reverse split date on {split_date} and split ratio {split_ratio}."
+    no_ratio_confirmation = f"Watching {ticker} with a reverse split date on {split_date}. To add split ratio, use '..addratio {ticker} ratio'."
+    
+    if split_ratio:
+        await ctx.send(watch_confirmation)
+    else:
+        await ctx.send(no_ratio_confirmation)
+        
     save_watch_list()
 
+async def watch_ratio(ctx, ticker: str, split_ratio: str = None):
+    ticker = ticker.upper()
+    
+    if ticker not in watch_list:
+        await ctx.send(f"{ticker} is not currently in the watchlist. Use '..watch TICKER mm/dd [optional ratio]' to add it first.")
+        return
+    
+    if not split_ratio.count('-') == 1:
+        await ctx.send("Invalid split ratio format. Use 'X-Y' format (e.g., 1-10).")
+        return
+    
+    watch_list[ticker]['split_ratio'] = split_ratio
+    save_watch_list()
+    
+    await ctx.send(f"Updated the split ratio for {ticker} to {split_ratio}.")
+    logging.info(f"Updated split ratio for {ticker} in watchlist to {split_ratio}.")
 
 def update_watchlist(broker_name, account_nickname, stock, quantity, order_type=None):
     """This function has been deprecated and no longer updates the watchlist."""
@@ -170,19 +194,7 @@ async def send_reminder_message_embed(ctx):
     await ctx.send(embed=embed)
 
 async def send_reminder_message(bot):
-    # reminders = []
 
-    # reminders.append(f"**Upcoming split dates from watchlist: **\n")
-    
-    # for ticker, data in watch_list.items():
-    #     split_date_str = data['split_date']
-    #     days_left = calculate_days_left(split_date_str)  # No need to await
-
-    #     if days_left <= 21:
-    #         reminders.append(f"** | {ticker}** - Effective on {split_date_str}\n *|>* Purchase within {days_left} day(s).")
-    
-    # reminder_message = "\n".join(reminders)
-    # --
     embed = discord.Embed(
     title="**Watchlist - Upcoming Split Dates: **",
     description=" ",
