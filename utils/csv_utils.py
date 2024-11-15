@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 import yfinance as yf
 from discord import Embed
 
-from utils.config_utils import load_config
-from utils.excel_utils import update_excel_log, get_excel_file_path
+from utils.init import *
+from utils.excel_utils import update_excel_log
 
 # Load configuration and mappings
 config = load_config()
@@ -21,15 +21,12 @@ ORDERS_HEADERS = config['header_settings']['orders_headers']
 HOLDINGS_HEADERS = config['header_settings']['holdings_headers']
 EXCLUDED_BROKERS = config.get('excluded_brokers', {})
 
-excel_log_file = get_excel_file_path()
-
 def ensure_csv_file_exists(file_path, headers):
     if not os.path.exists(file_path):
         with open(file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(headers)
 
-# -- Order Management
 def load_existing_orders(file_path):
     """Loads existing orders from CSV."""
     if os.path.exists(file_path):
@@ -69,7 +66,7 @@ def identify_latest_orders(orders, new_order):
     # Add or replace with the new order if it's the latest
     if new_order_key in latest_orders:
         if new_order['Timestamp'] > latest_orders[new_order_key]['Timestamp']:
-            print(f"Replacing older duplicate with new order: {new_order}")
+            logging.info(f"Replacing older duplicate with new order: {new_order}")
             latest_orders[new_order_key] = new_order
     else:
         latest_orders[new_order_key] = new_order
@@ -84,17 +81,13 @@ def write_orders_to_csv(orders, file_path):
         writer.writerows(orders)
 
 def save_order_to_csv(order_data):
-    """
-    Saves order information to the orders CSV, removes duplicates, and archives stale orders.
-    Newer orders with the same key fields replace older ones based on Timestamp.
-    """
-    print("Processing new order, checking for duplicates and stale entries.")
-    ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
-
-    # Add a current timestamp to the order data
-    order_data['Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+    # Saves order, deletes duplicates and stale entries
     try:
+        ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
+        logging.info("Processing new order, checking for duplicates and stale entries.")
+
+        # Add a current timestamp to the order data
+        order_data['Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # Load existing orders
         existing_orders = load_existing_orders(ORDERS_LOG_CSV)
 
@@ -107,11 +100,9 @@ def save_order_to_csv(order_data):
 
         # Write updated orders back to the CSV
         write_orders_to_csv(updated_orders, ORDERS_LOG_CSV)
-
-        print(f"Order saved: {order_data}")
+        logging.info(f"Order saved to csv: {order_data} updating excel log.")
 
         update_excel_log(order_data)
-
 
     except Exception as e:
         logging.error(f"Unexpected error when saving order: {e}")
@@ -171,9 +162,9 @@ def save_holdings_to_csv(parsed_holdings):
                 writer.writeheader()  # Ensure headers are written
                 writer.writerows(existing_holdings + new_holdings)  # Write the combined list
 
-            print(f"Holdings saved, with {len(new_holdings)} new entries added.")
+            logging.info(f"Holdings saved, with {len(new_holdings)} new entries added.")
         else:
-            print("No new holdings to add.")
+            logging.info("No new holdings to add.")
 
     except Exception as e:
         logging.error(f"Error saving holdings: {e}")

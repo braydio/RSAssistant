@@ -1,17 +1,15 @@
 import csv
 import json
-import logging
 import re
+import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
-
 from discord import embeds
 
-from utils.config_utils import (account_mapping, get_account_nickname, load_account_mappings,
-                                load_config, get_last_stock_price)
+from utils.init import *
 from utils.csv_utils import (save_holdings_to_csv, save_order_to_csv)
 
-# Load configuration
-config = load_config()
+# Files locations from
 ACCOUNT_MAPPING_FILE = config['paths']['account_mapping']
 HOLDINGS_LOG_CSV = config['paths']['holdings_log']
 ORDERS_CSV_FILE = config['paths']['orders_log']
@@ -73,7 +71,7 @@ def normalize_order_data(broker_name, broker_number, action, quantity, stock, ac
     if broker_name.lower() == 'webull' and action == 'sell' and quantity in {99.0, 999.0}:
         action = 'buy'
         quantity = 1.0
-        print("Webull 100/0 Lot Order: Action changed to 'buy' and quantity changed to 1.0")
+        logging.info("Webull 100/0 Lot Order: Action changed to 'buy' and quantity changed to 1.0")
 
     # Convert broker number and account number to strings for consistency
     broker_number = str(broker_number)
@@ -122,17 +120,17 @@ def handle_complete_order(match, broker_name, broker_number):
             if action.lower() == 'sell' and quantity in {99.0, 999.0}:
                 action = 'buy'
                 quantity = 1.0
-                print("Special case for Webull: Changed action to 'buy' and quantity to 1.0")
+                logging.info("Special case for Webull: Changed action to 'buy' and quantity to 1.0")
 
         else:
-            print(f"Unknown broker format for: {broker_name}")
+            logging.error(f"Unknown broker format for: {broker_name}")
             return
 
         # Normalize data
         broker_name, broker_number, action, quantity, stock, account_number = normalize_order_data(
             broker_name, broker_number, action, quantity, stock, account_number
         )
-
+        logging.info(f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}")
         # Get price and current date
         price = get_last_stock_price(stock)
         date = datetime.now().strftime('%Y-%m-%d')  # Use date only, no time
@@ -151,10 +149,11 @@ def handle_complete_order(match, broker_name, broker_number):
 
         # Save the order data to CSV
         save_order_to_csv(order_data)
-        print(f"Saved complete order for {broker_name} {broker_number} to CSV")
+
+        logging.info(f"Saved complete order for {broker_name} {broker_number} to CSV")
 
     except Exception as e:
-        print(f"Error handling complete order: {e}")
+        logging.error(f"Error handling complete order: {e}")
 
 def handle_incomplete_order(match, broker_name, broker_number):
     """Sets up temporary entries for verification of incomplete orders."""
@@ -168,7 +167,7 @@ def handle_incomplete_order(match, broker_name, broker_number):
             broker_name, broker_number, action, quantity, stock, None
         )
 
-        print(f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {stock}")
+        logging.info(f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {stock}")
         # account_mapping = load_account_mappings(ACCOUNT_MAPPING)
         broker_accounts = account_mapping.get(broker_name, {}).get(str(broker_number))
         if broker_accounts:
@@ -182,12 +181,12 @@ def handle_incomplete_order(match, broker_name, broker_number):
                     'quantity': quantity,
                     'stock': stock
                 }
-                print(f"Temporary order created for {nickname} - Account ending {account}")
+                logging.info(f"Temporary order created for {nickname} - Account ending {account}")
         else:
-            print(f"No accounts found for broker {broker_name} number {broker_number}")
+            logging.error(f"No accounts found for broker {broker_name} number {broker_number}")
 
     except Exception as e:
-        print(f"Error in handle_incomplete_order: {e}")
+        logging.error(f"Error in handle_incomplete_order: {e}")
 
 def handle_verification(match, broker_name, broker_number):
     """Processes order verification and finalizes incomplete orders."""
@@ -218,7 +217,7 @@ def handle_verification(match, broker_name, broker_number):
             action = match.group(4).lower()  # Action (buy/sell) is specified in Webull messages
 
         else:
-            print(f"Unknown broker format for verification: {broker_name}")
+            logging.error(f"Unknown broker format for verification: {broker_name}")
             return
 
         # Normalize data
@@ -226,7 +225,7 @@ def handle_verification(match, broker_name, broker_number):
             broker_name, broker_number, action, 1, '', account_number
         )
 
-        print(f"Verification received for {broker_name} {broker_number}, Account {account_number}")
+        logging.info(f"Verification received for {broker_name} {broker_number}, Account {account_number}")
 
         # Check for matching incomplete orders and finalize them upon verification
         for key, order in list(incomplete_orders.items()):
@@ -238,17 +237,17 @@ def handle_verification(match, broker_name, broker_number):
                 # Process and remove the verified order
                 process_verified_orders(broker_name, account_number, order)
                 del incomplete_orders[key]
-                print(f"Verified and removed temporary order for Account {account_number}")
+                logging.info(f"Verified and removed temporary order for Account {account_number}")
                 break
         else:
-            print(f"No matching temporary order found for {broker_name} {broker_number}, Account {account_number}")
+            logging.error(f"No matching temporary order found for {broker_name} {broker_number}, Account {account_number}")
 
     except Exception as e:
-        print(f"Error in handle_verification: {e}")
+        logging.error(f"Error in handle_verification: {e}")
 
 def process_verified_orders(broker_name, account_number, order):
     """Processes and finalizes a verified order by passing it to handle_complete_order."""
-    print(f"Verified order processed for {broker_name}, Account {account_number}:")
+    logging.info(f"Verified order processed for {broker_name}, Account {account_number}:")
 
     # Call handle_complete_order to complete and save the order to CSV
     handle_complete_order(
@@ -259,7 +258,7 @@ def process_verified_orders(broker_name, account_number, order):
         order['quantity'],
         order['stock']
     )
-    print("Order has been finalized and saved to CSV.")
+    logging.info("Order has been finalized and saved to CSV.")
 
 def parse_order_message(content):
     """Parses incoming messages and routes them to the correct handler based on type."""
@@ -279,8 +278,7 @@ def parse_order_message(content):
                     handle_verification(match, broker_name, broker_number)
                 return  # Exit once a match is found
     
-    print(f"No match found for message: {content}")
-
+    logging.error(f"No match found for message: {content}")
 
 def handle_failed_order(match, broker_name, broker_number):
     """Handles failed orders by removing incomplete entries."""
@@ -291,12 +289,10 @@ def handle_failed_order(match, broker_name, broker_number):
         
         for item in to_remove:
             del incomplete_orders[item]
-            print(f"Removed failed order for {broker_name} {account_number}")
+            logging.info(f"Removed failed order for {broker_name} {account_number}")
 
     except Exception as e:
-        print(f"Error handling failed order: {e}")
-
-from datetime import datetime
+        logging.error(f"Error handling failed order: {e}")
 
 def parse_manual_order_message(content):
     """Parses a manual order message and formats it for order processing.
@@ -339,7 +335,7 @@ def parse_manual_order_message(content):
         save_order_to_csv(order_data)
     
     except Exception as e:
-        print(f"Error parsing manual order: {e}")
+        logging.error(f"Error parsing manual order: {e}")
         return None
 
 
@@ -354,14 +350,14 @@ def handle_failed_order(match, broker):
         for (stock, account), order in incomplete_orders.items():
             if order['broker'] == 'Firstrade' and account == account_number:
                 to_remove.append((stock, account))
-                print(f"Removing Firstrade order for account {account_number} due to failure.")
+                logging.info(f"Removing Firstrade order for account {account_number} due to failure.")
 
         # Remove failed accounts from incomplete_orders
         for item in to_remove:
             del incomplete_orders[item]
 
     except Exception as e:
-        print(f"Error handling failed order: {e}")
+        logging.error(f"Error handling failed order: {e}")
 
 # -- Parsing Messages for Account Holdings
 
@@ -375,7 +371,7 @@ def parse_embed_message(embed):
     # Step 2: Save the parsed holdings to CSV
     save_holdings_to_csv(parsed_holdings)
 
-    print("Holdings have been successfully parsed and saved.")
+    logging.info("Holdings have been successfully parsed and saved.")
 
 def main_embed_message(embed):
     """
@@ -445,7 +441,7 @@ def parse_general_embed_message(embed):
                 holding.append(account_total)
 
         parsed_holdings.extend(new_holdings)
-        print(parsed_holdings)
+        logging.info(parsed_holdings)
 
     return parsed_holdings
 
