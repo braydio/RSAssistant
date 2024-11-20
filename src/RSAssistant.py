@@ -55,6 +55,7 @@ print(tagline)
 # Load configuration and logging
 
 setup_logging(config)
+init_db()
 account_mapping = load_account_mappings
 CONFIG_TOKEN = config['discord']['token']
 CONFIG_CHANNEL = config["discord"]['channel_id']
