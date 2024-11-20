@@ -397,7 +397,7 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
     try:
         # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
         wb = EXCEL_FILE_MAIN_PATH
-        load_excel_log(wb)
+        load_excel_workbook(wb)
         logging.info("Loaded Excel log workbook")
 
         if not wb:

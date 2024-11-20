@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 import signal
+import shutil
+import time
 from datetime import datetime
 
 # Third-party imports
@@ -12,7 +14,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
-from dotenv import load_dotenv
 
 # Local utility imports
 from utils.excel_utils import (clear_account_mappings, index_account_details,
@@ -29,13 +30,15 @@ from utils.utility_utils import (all_account_nicknames, all_brokers,
 from utils.watch_utils import (list_watched_tickers, load_watch_list,
                                periodic_check, send_reminder_message_embed,
                                stop_watching, watch_ratio, watch_ticker)
-from utils.init import (FILE_VERSION, APP_NAME, FILE_ENVIRONMENT,
+from utils.init import (FILE_VERSION, APP_NAME, RUNTIME_ENVIRONMENT,
                         ACCOUNT_MAPPING_FILE, HOLDINGS_LOG_CSV,
-                        EXCEL_FILE_MAIN_PATH, CONFIG_PATH, DOTENV_PATH,                       
-                        load_config, load_account_mappings, setup_logging)
+                        EXCEL_FILE_MAIN_PATH, CONFIG_PATH, DOTENV_FILE,                       
+                        config, load_account_mappings, setup_logging)
 
+RUNTIME_UPPER = RUNTIME_ENVIRONMENT.capitalize()
 startup_banner = (
 r"""
+
    ___  _______           _     __            __ 
   / _ \/ __/ _ | ___ ___ (_)__ / /____ ____  / /_
  / , _/\ \/ __ |(_-<(_-</ (_-</ __/ _ `/ _ \/ __/
@@ -44,32 +47,31 @@ r"""
 
 tagline = (f'{APP_NAME} - v{FILE_VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
 
-# Initialize env, config, logging
-load_dotenv()
-config = load_config()
-setup_logging()
+logging.info(f"{APP_NAME} by @braydio - GitHub: https://github.com/braydio/RSAssistant")
+logging.info(f"Version {FILE_VERSION} | Runtime Environment: {RUNTIME_UPPER}")
+print(startup_banner)
+print(tagline)
 
+# Load configuration and logging
 
-# Validate paths in the configuration
-def validate_paths():
-    missing_paths = []
-    for key, path in config["paths"].items():
-        if not os.path.exists(path):
-            missing_paths.append((key, path))
-            logging.warning(f"Path not found: {key} -> {path}")
-    return missing_paths
+setup_logging(config)
+account_mapping = load_account_mappings
+CONFIG_TOKEN = config['discord']['token']
+CONFIG_CHANNEL = config["discord"]['channel_id']
+print(CONFIG_TOKEN, CONFIG_CHANNEL)
 
-missing_paths = validate_paths()
-if missing_paths:
-    logging.error(f"Missing paths detected: {missing_paths}")
-
-if config["environment"]["mode"] == "development":
-    logging.getLogger().setLevel(logging.DEBUG)
-
-# Extract shortcuts and prefix
-shortcuts = config.get("shortcuts", {})
-prefix = config["discord"]["prefix"]
-task = None
+# Environment variables
+critical_env = "Terminating startup. Missing critical environment variable: "
+BOT_TOKEN = os.getenv("BOT_TOKEN", CONFIG_TOKEN)
+if not BOT_TOKEN:
+    logging.error(f"{critical_env} BOT_TOKEN")
+    sys.exit(f"{critical_env} BOT_TOKEN")
+TARGET_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", CONFIG_CHANNEL))
+#
+print(TARGET_CHANNEL_ID)
+# if not CHANNEL_ID:
+#     logging.error(f"{critical_env} DISCORD CHANNEL.")
+#     sys.exit(f"{critical_env} DISCORD CHANNEL.")
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -82,59 +84,22 @@ bot = commands.Bot(
     command_prefix=config["discord"]["prefix"], case_insensitive=True, intents=intents
 )
 
-load_dotenv(DOTENV_PATH)
+def slide_in_text(text, delay=0.1):
+    """Function to display text sliding in from the right side of the terminal."""
+    columns = shutil.get_terminal_size().columns
+    for i in range(columns, -len(text) - 1, -1):
+        print(" " * i + text, end="\r")
+        sys.stdout.flush()
+        time.sleep(delay)
+    print(text)
 
-def validate_env_vars():
-    """
-    Validates the presence of critical environment variables required for the application.
-    Logs errors and exits the program if any required variables are missing.
-    
-    Returns:
-        dict: A dictionary of the validated environment variables and their values.
-    """
-    # Define required environment variables with defaults (None if required)
-    required_vars = {
-        "BOT_TOKEN": os.getenv("BOT_TOKEN"),
-        "DISCORD_CHANNEL_ID": os.getenv("DISCORD_CHANNEL_ID"),
-        "ENVIRONMENT": os.getenv("ENVIRONMENT", "development")  # Default to "development"
-    }
-
-    # Identify missing variables
-    missing_vars = {key for key, value in required_vars.items() if not value}
-
-    if missing_vars:
-        logging.error(f"Missing critical environment variables: {', '.join(missing_vars)}")
-        sys.exit(f"Cannot start bot without required variables: {', '.join(missing_vars)}")
-
-    # Log validated variables for debugging (sensitive data like BOT_TOKEN should be sanitized)
-    logging.debug(f"Environment Variables Loaded: {', '.join([f'{key}={value}' for key, value in required_vars.items() if key != 'BOT_TOKEN'])}")
-    logging.debug("BOT_TOKEN=*** [REDACTED]")  # Avoid logging sensitive values like tokens
-
-    return required_vars
-
-env_vars = validate_env_vars()
-BOT_TOKEN = env_vars["BOT_TOKEN"]
-TARGET_CHANNEL_ID = int(env_vars["DISCORD_CHANNEL_ID"])
-
-ENVIRONMENT = FILE_ENVIRONMENT.capitalize()
-
-
-LOGS_FOLDER = "logs"
-os.makedirs(LOGS_FOLDER, exist_ok=True)
-
-account_mapping = load_account_mappings()
-
-# Load the watchlist and initialize db when bot starts
-load_watch_list()
-init_db()
-
-
+global periodic_task, reminder_scheduler
 @bot.event
 async def on_ready():
     """Triggered when the bot is ready."""
     channel = bot.get_channel(TARGET_CHANNEL_ID)
     account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_MAIN_PATH}`\n\nThen run: `..loadmap` and `..loadlog`."
-
+    rsa_startup_message = f"{startup_banner} \n {tagline}"
     try:
         with open(ACCOUNT_MAPPING_FILE, "r") as file:
             account_mappings = json.load(file)
@@ -148,22 +113,42 @@ async def on_ready():
 
     if channel:
         await channel.send(ready_message)
+        print(rsa_startup_message)
     else:
-        print(f"Could not find channel with ID: {TARGET_CHANNEL_ID}")
+        logging.warning(f"RSAssistant.py at on_ready() -- Could not find Channel: {TARGET_CHANNEL_ID}")
 
-    print(startup_banner)
-    print(tagline)
-    global task
-    logging.info(f"Initializing {APP_NAME} in {FILE_ENVIRONMENT} environment.")
+    logging.info(f"Initializing Application in {RUNTIME_ENVIRONMENT} environment.")
     logging.info(f"{bot.user} has connected to Discord!")
 
-    if task is None:
-        task = asyncio.create_task(periodic_check(bot))
+    # Start periodic check task if not already running
+    if 'periodic_task' not in globals() or periodic_task is None:
+        periodic_task = asyncio.create_task(periodic_check(bot))
         logging.info("Periodic task started.")
     else:
         logging.info("Periodic task already running.")
 
+    # Schedule reminder task using APScheduler
+    if 'reminder_scheduler' not in globals() or reminder_scheduler is None:
+        reminder_scheduler = BackgroundScheduler()
+        reminder_scheduler.add_job(lambda: bot.loop.create_task(send_scheduled_reminder()), CronTrigger(hour=8, minute=45))
+        reminder_scheduler.add_job(lambda: bot.loop.create_task(send_scheduled_reminder()), CronTrigger(hour=15, minute=30))
+        reminder_scheduler.start()
+        logging.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
+    else:
+        logging.info("Reminder scheduler already running.")
 
+@bot.command(name="version", help="Displays the current app version.")
+async def version(ctx):
+    embed_version = discord.Embed(
+        title=startup_banner,
+        color=discord.Color.green()
+        )
+    embed_version.add_field(
+        name=f"{APP_NAME} - Version Details: ",
+        value=tagline
+    )
+    await ctx.send(embed=embed_version)
+    # await ctx.send(f"{APP_NAME} - Version: {FILE_VERSION}")
 
 @bot.command(name="restart")
 async def restart(ctx):
@@ -178,7 +163,6 @@ async def restart(ctx):
         logging.error(f"Error during restart: {e}")
         await ctx.send("An error occurred while attempting to restart the bot.")
 
-
 @bot.event
 async def on_message(message):
     """Triggered when a message is received in the target channel."""
@@ -187,12 +171,7 @@ async def on_message(message):
 
     # Check if the message was sent in the target channel
     if message.channel.id == TARGET_CHANNEL_ID:
-        # Check if the message content matches any shortcut
-        if message.content in shortcuts:
-            # Replace the shortcut with its mapped full command
-            message.content = shortcuts[message.content]
 
-        # Continue with existing specific checks
         if message.content.lower().startswith("manual"):
             parse_manual_order_message(message.content)
         elif message.embeds:
@@ -208,6 +187,14 @@ async def on_message(message):
 async def show_reminder(ctx):
     """Shows a daily reminder message."""
     await send_reminder_message_embed(ctx)
+
+async def send_scheduled_reminder():
+    """Send scheduled reminders to the target channel."""
+    channel = bot.get_channel(TARGET_CHANNEL_ID)
+    if channel:
+        await send_reminder_message_embed(channel)
+    else:
+        logging.error(f"Could not find channel with ID: {TARGET_CHANNEL_ID} to send reminder.")
 
 
 @bot.command(name="brokerlist", help="List all active brokers. Optional arg: Broker")
@@ -374,10 +361,12 @@ async def update_version(ctx, version: str = None):
 
 # Graceful shutdown handler
 def shutdown_handler(signal_received, frame):
-    logging.info("Shutting down the bot...")
-    global task
-    if task and not task.done():
-        task.cancel()
+    logging.info("RSAssistant - shutting down...")
+    global periodic_check, reminder_scheduler
+    if periodic_check and not periodic_check.done():
+        periodic_check.cancel()
+    if reminder_scheduler:
+        reminder_scheduler.shutdown()
     sys.exit(0)
 
 signal.signal(signal.SIGINT, shutdown_handler)

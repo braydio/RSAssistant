@@ -13,26 +13,45 @@ from colorama import Fore, Style, init
 import discord
 import yaml
 import yfinance as yf
-
+from dotenv import load_dotenv
 
 
 # Load configuration dynamically based on the environment
 env = os.getenv("ENVIRONMENT", "production").lower()
+logging.debug(f"Environment variable loaded: {env}")
+if env not in ['prduction', 'development']:
+    logging.warning(f"Unrecognized environment '{env}', defaulting to 'production'.")
+    env = 'production'
 instance = "src" if env == "production" else "dev"
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+logging.info(BASE_DIR)
 CONFIG_DIR = BASE_DIR / "config"
-
-# Define paths for configuration files
 CONFIG_PATH = CONFIG_DIR / "settings.yaml"  # Central template config
-DEV_CONFIG_PATH = BASE_DIR / "dev" / "config"
-SRC_CONFIG_PATH = BASE_DIR / "src" / "config"
 CONFIG_INIT = CONFIG_DIR / "example-settings.yaml"
+BASE_ENV = CONFIG_DIR / ".env"
 
-CONFIG_INIT = os.path.join(CONFIG_DIR, "example-settings.yaml")
-CONFIG_PATH = os.path.join(CONFIG_DIR, "settings.yaml")
-logging.debug(f"Config_init at {CONFIG_INIT} path at {CONFIG_DIR}/settings.yaml at {CONFIG_PATH}")
+CONFIG_FILES = {
+    "production": {
+        "config_file": BASE_DIR / "src" / "config" / "settings.yaml",
+        "dotenv_file": BASE_DIR / "src" / "config" / ".env",
+        "account_mapping_file": BASE_DIR / "src" / "config" / "account_mapping.json",
+        "base_prefix": "src"
+    },
+    "development": {
+        "config_file": BASE_DIR / "dev" / "config" / "settings.yaml",
+        "dotenv_file": BASE_DIR / "dev" / "config" / ".env",
+        "account_mapping_file": BASE_DIR / "dev" / "config" / "account_mapping.json",
+        "base_prefix": "dev"
+    }
+}
+
+CONFIG_FILE = CONFIG_FILES[env]["config_file"]
+DOTENV_FILE = CONFIG_FILES[env]["dotenv_file"]
+ACCOUNT_MAPPING_FILE = CONFIG_FILES[env]["account_mapping_file"]
+
+load_dotenv(DOTENV_FILE)
 
 def parse_size(size_str):
     """Parse a human-readable size string (e.g., '10MB') and return its size in bytes."""
@@ -45,7 +64,6 @@ def parse_size(size_str):
         return int(size_str[:-2]) * 1024 * 1024 * 1024
     else:
         return int(size_str)  # Assume it's already in bytes if no suffix
-
 
 def setup_logging(config=None, verbose=False):
     """Set up logging based on the given configuration."""
@@ -193,23 +211,13 @@ def setup_logging(config=None, verbose=False):
 
 # Initialize logging before any other operations
 setup_logging()
-
-def initialize_file_if_missing(log_path_example, log_path_working, filename):
-    """Copy src to dest if dest does not exist, and notify if it already exists."""
-    if not os.path.exists(log_path_working):
-        shutil.copyfile(log_path_example, log_path_working)
-        logging.info(f'Initialized new local {filename} from "{log_path_example}"')
-    else:
-        logging.info(f"{filename} already exists at {log_path_working}.")
-    return log_path_working
-
 # Sync configuration files
 def sync_config(env):
     """
     Sync the environment-specific configuration file with the central template.
     """
-    target_path = DEV_CONFIG_PATH if env == "development" else SRC_CONFIG_PATH
-    # Load the template configuration
+    target_path = CONFIG_FILES[env]["config_file"]
+    # Load the template DE
     with open(CONFIG_PATH, "r", encoding="utf-8") as template_file:
         template_config = yaml.safe_load(template_file)
 
@@ -237,45 +245,26 @@ def sync_config(env):
             yaml.dump(target_config, target_file)
             logging.info(f"Updated {target_path} with missing keys from template.")
 
-    return target_config
+    # Adjust paths in the configuration based on the environment
+    paths = target_config.get("paths", {})
+    base_prefix = CONFIG_FILES[env]["base_prefix"]
 
-
-# Preprocess paths
-def preprocess_paths(config):
-    """
-    Adjust paths in the configuration based on the environment.
-    - In 'production':
-      * Paths starting with 'volumes/' remain unchanged.
-      * Other paths are prefixed with 'src/'.
-    - In 'development':
-      * Paths starting with 'volumes/' are prefixed with 'dev/volumes/'.
-      * Other paths are prefixed with 'dev/'.
-    """
-    env = config.get("environment", {}).get("mode", "production").lower()
-    is_development = env == "development"
-    logging.info(f"Environment detected: {env.capitalize()}")
-
-    paths = config.get("paths", {})
     for key, raw_path in paths.items():
         raw_path = Path(raw_path)  # Convert to Path object for safer manipulation
-
         if raw_path.parts[0] == "volumes":
             # If path starts with 'volumes/' handle based on environment
-            if is_development:
+            if env == "development":
                 # Development: Prepend 'dev/' to 'volumes/'
                 paths[key] = str(Path("dev") / raw_path)
             else:
                 # Production: Leave 'volumes/' paths unchanged
                 paths[key] = str(raw_path)
         else:
-            # For all other paths, prepend 'dev/' or 'src/' based on environment
-            base_prefix = "dev" if is_development else "src"
+            # For all other paths, prepend 'base_prefix' based on environment
             paths[key] = str(Path(base_prefix) / raw_path)
 
-    config["paths"] = paths
-    return config
-
-
+    target_config["paths"] = paths
+    return target_config
 
 def validate_config(config):
     """Ensure the configuration has all required sections and paths."""
@@ -294,21 +283,21 @@ def validate_config(config):
 
     logging.info("Configuration validated successfully.")
 
-
 # Load configuration
 def load_config():
     """Load, preprocess, and validate configuration."""
     env = os.getenv("ENVIRONMENT", "production").lower()
     config = sync_config(env)
 
-    config = preprocess_paths(config)
-
     validate_config(config)
 
-    config["discord"]["token"] = os.getenv("DISCORD_TOKEN", config["discord"].get("token"))
+    config["discord"]["token"] = os.getenv("BOT_TOKEN", config["discord"].get("token"))
+    config["discord"]["channel_id"] = os.getenv("DISCORD_CHANNEL_ID", config["discord_ids"].get("channel_id"))
 
     return config
 
+config = load_config()
+setup_logging(config)
 
 # Save configuration
 def save_config(config, path=CONFIG_PATH):
@@ -320,9 +309,9 @@ def save_config(config, path=CONFIG_PATH):
 
 
 # Load the configuration (make sure the config is loaded before accessing its keys)
-config = load_config()
-WORKING_INSTANCE = config["environment"]["mode"]
+RUNTIME_ENVIRONMENT = config["environment"]["mode"]
 HOLDINGS_LOG_CSV = config["paths"]["holdings_log"]
+ORDERS_LOG_CSV = config["paths"]["orders_log"]
 MANUAL_ORDER_ENTRY_TXT = config["paths"]["manual_orders"]
 ACCOUNT_MAPPING_FILE = config["paths"]["account_mapping"]
 EXCLUDED_BROKERS = config.get("excluded_brokers", {})

@@ -1,24 +1,34 @@
-# utils/init.py
-import logging
 import os
-
+import logging
 from utils.config_utils import (
-    get_account_nickname,
-    get_today, get_tomorrow,
-    load_account_mappings,
-    load_config,
     setup_logging,
-    CONFIG_PATH
-    )
+    load_config,
+    save_config,
+    load_account_mappings,
+    save_account_mappings,
+    get_account_nickname,
+    get_today,
+    get_tomorrow,
+    CONFIG_PATH,
+    DOTENV_FILE,
+    RUNTIME_ENVIRONMENT,
+    HOLDINGS_LOG_CSV,
+    ORDERS_LOG_CSV,
+    MANUAL_ORDER_ENTRY_TXT,
+    ACCOUNT_MAPPING_FILE,
+    EXCLUDED_BROKERS,
+    ACCOUNT_OWNERS
+)
 
 # Load configuration and set up logging
 config = load_config()
+
 setup_logging(config)
 logging.info("utils.init: Test log message: logging.info")
 logging.debug("utils.ini: Test log message: logging.debug")
 
+# Use imported functions and variables
 account_mapping = load_account_mappings()
-
 today = get_today()
 tomorrow = get_tomorrow()
 
@@ -27,12 +37,7 @@ APP_NAME = config["general_settings"]["app_name"]
 FILE_VERSION = config["general_settings"]["file_version"]
 
 # Key file paths
-CONFIG_PATH = CONFIG_PATH
-DOTENV_PATH = config["paths"]["dotenv"]
 TARGET_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
-ACCOUNT_MAPPING_FILE = config["paths"]["account_mapping"]
-HOLDINGS_LOG_CSV = config["paths"]["holdings_log"]
-ORDERS_LOG_CSV = config["paths"]["orders_log"]
 ERROR_LOG_FILE = config["paths"]["error_log"]
 ERROR_ORDER_DETAILS_FILE = config["paths"]["error_order"]
 WATCH_FILE = config["watch_list"]["watch_file"]
@@ -46,7 +51,30 @@ EXCEL_FILE_MAIN_PATH = os.path.join(
 
 ORDERS_HEADERS = config["header_settings"]["orders_headers"]
 HOLDINGS_HEADERS = config["header_settings"]["holdings_headers"]
-EXCLUDED_BROKERS = config.get("excluded_brokers", {})
-FILE_ENVIRONMENT = config["environment"]["mode"]
+RUNTIME_ENVIRONMENT = config["environment"]["mode"]
 
-# Misc
+
+# Use imported functions and variables
+account_mapping = load_account_mappings()
+today = get_today()
+tomorrow = get_tomorrow()
+
+# Export relevant values for other modules
+__all__ = [
+    "setup_logging",
+    "load_config",
+    "save_config",
+    "load_account_mappings",
+    "save_account_mappings",
+    "get_account_nickname",
+    "CONFIG_PATH",
+    "DOTENV_FILE",
+    "RUNTIME_ENVIRONMENT",
+    "HOLDINGS_LOG_CSV",
+    "ORDERS_LOG_CSV",
+    "MANUAL_ORDER_ENTRY_TXT",
+    "ACCOUNT_MAPPING_FILE",
+    "EXCLUDED_BROKERS",
+    "ACCOUNT_OWNERS",
+    "config"
+]

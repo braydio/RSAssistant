@@ -831,7 +831,7 @@ def update_file_version(config_path, new_version):
     with open(config_path, "w") as file:
         yaml.safe_dump(config_data, file)
     
-    print(f"Updated file_version to {new_version} in {config_path}")
+    logging.info(f"Updated file_version to {new_version} in {config_path}")
 
 def get_file_version(config_path):
     """
