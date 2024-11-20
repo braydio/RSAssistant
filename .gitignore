@@ -32,3 +32,5 @@ tests/*
 *.json
 *.yaml
 !example-settings.yaml
+
+RSAssistant-backup
