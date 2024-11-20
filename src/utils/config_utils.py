@@ -214,10 +214,10 @@ setup_logging()
 # Sync configuration files
 def sync_config(env):
     """
-    Sync the environment-specific configuration file with the central template.
+    Sync the environment-specific configuration file with the central template and process paths.
     """
     target_path = CONFIG_FILES[env]["config_file"]
-    # Load the template DE
+    # Load the template configuration
     with open(CONFIG_PATH, "r", encoding="utf-8") as template_file:
         template_config = yaml.safe_load(template_file)
 
@@ -226,20 +226,24 @@ def sync_config(env):
         logging.info(f"{target_path} does not exist. Initializing from template.")
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(CONFIG_PATH, target_path)
-        return template_config
 
     # Load the target configuration
     with open(target_path, "r", encoding="utf-8") as target_file:
         target_config = yaml.safe_load(target_file)
 
-    # Sync missing keys
+    # Update target path with file version from template
+    target_version = template_config.get('general_settings', {}).get('file_version', '1.0')
+    target_path = Path(str(target_path).replace('.yaml', f'_v{target_version}.yaml'))
+    logging.info(f"Updated target path with version: {target_path}")
+
+    # Sync missing keys from the template to the target configuration
     updated = False
     for key, value in template_config.items():
         if key not in target_config:
             target_config[key] = value
             updated = True
 
-    # Save the updated configuration
+    # Save the updated configuration if any changes were made
     if updated:
         with open(target_path, "w", encoding="utf-8") as target_file:
             yaml.dump(target_config, target_file)
