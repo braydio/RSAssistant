@@ -12,9 +12,9 @@
 # General settings
 general_settings:
   app_name:  'RSAssistant'
-  file_version: '1.2'
-  auto_rsa_path: "/path/to/auto-rsa"
-  rsassistant_path: "/path/to/rsassistant"
+  file_version: '1.3'
+auto_rsa_path: "/path/to/auto-rsa"
+rsassistant_path: "/path/to/rsassistant"
 
 # Mapping of shortcuts to full command names
 # If you change the command prefix, update the shortcuts with your new command prefix
@@ -27,30 +27,34 @@ shortcuts:
   '..ww': '..watchlist'
 
 # Settings for excel logging index values - These values define how log information is recorded within the 'Reverse Split Log' sheet in the Excel file.
-excel_log_settings:
-  stock_row: 1                  # Row where stock tickers are saved in every other column
-  date_row: 1                   # Row where dates are saved in every other column
-  ratio_row: 2                  # Row where split ratio is saved in every other column
-  order_row: 3                  # Cost / Proceeds
-  account_start_row: 4          # Starting row for account names
-  account_start_column: 1       # Starting column for account names
-  days_keep_backup: 2           # Number of days to keep backup files
+excel_settings:
+  excel_file_settings:
+    excel_file_name: ReverseSplitLog
+    base_excel_file: ReverseSplitLog.xlsx
+    days_keep_backup: 2
+  excel_log_settings:
+    stock_row: 1                  # Row where stock tickers are saved in every other column
+    date_row: 1                   # Row where dates are saved in every other column
+    ratio_row: 2                  # Row where split ratio is saved in every other column
+    order_row: 3                  # Cost / Proceeds
+    account_start_row: 4          # Starting row for account names
+    account_start_column: 1       # Starting column for account names
+    days_keep_backup: 2           # Number of days to keep backup files
 
 # Paths for logs and other files - Paths can be adjusted based on your project directory structure, but likely do not need to be changed.
 paths:
-  orders_log: "logs/orders_log.csv"           # Log file for orders
-  holdings_log: "logs/holdings_log.csv"       # Log file for holdings
-  error_log: "logs/error_log.txt"             # Error log for excel logging errors
-  error_order: "logs/error_details.txt"       # Detailed order error log for manual orders
-  excel_directory: "excel/"                   # Directory for Excel logs
-  excel_file_name: "ReverseSplitLog"          # Excel log file for tracking reverse splits
-  base_excel_file: "ReverseSplitLog.xlsx"     # Excel name with .xlsx
-  watch_list: "logs/watch_list.json"         # JSON file for watchlist data
-  account_mapping: "config/account_mapping.json" # Broker account nicknames file
-  holdings_data: "logs/holdings_data.csv"     # (TO BE DEPRECATED)
-  manual_orders: "logs/todiscord.txt"              # Enter order confirmation messages to send to discord
-
-# Header settings for logs - Customize headers if needed.
+  dotenv: config/.env
+  database: volumes/db/reverse_splits.db
+  account_mapping: config/account_mapping.json
+  error_log: volumes/logs/error_log.txt
+  error_order: volumes/logs/error_details.txt
+  excel_directory: volumes/excel/
+  holdings_log: volumes/logs/holdings_log.csv
+  manual_orders: todiscord.txt
+  orders_log: volumes/logs/orders_log.csv
+  watch_list: utils/watch_list.json
+  
+# Header settings for logs
 header_settings:
   orders_headers : ['Broker Name', 'Broker Number', 'Account Number', 'Order Type', 'Stock', 'Quantity', 'Price', 'Date', 'Timestamp']
   holdings_headers : ['Key', 'Broker Name', 'Broker Number', 'Account Number', 'Stock', 'Quantity', 'Price', 'Position Value', 'Account Total', 'Timestamp']
@@ -66,6 +70,10 @@ logging:
   file: "logs/app.log"          # Log file location
   max_size: 10MB                # Maximum log file size before rotation
   backup_count: 2               # Number of old log files to retain (adjustable)
+
+# Runtime environment for application
+environment:
+  mode: production
 
 # -------------------------------------------------------------------
 # END COPY BLOCK
@@ -88,7 +96,7 @@ discord:
     guilds: true
     members: true
 
-# Account Owners List - Specify account ownership with Account Nicknames as per your Excel log > Account Details
+# Account Owners List - Customizable account ownership - set in Account Nicknames as per your Excel log > Account Details
 account_owners : {
   '1': 'Account Group 1',
   '2': 'Account Group 2',

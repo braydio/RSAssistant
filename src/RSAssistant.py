@@ -1,8 +1,9 @@
 import asyncio
-import os
 import json
+import logging
+import os
 import sys
-from dotenv import load_dotenv
+import signal
 from datetime import datetime
 
 # Third-party imports
@@ -11,53 +12,59 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
-
-from utils.init import (
-    load_config,
-    load_account_mappings,
-    EXCEL_FILE_MAIN_PATH,
-    
-)
+from dotenv import load_dotenv
 
 # Local utility imports
-
+from utils.excel_utils import (clear_account_mappings, index_account_details,
+                               map_accounts_in_excel_log)
+from utils.parsing_utils import (parse_embed_message,
+                                 parse_manual_order_message,
+                                 parse_order_message)
+from utils.sql_utils import get_db_connection, init_db
 from utils.csv_utils import clear_holdings_log
-from utils.excel_utils import (
-    index_account_details,
-    map_accounts_in_excel_log,
-    clear_account_mappings,
-)
-from utils.parsing_utils import (
-    parse_embed_message,
-    parse_manual_order_message,
-    parse_order_message,
-)
-from utils.utility_utils import (
-    print_to_discord,
-    track_ticker_summary,
-    all_account_nicknames,
-    generate_broker_summary_embed,
-    all_brokers
-)
-from utils.watch_utils import (
-    list_watched_tickers,
-    load_watch_list,
-    periodic_check,
-    send_reminder_message_embed,
-    stop_watching,
-    watch_ticker,
-    watch_ratio
-)
+from utils.utility_utils import (all_account_nicknames, all_brokers,
+                                 generate_broker_summary_embed,
+                                 print_to_discord, track_ticker_summary,
+                                 update_file_version, get_file_version)
+from utils.watch_utils import (list_watched_tickers, load_watch_list,
+                               periodic_check, send_reminder_message_embed,
+                               stop_watching, watch_ratio, watch_ticker)
+from utils.init import (FILE_VERSION, APP_NAME, FILE_ENVIRONMENT,
+                        ACCOUNT_MAPPING_FILE, HOLDINGS_LOG_CSV,
+                        EXCEL_FILE_MAIN_PATH, CONFIG_PATH, DOTENV_PATH,                       
+                        load_config, load_account_mappings, setup_logging)
 
+startup_banner = (
+r"""
+   ___  _______           _     __            __ 
+  / _ \/ __/ _ | ___ ___ (_)__ / /____ ____  / /_
+ / , _/\ \/ __ |(_-<(_-</ (_-</ __/ _ `/ _ \/ __/
+/_/|_/___/_/ |_/___/___/_/___/\__/\_,_/_//_/\__/   
+""")
+
+tagline = (f'{APP_NAME} - v{FILE_VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
+
+# Initialize env, config, logging
 load_dotenv()
 config = load_config()
+setup_logging()
 
-# Load configuration and initialize paths
-HOLDINGS_LOG_CSV = config["paths"]["holdings_log"]
-MANUAL_ORDER_ENTRY_TXT = config["paths"]["manual_orders"]
-ACCOUNT_MAPPING_FILE = config["paths"]["account_mapping"]
-FILE_VERSION = config["general_settings"]["file_version"]
-APP_NAME = config["general_settings"]["app_name"]
+
+# Validate paths in the configuration
+def validate_paths():
+    missing_paths = []
+    for key, path in config["paths"].items():
+        if not os.path.exists(path):
+            missing_paths.append((key, path))
+            logging.warning(f"Path not found: {key} -> {path}")
+    return missing_paths
+
+missing_paths = validate_paths()
+if missing_paths:
+    logging.error(f"Missing paths detected: {missing_paths}")
+
+if config["environment"]["mode"] == "development":
+    logging.getLogger().setLevel(logging.DEBUG)
 
 # Extract shortcuts and prefix
 shortcuts = config.get("shortcuts", {})
@@ -75,19 +82,52 @@ bot = commands.Bot(
     command_prefix=config["discord"]["prefix"], case_insensitive=True, intents=intents
 )
 
-# Discord variables from .env
-MY_ID = os.getenv("MY_ID")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-TARGET_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
-PERSONAL_USER_ID = config["discord_ids"]["my_id"]
-TARGET_BOT_ID = config["discord_ids"]["target_bot"]
+load_dotenv(DOTENV_PATH)
+
+def validate_env_vars():
+    """
+    Validates the presence of critical environment variables required for the application.
+    Logs errors and exits the program if any required variables are missing.
+    
+    Returns:
+        dict: A dictionary of the validated environment variables and their values.
+    """
+    # Define required environment variables with defaults (None if required)
+    required_vars = {
+        "BOT_TOKEN": os.getenv("BOT_TOKEN"),
+        "DISCORD_CHANNEL_ID": os.getenv("DISCORD_CHANNEL_ID"),
+        "ENVIRONMENT": os.getenv("ENVIRONMENT", "development")  # Default to "development"
+    }
+
+    # Identify missing variables
+    missing_vars = {key for key, value in required_vars.items() if not value}
+
+    if missing_vars:
+        logging.error(f"Missing critical environment variables: {', '.join(missing_vars)}")
+        sys.exit(f"Cannot start bot without required variables: {', '.join(missing_vars)}")
+
+    # Log validated variables for debugging (sensitive data like BOT_TOKEN should be sanitized)
+    logging.debug(f"Environment Variables Loaded: {', '.join([f'{key}={value}' for key, value in required_vars.items() if key != 'BOT_TOKEN'])}")
+    logging.debug("BOT_TOKEN=*** [REDACTED]")  # Avoid logging sensitive values like tokens
+
+    return required_vars
+
+env_vars = validate_env_vars()
+BOT_TOKEN = env_vars["BOT_TOKEN"]
+TARGET_CHANNEL_ID = int(env_vars["DISCORD_CHANNEL_ID"])
+
+ENVIRONMENT = FILE_ENVIRONMENT.capitalize()
+
+
 LOGS_FOLDER = "logs"
 os.makedirs(LOGS_FOLDER, exist_ok=True)
 
 account_mapping = load_account_mappings()
 
-# Load the watchlist when bot starts
+# Load the watchlist and initialize db when bot starts
 load_watch_list()
+init_db()
+
 
 @bot.event
 async def on_ready():
@@ -111,28 +151,31 @@ async def on_ready():
     else:
         print(f"Could not find channel with ID: {TARGET_CHANNEL_ID}")
 
+    print(startup_banner)
+    print(tagline)
     global task
-    print(f"Initializing from {APP_NAME} - version {FILE_VERSION}.")
-    print(f"{bot.user} has connected to Discord!")
+    logging.info(f"Initializing {APP_NAME} in {FILE_ENVIRONMENT} environment.")
+    logging.info(f"{bot.user} has connected to Discord!")
 
     if task is None:
         task = asyncio.create_task(periodic_check(bot))
-        print("Periodic task started.")
+        logging.info("Periodic task started.")
     else:
-        print("Periodic task already running.")
+        logging.info("Periodic task already running.")
+
 
 
 @bot.command(name="restart")
 async def restart(ctx):
-    """Restarts the bot by terminating the current process and starting a new one."""
+    """Restarts the bot."""
     await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
     await asyncio.sleep(1)
-    print("Attempting to restart the bot...")
+    logging.info("Attempting to restart the bot...")
     try:
         python = sys.executable
         os.execv(python, [python] + sys.argv)
     except Exception as e:
-        print(f"Error during restart: {e}")
+        logging.error(f"Error during restart: {e}")
         await ctx.send("An error occurred while attempting to restart the bot.")
 
 
@@ -194,7 +237,10 @@ async def brokers_groups(ctx, broker: str = None):
     )
 
 
-@bot.command(name="brokerwith", help="All brokers with specified tickers > brokerwith <ticker> (details)")
+@bot.command(
+    name="brokerwith",
+    help="All brokers with specified tickers > brokerwith <ticker> (details)",
+)
 async def broker_has(ctx, ticker: str, *args):
     """Shows broker-level summary for a specific ticker."""
     specific_broker = args[0] if args else None
@@ -203,28 +249,34 @@ async def broker_has(ctx, ticker: str, *args):
     )
 
 
-@bot.command(name="watch", help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'")
+@bot.command(
+    name="watch",
+    help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'",
+)
 async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
     """Adds a ticker to the watchlist with an optional split date and split ratio."""
     try:
         if split_date:
-            datetime.strptime(split_date, '%m/%d')  # Validates the format as mm/dd
+            datetime.strptime(split_date, "%m/%d")  # Validates the format as mm/dd
     except ValueError:
         await ctx.send("Invalid date format. Please use * mm/dd * e.g., 11/4.")
         return
-    
+
     if not split_date:
         await ctx.send("Please include split date: * mm/dd *")
         return
-    
-    if split_ratio and not split_ratio.count('-') == 1:
+
+    if split_ratio and not split_ratio.count("-") == 1:
         await ctx.send("Invalid split ratio format. Use 'X-Y' format (e.g., 1-10).")
         return
-    
+
     await watch_ticker(ctx, ticker, split_date, split_ratio)
 
 
-@bot.command(name="addratio", help="Adds or updates the split ratio for an existing ticker in the watchlist.")
+@bot.command(
+    name="addratio",
+    help="Adds or updates the split ratio for an existing ticker in the watchlist.",
+)
 async def add_ratio(ctx, ticker: str, split_ratio: str):
 
     if not split_ratio:
@@ -232,7 +284,6 @@ async def add_ratio(ctx, ticker: str, split_ratio: str):
         return
 
     await watch_ratio(ctx, ticker, split_ratio)
-
 
 
 @bot.command(name="watchlist", help="Lists all tickers currently being watched.")
@@ -277,10 +328,7 @@ async def update_log_with_mappings(ctx):
         await ctx.send(f"An error occurred during update: {str(e)}")
 
 
-@bot.command(
-    name="clearmap",
-    help="Clears all account mappings from the account_mapping.json file",
-)
+@bot.command(name="clearmap", help="Clears all account mappings from the account_mapping.json file",)
 async def clear_mapping_command(ctx):
     """Clears all account mappings from the JSON file."""
     try:
@@ -297,6 +345,43 @@ async def clear_holdings(ctx):
     success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
     await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
+@bot.command(name="updateconfig", help="Dev tool to get or update file version.")
+async def update_version(ctx, version: str = None):
+    """
+    Gets or updates the file version in the configuration.
+    
+    Args:
+        ctx: Discord context.
+        version (str): Optional. If provided, updates the file version. If not, retrieves the current file version.
+    """
+    try:
+        if version:
+            # Update the file version if a new version is provided
+            success = update_file_version(config_path=CONFIG_PATH, version=version)
+            if success:
+                await ctx.send(f"Configuration updated successfully to version {version}.")
+            else:
+                await ctx.send(f"Failed to update configuration.")
+        else:
+            # Fetch the current file version if no version is provided
+            file_version = get_file_version(config_path=CONFIG_PATH)
+            if file_version:
+                await ctx.send(f"Current file version: {file_version}")
+            else:
+                await ctx.send(f"Failed to fetch the current file version.")
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+
+# Graceful shutdown handler
+def shutdown_handler(signal_received, frame):
+    logging.info("Shutting down the bot...")
+    global task
+    if task and not task.done():
+        task.cancel()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
 
 # Start the bot with the token from the .env
 if __name__ == "__main__":
