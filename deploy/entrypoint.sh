@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-# Exit immediately if a command fails
+# Exit if a command fails
 set -e
 
 # Initialize environment

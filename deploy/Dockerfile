@@ -1,16 +1,19 @@
 # Dockerfile for RSAssistant
 
-# Python base image
+# Use a lightweight Python base image
 FROM python:3.10-slim
 
-# Working directory in the container
+# Set working directory in the container
 WORKDIR /app
 
-# Requirements and dependencies
+# Install bash (since python:3.10-slim doesn't come with bash by default)
+RUN apt-get update && apt-get install -y bash
+
+# Copy requirements file and install dependencies
 COPY deploy/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# MISC directories and files into the container
+# Copy necessary directories and files into the container
 COPY ./deploy /app/deploy
 COPY ./src ./src
 COPY .gitignore /app/.gitignore
@@ -18,11 +21,11 @@ COPY ./config /app/config
 COPY LICENSE /app/LICENSE
 COPY README.md /app/README.md
 
-# Logs directory is writable
+# Ensure logs directory is writable
 RUN mkdir -p /app/volumes/logs && chmod -R 777 /app/volumes/logs
 
 # Set environment variables
 ENV ENVIRONMENT=production
 
-# Entrypoint script
-ENTRYPOINT ["sh", "deploy/entrypoint.sh"]
+# Entrypoint script using bash
+ENTRYPOINT ["bash", "deploy/entrypoint.sh"]

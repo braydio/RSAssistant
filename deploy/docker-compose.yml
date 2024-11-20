@@ -5,13 +5,9 @@ services:
       dockerfile: ./deploy/Dockerfile
     container_name: RSAssistant
     env_file:
-      - ../.env
-    environment:
-      - ENVIRONMENT=production
-      - BOT_TOKEN=${BOT_TOKEN}
-      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
-      - DISCORD_CHANNEL_ID2=${DISCORD_CHANNEL_ID2}
+      - ../.env  # Explicitly load the .env file
     volumes:
-      - ./config:/app/config
-      - ./volumes/logs:/app/volumes/logs
-      - ./volumes/db:/app/volumes/db
+      - ../config:/app/config
+      - ../volumes/logs:/app/volumes/logs
+      - ../volumes/db:/app/volumes/db
+      - ../volumes/excel:/app/volumes/excel
