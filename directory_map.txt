@@ -1,0 +1,102 @@
+├── .gitignore
+├── LICENSE
+├── README.md
+├── config
+│   ├── .env
+│   ├── example-settings.yaml
+│   ├── example.env
+│   └── settings.yaml
+├── deploy
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── entrypoint.sh
+│   └── requirements.txt
+├── dev
+│   ├── RSAssistant.py
+│   ├── config
+│   │   ├── account_mapping.json
+│   │   ├── example-account_mapping.json
+│   │   ├── example-settings.yaml
+│   │   └── settings.yaml
+│   ├── deploy
+│   │   ├── Dockerfile
+│   │   ├── docker-compose.override.template.yml
+│   │   ├── docker-compose.yml
+│   │   └── entrypoint.sh
+│   ├── friendlybot-setup.py
+│   ├── requirements.txt
+│   ├── todiscord.txt
+│   ├── utils
+│   │   ├── config_utils.py
+│   │   ├── csv_utils.py
+│   │   ├── excel_utils.py
+│   │   ├── init.py
+│   │   ├── parsing_utils.py
+│   │   ├── sql_utils.py
+│   │   ├── utility_utils.py
+│   │   ├── watch_list.json
+│   │   └── watch_utils.py
+│   └── volumes
+│       ├── db
+│       ├── excel
+│       │   ├── ReverseSplitLog.xlsx
+│       │   ├── archive
+│       │   └── example-ReverseSplitLog.xlsx
+│       └── logs
+│           └── app.log
+├── src
+│   ├── RSAssistant.py
+│   ├── __init__.py
+│   ├── config
+│   │   ├── .env
+│   │   ├── account_mapping.json
+│   │   ├── docker-compose.override.template.yml
+│   │   ├── example-account_mapping.json
+│   │   ├── example.env
+│   │   └── settings.yaml
+│   ├── example-todiscord.txt
+│   ├── helperbot-setup.py
+│   ├── src
+│   │   └── config
+│   ├── todiscord.txt
+│   ├── utils
+│   │   ├── config_utils.py
+│   │   ├── csv_utils.py
+│   │   ├── excel_utils.py
+│   │   ├── init.py
+│   │   ├── parsing_utils.py
+│   │   ├── sql_utils.py
+│   │   ├── utility_utils.py
+│   │   ├── watch_list.json
+│   │   └── watch_utils.py
+│   └── volumes
+│       ├── db
+│       │   └── reverse_splits.db
+│       ├── excel
+│       │   ├── ReverseSplitLog.xlsx
+│       │   ├── archive
+│       │   └── example-ReverseSplitLog.xlsx
+│       └── logs
+│           ├── app.log
+│           ├── error_details.txt
+│           ├── error_log.txt
+│           ├── holdings_log.csv
+│           └── orders_log.csv
+├── tests
+│   ├── account_mapping.json
+│   └── volumes
+│       ├── excel
+│       │   ├── ReverseSplitLog.xlsx
+│       │   └── test_ReverseSplitLog.xlsx
+│       └── logs
+└── volumes
+    ├── excel
+    │   ├── ReverseSplitLog.xlsx
+    │   ├── archive
+    │   │   ├── Backup_ReverseSplitLog.11-19.xlsx
+    │   │   └── Backup_ReverseSplitLog.11-20.xlsx
+    │   └── example-ReverseSplitLog.xlsx
+    └── logs
+        ├── error_details.txt
+        ├── error_log.txt
+        └── holdings_log.csv

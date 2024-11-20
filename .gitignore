@@ -1,6 +1,11 @@
 # environment stuff
 venv/
 .venv/
+*.env
+!example.env
+.myvenv
+*myvenv
+
 
 # config / settings
 config/settings.yaml
@@ -8,15 +13,22 @@ config/account_mapping.json
 utils/watch_list.json
 todiscord.txt
 logs/
+*.db
 
 # excel stuff
-excel/
-!excel/example-ReverseSplitLog.xlsx
+*.xlsx
+!example-ReverseSplitLog.xlsx
+
+# random scripts and files
+/untracked/
 
 # other system stuff
-utils/__pycache__
+dev/
+*__pycache__
 test*
 .vscode/
 *.zip
-
-
+tests/*
+*.json
+*.yaml
+!example-settings.yaml
