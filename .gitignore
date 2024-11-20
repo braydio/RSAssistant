@@ -1,5 +1,7 @@
 # environment stuff
 venv/
+# environment stuff
+venv/
 .venv/
 *.env
 !example.env
