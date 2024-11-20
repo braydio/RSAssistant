@@ -1,0 +1,12 @@
+services:
+  rsassistant:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    volumes:
+      # Mount src/volumes/ to the local machine for persistent storage
+      - ../src/volumes:/app/src/volumes
+    environment:
+      # Example environment variables
+      - TZ=America/New_York
+    entrypoint: ./deploy/entrypoint.sh
