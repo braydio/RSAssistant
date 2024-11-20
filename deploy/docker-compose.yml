@@ -1,12 +1,17 @@
 services:
   rsassistant:
     build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    volumes:
-      # Mount src/volumes/ to the local machine for persistent storage
-      - ../src/volumes:/app/src/volumes
+      context: ../
+      dockerfile: ./deploy/Dockerfile
+    container_name: RSAssistant
+    env_file:
+      - ../.env
     environment:
-      # Example environment variables
-      - TZ=America/New_York
-    entrypoint: ./deploy/entrypoint.sh
+      - ENVIRONMENT=production
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - DISCORD_CHANNEL_ID2=${DISCORD_CHANNEL_ID2}
+    volumes:
+      - ./config:/app/config
+      - ./volumes/logs:/app/volumes/logs
+      - ./volumes/db:/app/volumes/db

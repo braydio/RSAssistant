@@ -8,16 +8,16 @@ echo "Initializing RSAssistant environment..."
 export DISPLAY=:99  # Optional, if graphical dependencies are used
 
 # Check for required directories in volumes
-if [ ! -d "/app/src/volumes/logs" ]; then
+if [ ! -d "/app/volumes/logs" ]; then
     echo "Creating logs directory..."
-    mkdir -p /app/src/volumes/logs
+    mkdir -p /app/volumes/logs
 fi
 
-if [ ! -d "/app/src/volumes/excel" ]; then
+if [ ! -d "/app/volumes/excel" ]; then
     echo "Creating excel directory..."
-    mkdir -p /app/src/volumes/excel
+    mkdir -p /app/volumes/excel
 fi
 
 # Start the main script
 echo "Starting RSAssistant script..."
-exec python /app/RSAssistant.py
+exec python /app/src/RSAssistant.py

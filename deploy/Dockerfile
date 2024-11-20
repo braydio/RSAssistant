@@ -1,27 +1,28 @@
-# Base image
-FROM python:3.12-slim
+# Dockerfile for RSAssistant
 
-# Set environment variables
-ENV TZ=America/New_York
-ENV DEBIAN_FRONTEND=noninteractive
+# Python base image
+FROM python:3.10-slim
 
-# Install dependencies and Git
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3-pip \
-    dos2unix \
-    git \
-    tzdata && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Set the working directory
+# Working directory in the container
 WORKDIR /app
 
-# Install Python dependencies (bind-mounted requirements.txt)
+# Requirements and dependencies
+COPY deploy/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make the entrypoint script executable
-RUN dos2unix entrypoint.sh && chmod +x entrypoint.sh
+# MISC directories and files into the container
+COPY ./deploy /app/deploy
+COPY ./src ./src
+COPY .gitignore /app/.gitignore
+COPY ./config /app/config
+COPY LICENSE /app/LICENSE
+COPY README.md /app/README.md
 
-# Set entrypoint
-ENTRYPOINT ["./entrypoint.sh"]
+# Logs directory is writable
+RUN mkdir -p /app/volumes/logs && chmod -R 777 /app/volumes/logs
+
+# Set environment variables
+ENV ENVIRONMENT=production
+
+# Entrypoint script
+ENTRYPOINT ["sh", "deploy/entrypoint.sh"]
