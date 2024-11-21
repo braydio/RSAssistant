@@ -1,13 +1,31 @@
 services:
   rsassistant:
     build:
-      context: ../
+      context: .
       dockerfile: ./deploy/Dockerfile
     container_name: RSAssistant
     env_file:
-      - ../.env  # Explicitly load the .env file
+      - .env  # Load the .env file in the root directory
     volumes:
-      - ../config:/app/config
-      - ../volumes/logs:/app/volumes/logs
-      - ../volumes/db:/app/volumes/db
-      - ../volumes/excel:/app/volumes/excel
+      - ./volumes/logs:/app/src/volumes/logs   # Persist logs
+      - ./volumes/db:/app/src/volumes/db       # Persist database
+      - ./volumes/excel:/app/src/volumes/excel # Persist Excel files
+      - ./config:/app/config                  # Share config
+    depends_on:
+      - db
+    environment:
+      ENVIRONMENT: production
+  db:
+    image: postgres:14
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: reverse_splits
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  db_data:

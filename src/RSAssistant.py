@@ -58,8 +58,9 @@ setup_logging(config)
 init_db()
 account_mapping = load_account_mappings
 CONFIG_TOKEN = config['discord']['token']
-CONFIG_CHANNEL = config["discord"]['channel_id']
-print(CONFIG_TOKEN, CONFIG_CHANNEL)
+CONFIG_CHANNEL = config["discord_ids"]['channel_id']
+CONFIG_CHANNEL2 = config["discord_ids"]['channel_id2']
+print(CONFIG_TOKEN, CONFIG_CHANNEL, CONFIG_CHANNEL2)
 
 # Environment variables
 critical_env = "Terminating startup. Missing critical environment variable: "
@@ -68,6 +69,7 @@ if not BOT_TOKEN:
     logging.error(f"{critical_env} BOT_TOKEN")
     sys.exit(f"{critical_env} BOT_TOKEN")
 TARGET_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", CONFIG_CHANNEL))
+ALERTS_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID2", CONFIG_CHANNEL2))
 #
 print(TARGET_CHANNEL_ID)
 # if not CHANNEL_ID:
@@ -179,6 +181,18 @@ async def on_message(message):
             parse_embed_message(message.embeds[0])
         else:
             parse_order_message(message.content)
+    
+    if message.channel.id == ALERTS_CHANNEL_ID:
+        # Handle messages with embeds
+        if message.embeds:
+            for embed in message.embeds:
+                print(f"Title: {embed.title}")
+                print(f"Description: {embed.description}")
+                print(f"URL: {embed.url}")
+        else:
+            # Handle plain text messages
+            print(f"Message Content: {message.content}")
+
 
     # Pass the message to the command processing so bot commands work
     await bot.process_commands(message)

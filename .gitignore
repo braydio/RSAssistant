@@ -1,26 +1,24 @@
 # environment stuff
-venv/
-# environment stuff
-venv/
-.venv/
+.venv/*
 *.env
 !example.env
-.myvenv
-*myvenv
-
 
 # config / settings
-config/settings.yaml
-config/account_mapping.json
-utils/watch_list.json
-todiscord.txt
-logs/
+*settings.yaml
+*account_mapping.json
+*watch_list.json
+*todiscord.txt
 *.db
+*.db-shm
+*.db-wal
 
-# excel stuff
+# Volumes
 *.xlsx
 !example-ReverseSplitLog.xlsx
-
+*.csv
+*.log
+error_details.txt
+error_log.txt
 # random scripts and files
 /untracked/
 

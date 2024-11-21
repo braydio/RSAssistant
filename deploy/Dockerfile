@@ -13,19 +13,16 @@ RUN apt-get update && apt-get install -y bash
 COPY deploy/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy necessary directories and files into the container
-COPY ./deploy /app/deploy
-COPY ./src ./src
-COPY .gitignore /app/.gitignore
-COPY ./config /app/config
-COPY LICENSE /app/LICENSE
-COPY README.md /app/README.md
+# Copy application files
+COPY src /app/src
+COPY config /app/config
+COPY logs /app/logs
 
 # Ensure logs directory is writable
-RUN mkdir -p /app/volumes/logs && chmod -R 777 /app/volumes/logs
+RUN mkdir -p /app/logs && chmod -R 777 /app/logs
 
 # Set environment variables
 ENV ENVIRONMENT=production
 
-# Entrypoint script using bash
-ENTRYPOINT ["bash", "deploy/entrypoint.sh"]
+# Entrypoint script
+ENTRYPOINT ["sh", "deploy/entrypoint.sh"]
