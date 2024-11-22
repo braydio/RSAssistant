@@ -16,42 +16,84 @@ import yfinance as yf
 from dotenv import load_dotenv
 
 
+ENV_PATH = './config/.env'
+CONFIG_PATH = 'config/settings.yaml'
+CONFIG_INIT = 'config/example-settings.yaml'
+
 # Load configuration dynamically based on the environment
-env = os.getenv("ENVIRONMENT", "production").lower()
-logging.debug(f"Environment variable loaded: {env}")
-if env not in ['prduction', 'development']:
-    logging.warning(f"Unrecognized environment '{env}', defaulting to 'production'.")
-    env = 'production'
-instance = "src" if env == "production" else "dev"
+def load_env(env_path=ENV_PATH):
+    """
+    Load environment variables from a .env file.
+    """
+    # Resolve the full path
+    env_file_path = Path(env_path).resolve()
+    if not env_file_path.exists():
+        logging.warning(f".env file not found at {env_file_path}")
+        return
 
+    load_dotenv(dotenv_path=env_file_path)
+    logging.info(f"Loaded in keys from {env_file_path}")
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-logging.info(BASE_DIR)
-CONFIG_DIR = BASE_DIR / "config"
-CONFIG_PATH = CONFIG_DIR / "settings.yaml"  # Central template config
-CONFIG_INIT = CONFIG_DIR / "example-settings.yaml"
-BASE_ENV = CONFIG_DIR / ".env"
+load_env()
 
-CONFIG_FILES = {
-    "production": {
-        "config_file": BASE_DIR / "src" / "config" / "settings.yaml",
-        "dotenv_file": BASE_DIR / "src" / "config" / ".env",
-        "account_mapping_file": BASE_DIR / "src" / "config" / "account_mapping.json",
-        "base_prefix": "src"
-    },
-    "development": {
-        "config_file": BASE_DIR / "dev" / "config" / "settings.yaml",
-        "dotenv_file": BASE_DIR / "dev" / "config" / ".env",
-        "account_mapping_file": BASE_DIR / "dev" / "config" / "account_mapping.json",
-        "base_prefix": "dev"
-    }
-}
+def get_file_path(file_path):
+    logging.info(f"Resolving file path in config setup : {file_path}")
+    resolved_path = Path(file_path).resolve()
 
-CONFIG_FILE = CONFIG_FILES[env]["config_file"]
-DOTENV_FILE = CONFIG_FILES[env]["dotenv_file"]
-ACCOUNT_MAPPING_FILE = CONFIG_FILES[env]["account_mapping_file"]
+    if not resolved_path.exists():
+        logging.warning(f"File not found for {resolved_path}.")
+        return
+    else:
+        logging.info(f"Resolved file path: {resolved_path}")
+        return resolved_path
 
-load_dotenv(DOTENV_FILE)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DISCORD_PRIMARY_CHANNEL = os.getenv("DISCORD_CHANNEL_ID")
+DISCORD_SECONDARY_CHANNEL = os.getenv("DISCORD_CHANNEL_ID2")
+
+def load_config(config_path=CONFIG_PATH):
+    """
+    Loads the YAML config file and returns it as a dictionary.
+    Preprocesses paths and validates configuration settings.
+    """
+    load_env()
+
+    if not os.path.exists(config_path):
+        logging.warning(f"Config file not found at {config_path}. Initializing default config.")
+        init_missing_file(config_init=CONFIG_INIT, config_path=CONFIG_PATH, description="settings.yaml")
+
+    with open(config_path, "r", encoding="utf-8") as config_file:
+        config = yaml.safe_load(config_file)
+
+    return config
+
+config = load_config()
+VERSION = config["general_settings"]["file_version"]
+APP_NAME = config["general_settings"]["app_name"]
+
+def init_missing_file(src_path, dest_path, description="file"):
+    """
+    Copy src_path to dest_path if dest_path does not exist.
+    
+    Args:
+        src_path (str): Path to the source file (template or example file).
+        dest_path (str): Path to the destination where the file should exist.
+        description (str): Description of the file being initialized, e.g., "config file".
+    """
+    try:
+        # Check if destination file already exists
+        if not os.path.exists(dest_path):
+            # Ensure destination directory exists
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            
+            # Copy the source file to the destination
+            shutil.copyfile(src_path, dest_path)
+            logging.info(f"Initialized new {description} from template: {src_path} -> {dest_path}")
+        else:
+            logging.info(f"{description.capitalize()} already exists at: {dest_path}")
+    except Exception as e:
+        logging.error(f"Failed to initialize {description} from {src_path}: {str(e)}")
+        raise
 
 def parse_size(size_str):
     """Parse a human-readable size string (e.g., '10MB') and return its size in bytes."""
@@ -209,66 +251,8 @@ def setup_logging(config=None, verbose=False):
 
     logging.info("Logging setup complete.")
 
-# Initialize logging before any other operations
-setup_logging()
-# Sync configuration files
-def sync_config(env):
-    """
-    Sync the environment-specific configuration file with the central template and process paths.
-    """
-    target_path = CONFIG_FILES[env]["config_file"]
-    # Load the template configuration
-    with open(CONFIG_PATH, "r", encoding="utf-8") as template_file:
-        template_config = yaml.safe_load(template_file)
-
-    # Initialize the target config if it doesn't exist
-    if not target_path.exists():
-        logging.info(f"{target_path} does not exist. Initializing from template.")
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(CONFIG_PATH, target_path)
-
-    # Load the target configuration
-    with open(target_path, "r", encoding="utf-8") as target_file:
-        target_config = yaml.safe_load(target_file)
-
-    # Update target path with file version from template
-    target_version = template_config.get('general_settings', {}).get('file_version', '1.0')
-    target_path = Path(str(target_path).replace('.yaml', f'_v{target_version}.yaml'))
-    logging.info(f"Updated target path with version: {target_path}")
-
-    # Sync missing keys from the template to the target configuration
-    updated = False
-    for key, value in template_config.items():
-        if key not in target_config:
-            target_config[key] = value
-            updated = True
-
-    # Save the updated configuration if any changes were made
-    if updated:
-        with open(target_path, "w", encoding="utf-8") as target_file:
-            yaml.dump(target_config, target_file)
-            logging.info(f"Updated {target_path} with missing keys from template.")
-
-    # Adjust paths in the configuration based on the environment
-    paths = target_config.get("paths", {})
-    base_prefix = CONFIG_FILES[env]["base_prefix"]
-
-    for key, raw_path in paths.items():
-        raw_path = Path(raw_path)  # Convert to Path object for safer manipulation
-        if raw_path.parts[0] == "volumes":
-            # If path starts with 'volumes/' handle based on environment
-            if env == "development":
-                # Development: Prepend 'dev/' to 'volumes/'
-                paths[key] = str(Path("dev") / raw_path)
-            else:
-                # Production: Leave 'volumes/' paths unchanged
-                paths[key] = str(raw_path)
-        else:
-            # For all other paths, prepend 'base_prefix' based on environment
-            paths[key] = str(Path(base_prefix) / raw_path)
-
-    target_config["paths"] = paths
-    return target_config
+# Initialize logging
+setup_logging(config)
 
 def validate_config(config):
     """Ensure the configuration has all required sections and paths."""
@@ -286,31 +270,6 @@ def validate_config(config):
         raise KeyError(f"Config paths missing keys: {missing_paths}")
 
     logging.info("Configuration validated successfully.")
-
-# Load configuration
-def load_config():
-    """Load, preprocess, and validate configuration."""
-    env = os.getenv("ENVIRONMENT", "production").lower()
-    config = sync_config(env)
-
-    validate_config(config)
-
-    config["discord"]["token"] = os.getenv("BOT_TOKEN", config["discord"].get("token"))
-    config["discord"]["channel_id"] = os.getenv("DISCORD_CHANNEL_ID", config["discord_ids"].get("channel_id"))
-
-    return config
-
-config = load_config()
-setup_logging(config)
-
-# Save configuration
-def save_config(config, path=CONFIG_PATH):
-    """Save configuration to the specified path."""
-    os.makedirs(path.parent, exist_ok=True)
-    print(path, config)
-    with open(path, "w", encoding="utf-8") as temp_config:
-        yaml.dump(config, temp_config)
-
 
 # Load the configuration (make sure the config is loaded before accessing its keys)
 RUNTIME_ENVIRONMENT = config["environment"]["mode"]

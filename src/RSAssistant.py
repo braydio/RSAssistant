@@ -32,7 +32,8 @@ from utils.watch_utils import (list_watched_tickers, load_watch_list,
                                stop_watching, watch_ratio, watch_ticker)
 from utils.init import (FILE_VERSION, APP_NAME, RUNTIME_ENVIRONMENT,
                         ACCOUNT_MAPPING_FILE, HOLDINGS_LOG_CSV,
-                        EXCEL_FILE_MAIN_PATH, CONFIG_PATH, DOTENV_FILE,                       
+                        EXCEL_FILE_MAIN_PATH, CONFIG_PATH, BOT_TOKEN,
+                        DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL,                      
                         config, load_account_mappings, setup_logging)
 
 RUNTIME_UPPER = RUNTIME_ENVIRONMENT.capitalize()
@@ -60,7 +61,6 @@ account_mapping = load_account_mappings
 CONFIG_TOKEN = config['discord']['token']
 CONFIG_CHANNEL = config["discord_ids"]['channel_id']
 CONFIG_CHANNEL2 = config["discord_ids"]['channel_id2']
-print(CONFIG_TOKEN, CONFIG_CHANNEL, CONFIG_CHANNEL2)
 
 # Environment variables
 critical_env = "Terminating startup. Missing critical environment variable: "
@@ -70,11 +70,6 @@ if not BOT_TOKEN:
     sys.exit(f"{critical_env} BOT_TOKEN")
 TARGET_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", CONFIG_CHANNEL))
 ALERTS_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID2", CONFIG_CHANNEL2))
-#
-print(TARGET_CHANNEL_ID)
-# if not CHANNEL_ID:
-#     logging.error(f"{critical_env} DISCORD CHANNEL.")
-#     sys.exit(f"{critical_env} DISCORD CHANNEL.")
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -86,15 +81,6 @@ intents.members = config["discord"]["intents"]["members"]
 bot = commands.Bot(
     command_prefix=config["discord"]["prefix"], case_insensitive=True, intents=intents
 )
-
-def slide_in_text(text, delay=0.1):
-    """Function to display text sliding in from the right side of the terminal."""
-    columns = shutil.get_terminal_size().columns
-    for i in range(columns, -len(text) - 1, -1):
-        print(" " * i + text, end="\r")
-        sys.stdout.flush()
-        time.sleep(delay)
-    print(text)
 
 global periodic_task, reminder_scheduler
 @bot.event
@@ -113,15 +99,19 @@ async def on_ready():
         )
     except (FileNotFoundError, json.JSONDecodeError):
         ready_message = account_setup_message
+        
 
     if channel:
         await channel.send(ready_message)
-        print(rsa_startup_message)
+        # slide_in_text(startup_banner)
+        # slide_in_text(tagline)
+        # print(rsa_startup_message)
     else:
         logging.warning(f"RSAssistant.py at on_ready() -- Could not find Channel: {TARGET_CHANNEL_ID}")
 
     logging.info(f"Initializing Application in {RUNTIME_ENVIRONMENT} environment.")
     logging.info(f"{bot.user} has connected to Discord!")
+
 
     # Start periodic check task if not already running
     if 'periodic_task' not in globals() or periodic_task is None:
@@ -188,6 +178,7 @@ async def on_message(message):
             for embed in message.embeds:
                 print(f"Title: {embed.title}")
                 print(f"Description: {embed.description}")
+                print(f"Value: {embed.value}")
                 print(f"URL: {embed.url}")
         else:
             # Handle plain text messages

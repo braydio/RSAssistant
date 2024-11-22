@@ -1,23 +1,27 @@
 import os
 import logging
+import pathlib
 from utils.config_utils import (
     setup_logging,
     load_config,
-    save_config,
+    load_env,
     load_account_mappings,
     save_account_mappings,
     get_account_nickname,
     get_today,
     get_tomorrow,
+    get_file_path,
     CONFIG_PATH,
-    DOTENV_FILE,
     RUNTIME_ENVIRONMENT,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
     MANUAL_ORDER_ENTRY_TXT,
     ACCOUNT_MAPPING_FILE,
     EXCLUDED_BROKERS,
-    ACCOUNT_OWNERS
+    ACCOUNT_OWNERS,
+    BOT_TOKEN,
+    DISCORD_PRIMARY_CHANNEL,
+    DISCORD_SECONDARY_CHANNEL
 )
 
 # Load configuration and set up logging
@@ -59,16 +63,28 @@ account_mapping = load_account_mappings()
 today = get_today()
 tomorrow = get_tomorrow()
 
+logging.info(f"Configuration loaded: {CONFIG_PATH}")
+logging.info(f"Watchlist from: {WATCH_FILE}")
+logging.info(f"Excel log loaded at {EXCEL_FILE_MAIN_PATH}")
+logging.info(f"Account mapped from mapping file at: {ACCOUNT_MAPPING_FILE}")
+
+CONFIG_PATH = get_file_path(CONFIG_PATH)
+WATCH_FILE = get_file_path(WATCH_FILE)
+ACCOUNT_MAPPING_FILE = get_file_path(ACCOUNT_MAPPING_FILE)
+EXCEL_FILE_MAIN_PATH = get_file_path(EXCEL_FILE_MAIN_PATH)
+ORDERS_LOG_CSV = get_file_path(ORDERS_LOG_CSV)
+HOLDINGS_LOG_CSV = get_file_path(HOLDINGS_LOG_CSV)
+
 # Export relevant values for other modules
 __all__ = [
     "setup_logging",
     "load_config",
-    "save_config",
     "load_account_mappings",
     "save_account_mappings",
     "get_account_nickname",
+    "today",
+    "tomorrow",
     "CONFIG_PATH",
-    "DOTENV_FILE",
     "RUNTIME_ENVIRONMENT",
     "HOLDINGS_LOG_CSV",
     "ORDERS_LOG_CSV",
@@ -77,4 +93,7 @@ __all__ = [
     "EXCLUDED_BROKERS",
     "ACCOUNT_OWNERS",
     "config"
+    "BOT_TOKEN",
+    "DISCORD_PRIMARY_CHANNEL",
+    "DISCORD_SECONDARY_CHANNEL"
 ]

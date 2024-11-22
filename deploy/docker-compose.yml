@@ -2,17 +2,15 @@ services:
   rsassistant:
     build:
       context: .
-      dockerfile: ./deploy/Dockerfile
+      dockerfile: ./Dockerfile
     container_name: RSAssistant
     env_file:
-      - .env  # Load the .env file in the root directory
+      - .env  # assuming .env is in the root directory
     volumes:
-      - ./volumes/logs:/app/src/volumes/logs   # Persist logs
-      - ./volumes/db:/app/src/volumes/db       # Persist database
-      - ./volumes/excel:/app/src/volumes/excel # Persist Excel files
-      - ./config:/app/config                  # Share config
-    depends_on:
-      - db
+      - ./volumes/logs:/app/volumes/logs   # Persist logs
+      - ./volumes/db:/app/volumes/db       # Persist database
+      - ./volumes/excel:/app/volumes/excel # Persist Exce 
+      - ./config:/app/config               # Sh    - db
     environment:
       ENVIRONMENT: production
   db:
