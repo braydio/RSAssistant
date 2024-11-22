@@ -5,12 +5,12 @@ services:
       dockerfile: Dockerfile
     container_name: RSAssistant
     env_file:
-      - ../config/.env  # assuming .env is in the root directory
+      - ./config/.env  # assuming .env is in the root directory
     volumes:
-      - ../volumes/logs:/app/volumes/logs   # Persist logs
-      - ../volumes/db:/app/volumes/db       # Persist database
-      - ../volumes/excel:/app/volumes/excel # Persist Exce 
-      - ../config:/app/config               # Sh    - db
+      - ./volumes/logs:/app/volumes/logs   # Persist logs
+      - ./volumes/db:/app/volumes/db       # Persist database
+      - ./volumes/excel:/app/volumes/excel # Persist Exce 
+      - ./config:/app/config               # Sh    - db
     environment:
       ENVIRONMENT: production
   db:

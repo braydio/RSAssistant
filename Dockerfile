@@ -8,14 +8,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y bash
 
 # COPY requirements file and install dependencies
-COPY requirements.txt app/requirements.txt
+COPY ./requirements.txt app/requirements.txt
 RUN pip install --no-cache-dir -r app/requirements.txt
-COPY deploy/ /app/
-COPY src/ /app/
+COPY ./src/ /app/src/
+COPY ./entrypoint.sh /app/entrypoint.sh
 
 # COPY application files
-# COPY src /app/src
-#  COPY config/settings.yaml /app/config/settings.yaml
 # do not COPY volumes, as they will be mounted by docker-compose
 # ensure logs directory is writable
 RUN mkdir -p /app/volumes && chmod -R 777 /app/volumes
