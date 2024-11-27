@@ -40,6 +40,7 @@ tomorrow = get_tomorrow()
 APP_NAME = config["general_settings"]["app_name"]
 FILE_VERSION = config["general_settings"]["file_version"]
 
+
 # Key file paths
 TARGET_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 ERROR_LOG_FILE = config["paths"]["error_log"]
@@ -47,11 +48,18 @@ ERROR_ORDER_DETAILS_FILE = config["paths"]["error_order"]
 WATCH_FILE = config["watch_list"]["watch_file"]
 
 EXCEL_FILE_DIRECTORY = config["paths"]["excel_directory"]
-EXCEL_FILE_NAME = config["excel_settings"]["excel_file_settings"]["excel_file_name"]
-BASE_EXCEL_FILE = config["excel_settings"]["excel_file_settings"]["base_excel_file"]
+EXCEL_FILE_NAME = config["paths"]["excel_file_name"]
+BASE_EXCEL_FILE = config["paths"]["base_excel_file"]
 EXCEL_FILE_MAIN_PATH = os.path.join(
     os.path.normpath(EXCEL_FILE_DIRECTORY), BASE_EXCEL_FILE
 )
+
+CONFIG_PATH = get_file_path(CONFIG_PATH)
+WATCH_FILE = get_file_path(WATCH_FILE)
+ACCOUNT_MAPPING_FILE = get_file_path(ACCOUNT_MAPPING_FILE)
+EXCEL_FILE_MAIN_PATH = get_file_path(EXCEL_FILE_MAIN_PATH)
+ORDERS_LOG_CSV = get_file_path(ORDERS_LOG_CSV)
+HOLDINGS_LOG_CSV = get_file_path(HOLDINGS_LOG_CSV)
 
 ORDERS_HEADERS = config["header_settings"]["orders_headers"]
 HOLDINGS_HEADERS = config["header_settings"]["holdings_headers"]
@@ -68,12 +76,7 @@ logging.info(f"Watchlist from: {WATCH_FILE}")
 logging.info(f"Excel log loaded at {EXCEL_FILE_MAIN_PATH}")
 logging.info(f"Account mapped from mapping file at: {ACCOUNT_MAPPING_FILE}")
 
-CONFIG_PATH = get_file_path(CONFIG_PATH)
-WATCH_FILE = get_file_path(WATCH_FILE)
-ACCOUNT_MAPPING_FILE = get_file_path(ACCOUNT_MAPPING_FILE)
-EXCEL_FILE_MAIN_PATH = get_file_path(EXCEL_FILE_MAIN_PATH)
-ORDERS_LOG_CSV = get_file_path(ORDERS_LOG_CSV)
-HOLDINGS_LOG_CSV = get_file_path(HOLDINGS_LOG_CSV)
+
 
 # Export relevant values for other modules
 __all__ = [

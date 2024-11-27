@@ -36,20 +36,19 @@ def load_env(env_path=ENV_PATH):
 
 load_env()
 
-def get_file_path(file_path):
+def get_full_path(file_path):
     logging.info(f"Resolving file path in config setup : {file_path}")
+    runtime = RUNTIME_ENVIRONMENT
     resolved_path = Path(file_path).resolve()
 
     if not resolved_path.exists():
         logging.warning(f"File not found for {resolved_path}.")
         return
     else:
-        logging.info(f"Resolved file path: {resolved_path}")
+        # logging.info(f"Resolved file path: {resolved_path}")
         return resolved_path
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DISCORD_PRIMARY_CHANNEL = os.getenv("DISCORD_CHANNEL_ID")
-DISCORD_SECONDARY_CHANNEL = os.getenv("DISCORD_CHANNEL_ID2")
+
 
 def load_config(config_path=CONFIG_PATH):
     """
@@ -70,6 +69,41 @@ def load_config(config_path=CONFIG_PATH):
 config = load_config()
 VERSION = config["general_settings"]["file_version"]
 APP_NAME = config["general_settings"]["app_name"]
+
+def get_file_path(file_path):
+    mode = config["environment"]["mode"]
+    runtime = 'production'
+    if mode.upper() == runtime.upper():
+        full_path = get_full_path(file_path)
+        logging.info(f"Resolved Full Path : {full_path}")
+        return full_path
+    else:
+        prepend_path = 'dev/' + file_path
+        logging.info(f"Dev Environment - Setting dev {prepend_path} for {file_path}")
+        full_path = get_full_path(prepend_path)
+        logging.info(f"Resolved Dev Path : {full_path}")
+        return full_path
+
+
+def check_runtime():
+    production = config["environment"]["mode"]
+    check = 'production'
+    if production.upper() == check.upper():
+        logging.info(f"Production environment detected - Initializing runtime.")
+        token = os.getenv("BOT_TOKEN")
+        logging.debug("REMOVE TOKEN READ PRINTS AFTER DEBUG")
+        logging.info(f"Token = Dev Token = {token}")
+        return token
+    else:
+        logging.info(f"Development environment detected - Initializing dev paths")
+        token = os.getenv("DEV_TOKEN")
+        logging.debug("REMOVE TOKEN READ PRINTS AFTER DEBUG")
+        logging.info(f"Token = Dev Token = {token}")
+        return token
+
+BOT_TOKEN = check_runtime()
+DISCORD_PRIMARY_CHANNEL = os.getenv("DISCORD_CHANNEL_ID")
+DISCORD_SECONDARY_CHANNEL = os.getenv("DISCORD_CHANNEL_ID2")
 
 def init_missing_file(src_path, dest_path, description="file"):
     """

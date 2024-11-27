@@ -10,24 +10,80 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 # Import configuration and functions from init.py
-from utils.init import (ACCOUNT_MAPPING_FILE, BASE_EXCEL_FILE, ERROR_LOG_FILE,
-                        ERROR_ORDER_DETAILS_FILE, EXCEL_FILE_DIRECTORY,
-                        EXCEL_FILE_MAIN_PATH, EXCEL_FILE_NAME, config,
+from utils.init import (config,
                         get_account_nickname, load_account_mappings,
                         load_config, setup_logging, today, tomorrow)
 
 config = load_config()
+
+EXCEL_FILE_DIRECTORY = config['paths']['excel_directory']
+EXCEL_FILE_NAME = config['paths']['excel_file_name']
+BASE_EXCEL_FILE = config['paths']['base_excel_file']
+HOLDINGS_LOG_CSV = config['paths']['holdings_log']
+ACCOUNT_MAPPING = config['paths']['account_mapping']
+ERROR_LOG_FILE = config['paths']['error_log']
+ERROR_ORDER_DETAILS_FILE = config['paths']['error_order']
+
 # Load Excel log settings
-stock_row = config["excel_settings"]["excel_log_settings"]["stock_row"]
-date_row = config["excel_settings"]["excel_log_settings"]["date_row"]
-ratio_row = config["excel_settings"]["excel_log_settings"]["ratio_row"]
-order_row = config["excel_settings"]["excel_log_settings"]["order_row"]
-account_start_row = config["excel_settings"]["excel_log_settings"]["account_start_row"]
-account_start_column = config["excel_settings"]["excel_log_settings"]["account_start_column"]
-days_keep_backup = config["excel_settings"]["excel_file_settings"]["days_keep_backup"]
+stock_row = config["excel_log_settings"]["stock_row"]
+date_row = config["excel_log_settings"]["date_row"]
+ratio_row = config["excel_log_settings"]["ratio_row"]
+order_row = config["excel_log_settings"]["order_row"]
+account_start_row = config["excel_log_settings"]["account_start_row"]
+account_start_column = config["excel_log_settings"]["account_start_column"]
+days_keep_backup = config["excel_log_settings"]["days_keep_backup"]
 
 setup_logging(config)
 
+def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
+    """
+    Returns the path of the base Excel file (without date).
+    If today's backup or tomorrow's backup doesn't exist, it creates them from the base file or today's file.
+    """
+    today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
+
+    # Logging: Log directory and filename values
+    logging.debug(f"directory={directory}, filename={filename}")
+
+    archive_dir = os.path.join(str(directory), "archive")
+    logging.debug(f"archive_dir={archive_dir}")
+
+    # Full paths for today's and tomorrow's backup files
+    today_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{today}.xlsx")
+    tomorrow_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{tomorrow}.xlsx")
+    
+    # Path to the base file (this is the file we will use for reading/writing)
+    base_excel_file_path = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
+
+    # Ensure the archive directory exists
+    if not os.path.exists(archive_dir):
+        os.makedirs(archive_dir)
+        logging.debug(f"Created archive directory: {archive_dir}")
+
+    # Check if today's backup file exists
+    if not os.path.exists(today_excel_file):
+        # If not, copy from the base file
+        if os.path.exists(base_excel_file_path):
+            shutil.copy(base_excel_file_path, today_excel_file)
+            logging.info(f"Created today's backup Excel file: {today_excel_file}")
+        else:
+            logging.error(f"Base Excel file {base_excel_file_path} not found.")
+
+    # Check if tomorrow's backup file exists
+    if not os.path.exists(tomorrow_excel_file):
+        # If not, copy from today's backup if it exists
+        if os.path.exists(today_excel_file):
+            shutil.copy(today_excel_file, tomorrow_excel_file)
+            logging.info(f"Created tomorrow's backup Excel file: {tomorrow_excel_file}")
+        else:
+            logging.error(f"Today's backup file {today_excel_file} not found.")
+
+    # Return the path to the base file (this is the file you will use)
+    return base_excel_file_path
+
+EXCEL_FILE_PATH = get_excel_file_path()
+# Example usage
 
 def copy_cell_format(source_cell, target_cell):
     """Copy cell formatting from source to target cell."""
@@ -74,18 +130,18 @@ def load_excel_workbook(file_path):
         logging.error(f"Workbook not found: {file_path}")
         return None
 
+EXCEL_FILE_LIVE = load_excel_workbook(EXCEL_FILE_PATH)
 
 # -- Update Account Mappings
 
-
 async def index_account_details(
-    ctx, filename=EXCEL_FILE_MAIN_PATH, mapping_file=ACCOUNT_MAPPING_FILE
+    ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING
 ):
     """Index account details from an Excel file, update account mappings in JSON, and notify about changes."""
 
     # Load the Excel workbook and select the 'Account Details' sheet
     try:
-        wb = openpyxl.load_workbook(filename)
+        wb = load_excel_workbook(excel_main_path)
         if "Account Details" not in wb.sheetnames:
             await ctx.send("Sheet 'Account Details' not found.")
             return
@@ -117,7 +173,7 @@ async def index_account_details(
                     broker_name,
                     group_number,
                     account_number,
-                    mapping_file=ACCOUNT_MAPPING_FILE,
+                    mapping_file=ACCOUNT_MAPPING,
                 )
             if (
                 not broker_name
@@ -156,9 +212,7 @@ async def index_account_details(
                     )
 
             # Add or update the account details under the broker and group number
-            account_mappings[broker_name][group_number][
-                account_number
-            ] = account_nickname
+            account_mappings[broker_name][group_number][account_number] = account_nickname
 
     except Exception as e:
         await ctx.send(f"Error processing Excel rows: {e}")
@@ -182,12 +236,12 @@ async def index_account_details(
 
 
 async def map_accounts_in_excel_log(
-    ctx, filename=EXCEL_FILE_MAIN_PATH, mapped_accounts_json=ACCOUNT_MAPPING_FILE
+    ctx, filename=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING
 ):
     """Update the Reverse Split Log sheet by inserting new rows, copying data and formatting, and deleting original rows."""
 
     # Load the Excel workbook and the Reverse Split Log sheet
-    wb = openpyxl.load_workbook(filename)
+    wb = load_excel_workbook(filename)
     reverse_split_log = wb["Reverse Split Log"]
 
     # Load the account mappings from the JSON file
@@ -291,13 +345,13 @@ async def map_accounts_in_excel_log(
 
     # Save the updated workbook
     try:
-        wb.save(filename)
+        save_workbook(wb, filename)
         await ctx.send(f"Updated {filename} with account mappings.")
     except Exception as e:
         await ctx.send(f"Error saving Excel file: {e}")
 
 
-async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING_FILE):
+async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
     """Clear the account mappings JSON file and notify the user."""
 
     try:
@@ -349,7 +403,7 @@ def generate_account_nickname(
 
     # Load current account mappings from JSON file
     try:
-        with open(ACCOUNT_MAPPING_FILE, "r") as f:
+        with open(ACCOUNT_MAPPING, "r") as f:
             account_mappings = json.load(f)
     except FileNotFoundError:
         logging.info(f"")
@@ -396,8 +450,8 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
     """Add the given stock ticker to the next available spot in the Excel log and copy formatting from the previous columns."""
     try:
         # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
-        wb = EXCEL_FILE_MAIN_PATH
-        load_excel_workbook(wb)
+        wb = load_excel_workbook(EXCEL_FILE_PATH)
+        
         logging.info("Loaded Excel log workbook")
 
         if not wb:
@@ -435,7 +489,7 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
         ws.cell(row=order_row, column=proceeds_col).value = "Proceeds"
 
         # Save the workbook and close it (no await)
-        wb.save(BASE_EXCEL_FILE)
+        save_workbook(wb, EXCEL_FILE_PATH)
         logging.info(
             f"Added {ticker} to Excel log at column {get_column_letter(cost_col)} with split date {split_date}."
         )
@@ -492,7 +546,7 @@ def update_excel_log(
     
     logging.debug(f"order_data received: {order_data}")
 
-    wb = load_excel_workbook(EXCEL_FILE_MAIN_PATH)
+    wb = load_excel_workbook(EXCEL_FILE_PATH)
     if not wb:
         logging.error("Workbook loading failed.")
         return
@@ -581,6 +635,7 @@ def update_excel_log(
 
     # Save the workbook and close it after processing
     save_workbook(wb, filename)
+    logging.info(f"Saved workbook {filename}")
     delete_stale_backups(EXCEL_FILE_DIRECTORY, "archive", days_keep_backup)
     wb.close()
 
@@ -752,194 +807,10 @@ def check_log_for_entry(log_file_path, entry):
 def append_to_log(log_file_path, message):
     """Append a message to the specified log file."""
     with open(log_file_path, "a") as log_file:
-        log_file.write(message)
+        log_file.write(message)  
     logging.info(f"Appended to log: {log_file_path}")
 
 
 def format_error_entry(error_message, order_details):
     """Format the error entry for consistent logging."""
     return f"--- Error at {datetime.now()} ---\nError Message: {error_message}\nOrder Details: {order_details}\n\n"
-
-
-# -- OLD STUFF TO REMOVE
-
-"""
-def log_error_message(error_message, order_details, error_log_file=ERROR_LOG_FILE):
-    # Log an error message to the specified log file and avoid duplicate entries.
-    logging.info(f"Logging error message, order details: {order_details}")
-    try:
-        with open(error_log_file, 'r') as log_file:
-            log_contents = log_file.read()
-    except FileNotFoundError:
-        log_contents = ""  # If the log file doesn't exist, we'll create it later
-
-    if order_details in log_contents:
-        logging.info(f"Order details already logged as error: {order_details}")
-        return  # Avoid logging duplicates
-
-    # Append the error message and order details to the log file
-    with open(error_log_file, 'a') as log_file:
-        log_file.write(f"--- Error at {datetime.now()} ---\n")
-        log_file.write(f"Error Message: {error_message}\n")
-        log_file.write(f"Order Details: {order_details}\n\n")
-    
-    logging.info(f"Written to log file: {error_log_file}")
-    log_error_order_details(order_details)
-
-def log_error_order_details(order_details):
-    logging.info(order_details)  # Ensure this is not outputting the raw dictionary with colons
-    
-    # Log the order details for later manual entry for errors in a separate file.
-    try:
-        logging.info(order_details)
-        with open(ERROR_ORDER_DETAILS_FILE, 'r') as order_file:
-            existing_orders = order_file.read()
-    except FileNotFoundError:
-        existing_orders = ""
-
-    # Format order_details as a clean string to avoid colons
-    formatted_order = (
-        f"Broker: {order_details['broker_name']}, "
-        f"Group Number: {order_details['group_number']}, "
-        f"Account: {order_details['account']}, "
-        f"Order Type: {order_details['order_type']}, "
-        f"Stock: {order_details['stock']}, "
-        f"Price: {order_details['price']}"
-    )
-
-    # Avoid logging duplicate orders
-    if formatted_order not in existing_orders:
-        with open(ERROR_ORDER_DETAILS_FILE, 'a') as order_file:
-            order_file.write(formatted_order + '\n')
-        logging.info(f"Order details saved to {ERROR_ORDER_DETAILS_FILE}")
-
-    # Log formatted order for consistency
-    logging.info(formatted_order)
-
-def remove_from_file(file_path, identifier):
-    Remove a specific block containing the identifier from the file.
-    logging.info(f'Removing {identifier} from {file_path}')
-    try:
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
-
-        with open(file_path, 'w') as file:
-            block_to_skip = False
-            for line in lines:
-                stripped_line = line.strip()
-
-                if "--- Error at" in stripped_line:
-                    block_to_skip = False
-
-                if f"Order Details: {identifier}" in stripped_line:
-                    block_to_skip = True
-                    logging.info(f"Skipping block with identifier: {identifier}")
-
-                if not block_to_skip:
-                    file.write(line)
-
-    except FileNotFoundError:
-        logging.info(f"{file_path} not found.")
-
-def update_excel_log(order_data, order_type=None, filename=excel_log_file, config=config):
-    
-    wb = None
-    error_log_file = ERROR_LOG_FILE
-
-    # Convert order_data to a list if it's a single dictionary
-    if isinstance(order_data, dict):
-        order_data = [order_data]
-
-    try:
-        # Load the Excel workbook
-        wb = load_workbook(filename)
-        if not wb:
-            logging.error(f"Workbook could not be loaded: {filename}")
-            return
-        
-        # Validate and normalize order_data
-        try:
-            order_data = validate_order_data(order_data)
-        except TypeError as e:
-            logging.error(f"Invalid order_data format: {str(e)}")
-            return  # Exit function if validation fails
-
-        # Access or create the "Reverse Split Log" sheet
-        if "Reverse Split Log" in wb.sheetnames:
-            ws = wb["Reverse Split Log"]
-        else:
-            ws = wb.create_sheet("Reverse Split Log")
-            logging.info(f"'Reverse Split Log' sheet was missing, created a new one.")
-
-        logging.info(order_data)  # Debugging: Print the orders to verify they are correct
-
-        for order in order_data:
-            try:
-                # Extract details and get the account nickname
-                broker_name = order['Broker Name']
-                broker_number = int(order['Broker Number'])
-                account_number = order['Account Number']
-                order_type = order_type or order['Order Type']
-                stock = order['Stock']
-                quantity = order['Quantity']
-                price = float(order['Price'])  # Convert np.float64 to regular float
-                date = order['Date']
-
-                error_order = f"manual {broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
-
-                account_nickname = get_account_nickname(broker_name, broker_number, account_number)
-                excel_nickname = f"{broker_name} {account_nickname}"
-                logging.info(f"Processing {order_type} order for {excel_nickname}, stock: {stock}, price: {price}")
-
-                # Locate the row for the account in Column A based on account_nickname
-                account_row = None
-                for row in range(account_start_row, ws.max_row + 1):
-                    cell_value = ws[f'A{row}'].value
-                    cell_value = cell_value.strip() if isinstance(cell_value, str) else str(cell_value or '')
-
-                    if cell_value.lower() == excel_nickname.strip().lower():
-                        account_row = row
-                        break
-
-                if account_row:
-                    # Locate the stock column in the specified stock row
-                    stock_col = None
-                    for col in range(3, ws.max_column + 1, 2):
-                        if ws.cell(row=stock_row, column=col).value == stock:
-                            stock_col = col + 1 if order_type.lower() == 'sell' else col
-                            break
-
-                    if stock_col:
-                        ws.cell(row=account_row, column=stock_col).value = price
-                        logging.info(f"{excel_nickname}: Updated column {stock_col}, row {account_row} with {price} for {order_type} on {stock}.")
-                        # Remove the corresponding error from the error logs if the order was successfully processed
-                        remove_from_file(error_log_file, error_order)
-                        remove_from_file(ERROR_ORDER_DETAILS_FILE, error_order)
-                    else:
-                        error_message = f"Stock {stock} not found for account {account_nickname}."
-                        log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
-                else:
-                    error_message = f"{broker_name} - {account_nickname} not found in Excel."
-                    log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
-
-            except ValueError as e:
-                error_message = f"ValueError: {str(e)}"
-                log_error_message(error_message, f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}", error_log_file)
-
-        try:
-            wb.save(filename)
-            logging.info(f"Saved Excel file: {filename}")
-            logging.info(f"Successfully saved the Excel log: {filename}")
-
-            # Manage backups by removing stale ones (using the config value)
-            delete_stale_backups(EXCEL_FILE_DIRECTORY, 'archive', days_keep_backup)
-        
-
-        except Exception as e:
-            logging.error(f"An error occurred while updating the Excel log: {str(e)}")
-
-    finally:
-        if wb:
-            wb.close()
-
-"""

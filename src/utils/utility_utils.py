@@ -20,7 +20,10 @@ HOLDINGS_LOG_CSV = config["paths"]["holdings_log"]
 ORDERS_CSV_FILE = config["paths"]["orders_log"]
 MANUAL_ORDER_ENTRY_TXT = config["paths"]["manual_orders"]
 
+
+
 account_mapping = load_account_mappings()
+
 
 
 def check_holdings_timestamp(filename):
@@ -115,7 +118,6 @@ async def track_ticker_summary(
     except Exception as e:
         await ctx.send(f"Error: {e}")
 
-
 async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping):
     """
     Generates an aggregated summary of positions across all brokers for a given ticker.
@@ -168,7 +170,6 @@ async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping):
         text=f"Try: '..brokerwith {ticker} <broker>' for details. • {HOLDINGS_TIMESTAMP}"
     )
     await ctx.send(embed=embed)
-
 
 async def get_detailed_broker_view(
     ctx, ticker, specific_broker, holdings, account_mapping
@@ -234,7 +235,6 @@ async def get_detailed_broker_view(
     else:
         await ctx.send(f"No broker found for {broker_name}.")
 
-
 async def send_accounts_with_position_embed(
     ctx, broker_name, ticker, accounts_with_position
 ):
@@ -279,7 +279,6 @@ async def send_accounts_with_position_embed(
         )
         embed_with_position.set_footer(text=HOLDINGS_TIMESTAMP)
         await ctx.send(embed=embed_with_position)
-
 
 async def send_accounts_without_position_embed(
     ctx, broker_name, ticker, accounts_without_position
@@ -358,7 +357,6 @@ async def all_brokers(ctx):
         await ctx.send(f"An error occurred: {e}")
         logging.error(f"Exception in all_brokers: {e}")
 
-
 # Retrieve Last Stock Price
 def get_last_stock_price(stock):
     """Fetches the last price of a given stock using Yahoo Finance."""
@@ -372,7 +370,6 @@ def get_last_stock_price(stock):
     except Exception as e:
         logging.error(f"Error fetching last price for {stock}: {e}")
         return None
-
 
 # -- Get Totals for Specific Broker
 def get_account_totals(broker, group_number=None, account_number=None):
@@ -400,7 +397,6 @@ def get_account_totals(broker, group_number=None, account_number=None):
                 account_totals[row["Account Number"]] = float(row["Account Total"])
 
     return account_totals
-
 
 # Sum Account Totals by Broker and Group
 def sum_account_totals(broker, group_number, accounts):
@@ -432,7 +428,6 @@ def sum_account_totals(broker, group_number, accounts):
 
     return account_count, total_sum
 
-
 # Calculate Totals for All Brokers and Groups
 def calculate_broker_totals(account_mapping):
     """
@@ -458,7 +453,6 @@ def calculate_broker_totals(account_mapping):
 
     return broker_totals
 
-
 # Get All Accounts for a Broker
 def all_broker_accounts(broker):
     """
@@ -476,7 +470,6 @@ def all_broker_accounts(broker):
             f"Broker '{broker}' not found. Available brokers: {list(mappings.keys())}"
         )
     return mappings[broker].get("accounts", [])
-
 
 # Retrieve Account Nicknames for a Broker
 async def all_account_nicknames(ctx, broker):
@@ -540,14 +533,11 @@ def all_account_numbers(broker):
         return accounts
     return [account["account_number"] for account in accounts]
 
-
-def all_brokers_summary_by_owner(config, account_mapping, specific_broker=None):
+def all_brokers_summary_by_owner(specific_broker=None):
     """
     Summarizes account totals for each broker, grouped by account owner.
 
     Parameters:
-        config (dict): Configuration with paths and account owners.
-        account_mapping (dict): Mapping of accounts from JSON.
         specific_broker (str, optional): If provided, only summarize for this broker.
 
     Returns:
@@ -638,27 +628,22 @@ def all_brokers_summary_by_owner(config, account_mapping, specific_broker=None):
 
     return brokers_summary
 
-
-def generate_broker_summary_embed(
-    config=config, account_mapping=account_mapping, broker_name=None
-):
+def generate_broker_summary_embed(ctx, specific_broker=None):
     """
     Generates a Discord embed for account owner summaries.
 
     Parameters:
-        config (dict): Configuration dictionary.
-        account_mapping (dict): Account mappings dictionary.
         broker_name (str, optional): If provided, only show summary for this broker.
 
     Returns:
         discord.Embed: The generated embed with summaries by account owner.
     """
-    brokers_summary = all_brokers_summary_by_owner(config, account_mapping, broker_name)
-    if broker_name:
+    brokers_summary = all_brokers_summary_by_owner(specific_broker=None)
+    if specific_broker:
         broker = (
-            broker_name.upper()
-            if broker_name.lower() in ["bbae", "dspac"]
-            else broker_name.capitalize()
+            specific_broker.upper()
+            if specific_broker.lower() in ["bbae", "dspac"]
+            else specific_broker.capitalize()
         )
     else:
         broker = "All Active Brokers"
@@ -698,14 +683,10 @@ def generate_broker_summary_embed(
             )
 
             # Only show one broker if a specific one was requested
-            if broker_name:
+            if specific_broker:
                 break
 
     return embed
-
-
-# -- END CONFIG COPIED
-
 
 def get_fennel_account_number(account_str):
     """Extract Fennel account number by combining the first and second number from the string."""
@@ -745,7 +726,6 @@ async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_TXT, delay=1):
         await ctx.send(f"Error: The file {file_path} was not found.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
-
 
 async def send_large_message_chunks(ctx, message):
     print("This function depraced, move it to config boy.")

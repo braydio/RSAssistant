@@ -308,38 +308,26 @@ def handle_incomplete_order(match, broker_name, broker_number):
 def handle_verification(match, broker_name, broker_number):
     """Processes order verification and finalizes incomplete orders."""
     try:
+        # Initialize variables
+        account_number = None
+        action = None  # Default action to None
+
         # Extract fields based on broker type for verification
-        if broker_name.lower() == "schwab":
-            account_number = match.group(3)
-            action = None  # Action is not specified in Schwab verification messages
+        if broker_name.lower() in {"schwab", "firstrade", "vanguard", "chase"}:
+            account_number = match.group(3) if match and match.lastindex >= 3 else None
+            # These brokers do not specify an action in verification messages
+            action = None
 
-        elif broker_name.lower() == "firstrade":
-            account_number = match.group(3)
-            action = None  # Action is not specified in Firstrade verification messages
-
-        elif broker_name.lower() == "vanguard":
-            account_number = match.group(3)
-            action = None  # Action is not specified in Vanguard verification messages
-
-        elif broker_name.lower() == "chase":
-            account_number = match.group(3)
-            action = None  # Action is not specified in Chase verification messages
-
-        elif broker_name.lower() == "tradier":
-            account_number = match.group(3)
-            action = match.group(
-                4
-            ).lower()  # Action (buy/sell) is specified in Tradier messages
-
-        elif broker_name.lower() == "webull":
-            account_number = match.group(3)
-            action = match.group(
-                4
-            ).lower()  # Action (buy/sell) is specified in Webull messages
+        elif broker_name.lower() in {"tradier", "webull"}:
+            account_number = match.group(3) if match and match.lastindex >= 3 else None
+            action = match.group(4).lower() if match and match.lastindex >= 4 else None
 
         else:
-            logging.error(f"Unknown broker format for verification: {broker_name}")
-            return
+            raise ValueError(f"Unknown broker format for verification: {broker_name}")
+
+        # Ensure account_number is valid
+        if not account_number:
+            raise ValueError(f"Missing account number in verification for {broker_name}")
 
         # Normalize data
         broker_name, broker_number, action, _, _, account_number = normalize_order_data(
@@ -352,15 +340,20 @@ def handle_verification(match, broker_name, broker_number):
 
         # Check for matching incomplete orders and finalize them upon verification
         for key, order in list(incomplete_orders.items()):
+            # Log order comparison details for debugging
+            logging.debug(
+                f"Comparing: order_action={order['action']}, verification_action={action}"
+            )
+
+            # Safely handle None values for action
             if (
                 order["broker_name"] == broker_name
                 and order["broker_number"] == broker_number
                 and order["account_number"] == account_number
                 and (action is None or order["action"] == action)
             ):
-
                 # Process and remove the verified order
-                process_verified_orders(broker_name, account_number, order)
+                process_verified_orders(broker_name, broker_number, account_number, order)
                 del incomplete_orders[key]
                 logging.info(
                     f"Verified and removed temporary order for Account {account_number}"
@@ -371,26 +364,73 @@ def handle_verification(match, broker_name, broker_number):
                 f"No matching temporary order found for {broker_name} {broker_number}, Account {account_number}"
             )
 
+    except ValueError as ve:
+        logging.error(
+            f"ValueError in handle_verification: {ve}. Broker: {broker_name}, Match: {match}"
+        )
+    except AttributeError as ae:
+        logging.error(
+            f"AttributeError in handle_verification: {ae}. Match details: {match}"
+        )
     except Exception as e:
-        logging.error(f"Error in handle_verification: {e}")
+        logging.error(f"Unexpected error in handle_verification: {e}")
 
 
-def process_verified_orders(broker_name, account_number, order):
+def process_verified_orders(broker_name, broker_number, account_number, order):
     """Processes and finalizes a verified order by passing it to handle_complete_order."""
     logging.info(
-        f"Verified order processed for {broker_name}, Account {account_number}:"
+        f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
     )
+    action = None
 
-    # Call handle_complete_order to complete and save the order to CSV
-    handle_complete_order(
-        broker_name,
-        order["broker_number"],
-        account_number,
-        order["action"],
-        order["quantity"],
-        order["stock"],
-    )
-    logging.info("Order has been finalized and saved to CSV.")
+    order["action"] = action
+    order["quantity"] = quantity
+    order["stock"] = stock
+    
+
+    # Normalize data
+    if broker_name == 'Chase':
+            return
+    else: 
+        broker_name, broker_number, action, quantity, stock, account_number = (
+            normalize_order_data(
+                broker_name, broker_number, action, quantity, stock, account_number
+            )
+        )
+        logging.info(
+            f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
+            )
+
+    # Get price and current date
+    price = get_last_stock_price(stock)
+    date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Prepare order data
+    order_data = {
+        "Broker Name": broker_name,
+        "Broker Number": broker_number,
+        "Account Number": account_number,
+        "Order Type": action.capitalize(),
+        "Stock": stock,
+        "Quantity": quantity,
+        "Price": price,
+        "Date": date,
+    }
+
+    logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV")
+    # Save the order data to CSV
+    save_order_to_csv(order_data)
+
+    # Save the order data to the database
+    logging.info(f"Passing to database for {broker_name} {account_number}")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        account_id = get_account_id(
+            cursor, broker_name, broker_number, account_number
+        )
+        order_data["Account ID"] = account_id
+        add_order(order_data)
+        logging.info(f"Order successfully saved to database for stock {stock}")
 
 
 def parse_order_message(content):
@@ -761,3 +801,29 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
     except KeyError:
         # If the account is not found, return 'AccountNotMapped'
         return "AccountNotMapped"
+
+
+import re
+
+def alert_channel_message(content):
+    """
+    Parses alert content and returns a formatted alert message if a match is found.
+    
+    Args:
+        content (str): The content of the message to parse.
+        
+    Returns:
+        str: A formatted alert message or None if no match is found.
+    """
+    alert_pattern = r"📰 \| \*\*(.+)\*\*\n(https?://[^\s]+)"
+    match = re.search(alert_pattern, content)
+
+    if match:
+        title = match.group(1)  # Extract the title
+        url = match.group(2)    # Extract the URL
+        alert_message = f"🚨 Corporate Action Alert:\n**{title}**\n[Details Here]({url})"
+        return alert_message
+
+    # Log an error and return a default message or None
+    logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
+    return None  # Explicitly return None for unmatched content

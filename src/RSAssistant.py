@@ -18,7 +18,7 @@ from discord.ext import commands
 # Local utility imports
 from utils.excel_utils import (clear_account_mappings, index_account_details,
                                map_accounts_in_excel_log)
-from utils.parsing_utils import (parse_embed_message,
+from utils.parsing_utils import (parse_embed_message, alert_channel_message,
                                  parse_manual_order_message,
                                  parse_order_message)
 from utils.sql_utils import get_db_connection, init_db
@@ -27,7 +27,7 @@ from utils.utility_utils import (all_account_nicknames, all_brokers,
                                  generate_broker_summary_embed,
                                  print_to_discord, track_ticker_summary,
                                  update_file_version, get_file_version)
-from utils.watch_utils import (list_watched_tickers, load_watch_list,
+from utils.watch_utils import (list_watched_tickers,
                                periodic_check, send_reminder_message_embed,
                                stop_watching, watch_ratio, watch_ticker)
 from utils.init import (FILE_VERSION, APP_NAME, RUNTIME_ENVIRONMENT,
@@ -35,6 +35,8 @@ from utils.init import (FILE_VERSION, APP_NAME, RUNTIME_ENVIRONMENT,
                         EXCEL_FILE_MAIN_PATH, CONFIG_PATH, BOT_TOKEN,
                         DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL,                      
                         config, load_account_mappings, setup_logging)
+
+from utils.startup_scripts import falling_charstart, retro_charstart, timer_start, startup_banner, tagline, RUNTIME_UPPER, runtime_info
 
 RUNTIME_UPPER = RUNTIME_ENVIRONMENT.capitalize()
 startup_banner = (
@@ -48,19 +50,22 @@ r"""
 
 tagline = (f'{APP_NAME} - v{FILE_VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
 
+# falling_charstart()
+# retro_charstart()
+# timer_start()
+
 logging.info(f"{APP_NAME} by @braydio - GitHub: https://github.com/braydio/RSAssistant")
 logging.info(f"Version {FILE_VERSION} | Runtime Environment: {RUNTIME_UPPER}")
-print(startup_banner)
-print(tagline)
 
 # Load configuration and logging
-
 setup_logging(config)
 init_db()
+
 account_mapping = load_account_mappings
-CONFIG_TOKEN = config['discord']['token']
+CONFIG_TOKEN = config["discord"]["token"]
 CONFIG_CHANNEL = config["discord_ids"]['channel_id']
 CONFIG_CHANNEL2 = config["discord_ids"]['channel_id2']
+
 
 # Environment variables
 critical_env = "Terminating startup. Missing critical environment variable: "
@@ -71,6 +76,7 @@ if not BOT_TOKEN:
 TARGET_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", CONFIG_CHANNEL))
 ALERTS_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID2", CONFIG_CHANNEL2))
 
+logging.info(f"Target channel {TARGET_CHANNEL_ID}")
 # Set up bot intents
 intents = discord.Intents.default()
 intents.message_content = config["discord"]["intents"]["message_content"]
@@ -82,13 +88,15 @@ bot = commands.Bot(
     command_prefix=config["discord"]["prefix"], case_insensitive=True, intents=intents
 )
 
+
 global periodic_task, reminder_scheduler
 @bot.event
 async def on_ready():
     """Triggered when the bot is ready."""
+
     channel = bot.get_channel(TARGET_CHANNEL_ID)
     account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_MAIN_PATH}`\n\nThen run: `..loadmap` and `..loadlog`."
-    rsa_startup_message = f"{startup_banner} \n {tagline}"
+    
     try:
         with open(ACCOUNT_MAPPING_FILE, "r") as file:
             account_mappings = json.load(file)
@@ -100,14 +108,10 @@ async def on_ready():
     except (FileNotFoundError, json.JSONDecodeError):
         ready_message = account_setup_message
         
-
     if channel:
         await channel.send(ready_message)
-        # slide_in_text(startup_banner)
-        # slide_in_text(tagline)
-        # print(rsa_startup_message)
     else:
-        logging.warning(f"RSAssistant.py at on_ready() -- Could not find Channel: {TARGET_CHANNEL_ID}")
+        logging.warning(f"Target Channel not found - ID: {TARGET_CHANNEL_ID} on startup.")
 
     logging.info(f"Initializing Application in {RUNTIME_ENVIRONMENT} environment.")
     logging.info(f"{bot.user} has connected to Discord!")
@@ -176,14 +180,21 @@ async def on_message(message):
         # Handle messages with embeds
         if message.embeds:
             for embed in message.embeds:
-                print(f"Title: {embed.title}")
-                print(f"Description: {embed.description}")
-                print(f"Value: {embed.value}")
-                print(f"URL: {embed.url}")
-        else:
-            # Handle plain text messages
-            print(f"Message Content: {message.content}")
+                logging.info(f"Title: {embed.title}")
+                logging.info(f"Description: {embed.description}")
+                logging.info(f"Value: {embed.value}")
+                logging.info(f"URL: {embed.url}")
 
+        if message.content:
+            # Handle plain text messages
+            parsed_message = alert_channel_message(message.content)
+            if parsed_message:  # Ensure the message is not None
+                await channel.send(parsed_message)
+            else:
+                logging.warning("Parsed message is None. No alert sent.")
+                
+            channel = bot.get_channel(TARGET_CHANNEL_ID)
+            await channel.send("Placeholder message, see startup.")
 
     # Pass the message to the command processing so bot commands work
     await bot.process_commands(message)
@@ -222,12 +233,13 @@ async def brokers_groups(ctx, broker: str = None):
     """
     Displays account owner summary for a specific broker or all brokers if no broker is specified.
     """
-    embed = generate_broker_summary_embed(config, account_mapping, broker)
+    embed = generate_broker_summary_embed(ctx, broker)
     await ctx.send(
         embed=(
             embed if embed else "An error occurred while generating the broker summary."
         )
     )
+
 
 
 @bot.command(
