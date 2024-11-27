@@ -8,6 +8,7 @@ import shutil
 import time
 from datetime import datetime
 
+
 # Third-party imports
 import discord
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -22,7 +23,7 @@ from utils.parsing_utils import (parse_embed_message, alert_channel_message,
                                  parse_manual_order_message,
                                  parse_order_message)
 from utils.sql_utils import get_db_connection, init_db
-from utils.csv_utils import clear_holdings_log
+from utils.csv_utils import clear_holdings_log, send_top_holdings_embed
 from utils.utility_utils import (all_account_nicknames, all_brokers,
                                  generate_broker_summary_embed,
                                  print_to_discord, track_ticker_summary,
@@ -199,6 +200,10 @@ async def on_message(message):
     # Pass the message to the command processing so bot commands work
     await bot.process_commands(message)
 
+async def send_buy(ctx):
+    order_details = "!ping"
+    # "!rsa buy 1 slxn chase"
+    await ctx.send(order_details)
 
 @bot.command(name="reminder", help="Shows daily reminder")
 async def show_reminder(ctx):
@@ -226,6 +231,15 @@ async def brokerlist(ctx, broker: str = None):
         await ctx.send(f"An error occurred: {str(e)}")
 
 
+@bot.command(name="brokerwith", help="All brokers with specified tickers > brokerwith <ticker> (details)",)
+async def broker_has(ctx, ticker: str, *args):
+    """Shows broker-level summary for a specific ticker."""
+    specific_broker = args[0] if args else None
+    await track_ticker_summary(
+        ctx, ticker, show_details=bool(specific_broker), specific_broker=specific_broker
+    )
+
+
 @bot.command(
     name="grouplist", help="Summary by account owner. Optional: specify a broker."
 )
@@ -241,17 +255,22 @@ async def brokers_groups(ctx, broker: str = None):
     )
 
 
+# Discord bot command
+@bot.command(name="top", help="Displays the top holdings by dollar value (Quantity <= 1) grouped by broker.")
+async def top_holdings_command(ctx, range: int = 3):
+    """
+    Discord bot command to show top holdings by broker level.
 
-@bot.command(
-    name="brokerwith",
-    help="All brokers with specified tickers > brokerwith <ticker> (details)",
-)
-async def broker_has(ctx, ticker: str, *args):
-    """Shows broker-level summary for a specific ticker."""
-    specific_broker = args[0] if args else None
-    await track_ticker_summary(
-        ctx, ticker, show_details=bool(specific_broker), specific_broker=specific_broker
-    )
+    Args:
+        ctx: Discord context object.
+        range (int): Number of top holdings to display per broker.
+    """
+    try:
+        # Send the embed message
+        await send_top_holdings_embed(ctx, range)
+
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
 
 
 @bot.command(
@@ -342,7 +361,6 @@ async def clear_mapping_command(ctx):
         await ctx.send("Account mappings have been cleared.")
     except Exception as e:
         await ctx.send(f"An error occurred during the clearing process: {str(e)}")
-
 
 @bot.command(name="clearholdings", help="Clears entries in holdings_log.csv")
 async def clear_holdings(ctx):
