@@ -141,7 +141,7 @@ discord:
 
 paths:
   holdings_log: "volumes/logs/holdings_log.csv"
-  account_mapping: "volumes/db/account_mapping.json"
+  excel_directory: "volumes/excel/"
 ```
 
 ---

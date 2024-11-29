@@ -2,3 +2,4 @@ tests/
 untracked/
 dev/
 .venv/
+deploy/

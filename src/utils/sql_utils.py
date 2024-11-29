@@ -191,7 +191,7 @@ def add_order(order_data):
         logging.error(f"Failed to add order for {stock}: {e}")
         raise
 
-
+# Add
 def insert_holdings(parsed_holdings):
     """
     Inserts parsed holdings into the Holdings and HistoricalHoldings tables.
@@ -244,7 +244,6 @@ def insert_holdings(parsed_holdings):
 
         conn.commit()
     logging.info(f"Inserted {len(parsed_holdings)} holdings into the database.")
-
 
 # Add or update a holding in the Holdings table
 def add_or_update_holding(account_id, ticker, quantity, price, operation="buy"):
@@ -341,3 +340,74 @@ def add_or_update_holding(account_id, ticker, quantity, price, operation="buy"):
                 raise ValueError(
                     f"Cannot sell shares of {ticker}. No existing holding."
                 )
+
+# --- Data Retrieval
+
+def get_table_data(table_name, filters=None, limit=None):
+    """
+    Fetches data from a specified table with optional filters and a row limit.
+
+    Args:
+        table_name (str): Name of the table to query.
+        filters (dict, optional): A dictionary of filters where the key is the column name 
+                                  and the value is the filter value. For example: 
+                                  {'account_id': 1}
+        limit (int, optional): Maximum number of rows to fetch.
+
+    Returns:
+        list[dict]: A list of dictionaries representing the rows of the table.
+
+    Raises:
+        ValueError: If the table name is invalid.
+        sqlite3.Error: For database-related errors.
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # Construct query
+            query = f"SELECT * FROM {table_name}"
+            params = []
+
+            if filters:
+                conditions = [f"{col} = ?" for col in filters.keys()]
+                query += " WHERE " + " AND ".join(conditions)
+                params = list(filters.values())
+
+            if limit:
+                query += f" LIMIT {limit}"
+
+            cursor.execute(query, params)
+            columns = [column[0] for column in cursor.description]
+            rows = cursor.fetchall()
+
+            # Convert rows to list of dictionaries
+            return [dict(zip(columns, row)) for row in rows]
+    except sqlite3.Error as e:
+        logging.error(f"Error querying table {table_name}: {e}")
+        raise
+    except ValueError as ve:
+        logging.error(f"Invalid table name {table_name}: {ve}")
+        raise
+
+
+# -- Bot Commands
+
+def bot_query_table(table_name, args):
+    """
+    Queries a table using arguments from a bot command.
+
+    Args:
+        table_name (str): Name of the table to query.
+        args (list[str]): Arguments passed to the bot command. Supports filters (key=value)
+                          and a limit (limit=n).
+
+    Returns:
+        list[dict]: Query results as a list of dictionaries.
+
+    Raises:
+        Exception: For invalid input or database errors.
+    """
+    filters = {arg.split("=")[0]: arg.split("=")[1] for arg in args if "=" in arg}
+    limit = next((int(arg.split("=")[1]) for arg in args if arg.startswith("limit=")), None)
+    return get_table_data(table_name, filters, limit)

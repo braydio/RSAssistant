@@ -178,24 +178,21 @@ async def on_message(message):
             parse_order_message(message.content)
     
     if message.channel.id == ALERTS_CHANNEL_ID:
-        # Handle messages with embeds
-        if message.embeds:
-            for embed in message.embeds:
-                logging.info(f"Title: {embed.title}")
-                logging.info(f"Description: {embed.description}")
-                logging.info(f"Value: {embed.value}")
-                logging.info(f"URL: {embed.url}")
-
         if message.content:
-            # Handle plain text messages
+            logging.info(f"Received message: {message.content}")
+            
+            channel = bot.get_channel(TARGET_CHANNEL_ID)
             parsed_message = alert_channel_message(message.content)
-            if parsed_message:  # Ensure the message is not None
-                await channel.send(parsed_message)
+
+            if parsed_message:
+                await channel.send(f"\n{parsed_message}")
+                logging.info("Alert sent successfully.")
             else:
                 logging.warning("Parsed message is None. No alert sent.")
-                
-            channel = bot.get_channel(TARGET_CHANNEL_ID)
-            await channel.send("Placeholder message, see startup.")
+
+            # Optional notification
+            # await channel.send("Nasdaq Corporate Actions Alert: See channel #reverse-splits")
+
 
     # Pass the message to the command processing so bot commands work
     await bot.process_commands(message)
@@ -240,9 +237,7 @@ async def broker_has(ctx, ticker: str, *args):
     )
 
 
-@bot.command(
-    name="grouplist", help="Summary by account owner. Optional: specify a broker."
-)
+@bot.command(name="grouplist", help="Summary by account owner. Optional: specify a broker.")
 async def brokers_groups(ctx, broker: str = None):
     """
     Displays account owner summary for a specific broker or all brokers if no broker is specified.
@@ -256,7 +251,8 @@ async def brokers_groups(ctx, broker: str = None):
 
 
 # Discord bot command
-@bot.command(name="top", help="Displays the top holdings by dollar value (Quantity <= 1) grouped by broker.")
+@bot.command(name="top",
+    help="Displays the top holdings by dollar value (Quantity <= 1) grouped by broker.")
 async def top_holdings_command(ctx, range: int = 3):
     """
     Discord bot command to show top holdings by broker level.
@@ -273,8 +269,7 @@ async def top_holdings_command(ctx, range: int = 3):
         await ctx.send(f"An error occurred: {e}")
 
 
-@bot.command(
-    name="watch",
+@bot.command(name="watch",
     help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'",
 )
 async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
@@ -297,8 +292,7 @@ async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = Non
     await watch_ticker(ctx, ticker, split_date, split_ratio)
 
 
-@bot.command(
-    name="addratio",
+@bot.command(name="addratio",
     help="Adds or updates the split ratio for an existing ticker in the watchlist.",
 )
 async def add_ratio(ctx, ticker: str, split_ratio: str):
@@ -310,7 +304,8 @@ async def add_ratio(ctx, ticker: str, split_ratio: str):
     await watch_ratio(ctx, ticker, split_ratio)
 
 
-@bot.command(name="watchlist", help="Lists all tickers currently being watched.")
+@bot.command(name="watchlist",
+    help="Lists all tickers currently being watched.")
 async def allwatching(ctx):
     """Lists all tickers being watched."""
     await list_watched_tickers(ctx)

@@ -11,11 +11,9 @@ from discord import embeds
 from utils.utility_utils import get_last_stock_price
 from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
 from utils.init import (
-    load_config,
     get_account_nickname,
     load_account_mappings
 )
-
 from utils.sql_utils import (
     get_db_connection,
     get_account_id,
@@ -114,14 +112,7 @@ def normalize_order_data(
         logging.error(f"Invalid quantity '{quantity}' provided for stock {stock}.")
         quantity = 0.0
 
-    # Optional: Handle test orders (example behavior)
-    if broker_number == "0":
-        process_test_order(broker_name, broker_number, action, quantity, stock, account_number)
-
     return broker_name, broker_number, action, quantity, stock, account_number
-
-def process_test_order(broker_name, broker_number, action, quantity, stock, account_number):
-    logging.info(f"Test order registered for {broker_name} {broker_number} {account_number}")
 
 def parse_broker_data(
     broker_name: str, match: Optional[Match], order_type: str
@@ -304,7 +295,6 @@ def handle_incomplete_order(match, broker_name, broker_number):
     except Exception as e:
         logging.error(f"Error in handle_incomplete_order: {e}")
 
-
 def handle_verification(match, broker_name, broker_number):
     """Processes order verification and finalizes incomplete orders."""
     try:
@@ -352,7 +342,9 @@ def handle_verification(match, broker_name, broker_number):
                 and order["account_number"] == account_number
                 and (action is None or order["action"] == action)
             ):
-                # Process and remove the verified order
+                # Merge details from incomplete order
+                order["action"] = order.get("action") or action
+                order["quantity"] = order.get("quantity") or 1  # Default to 1 if missing
                 process_verified_orders(broker_name, broker_number, account_number, order)
                 del incomplete_orders[key]
                 logging.info(
@@ -375,31 +367,24 @@ def handle_verification(match, broker_name, broker_number):
     except Exception as e:
         logging.error(f"Unexpected error in handle_verification: {e}")
 
-
 def process_verified_orders(broker_name, broker_number, account_number, order):
     """Processes and finalizes a verified order by passing it to handle_complete_order."""
     logging.info(
         f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
     )
-    action = None
-
-    order["action"] = action
-    order["quantity"] = quantity
-    order["stock"] = stock
-    
+    action = order["action"]
+    quantity = order["quantity"]
+    stock = order["stock"]
 
     # Normalize data
-    if broker_name == 'Chase':
-            return
-    else: 
-        broker_name, broker_number, action, quantity, stock, account_number = (
-            normalize_order_data(
-                broker_name, broker_number, action, quantity, stock, account_number
-            )
+    broker_name, broker_number, action, quantity, stock, account_number = (
+        normalize_order_data(
+            broker_name, broker_number, action, quantity, stock, account_number
         )
-        logging.info(
-            f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
-            )
+    )
+    logging.info(
+        f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
+    )
 
     # Get price and current date
     price = get_last_stock_price(stock)
@@ -431,7 +416,6 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
         order_data["Account ID"] = account_id
         add_order(order_data)
         logging.info(f"Order successfully saved to database for stock {stock}")
-
 
 def parse_order_message(content):
     """Parses incoming messages and routes them to the correct handler based on type."""
@@ -470,7 +454,6 @@ def handle_failed_order(match, broker_name, broker_number):
 
     except Exception as e:
         logging.error(f"Error handling failed order: {e}")
-
 
 def parse_manual_order_message(content):
     """Parses a manual order message and formats it for order processing.
@@ -802,8 +785,7 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
         # If the account is not found, return 'AccountNotMapped'
         return "AccountNotMapped"
 
-
-import re
+# -- Alerts Channel
 
 def alert_channel_message(content):
     """
@@ -815,15 +797,28 @@ def alert_channel_message(content):
     Returns:
         str: A formatted alert message or None if no match is found.
     """
-    alert_pattern = r"📰 \| \*\*(.+)\*\*\n(https?://[^\s]+)"
+    # Updated regex to handle extra spaces or blank lines
+    alert_pattern = r"📰 \| (.+?) \((\w+)\)\s*(https?://[^\s]+)"
     match = re.search(alert_pattern, content)
 
     if match:
-        title = match.group(1)  # Extract the title
-        url = match.group(2)    # Extract the URL
-        alert_message = f"🚨 Corporate Action Alert:\n**{title}**\n[Details Here]({url})"
+        title = match.group(1)  # Extract the full title
+        ticker = match.group(2)  # Extract the stock ticker
+        url = match.group(3)  # Extract the URL
+
+        # Detect "Reverse Stock Split" in the title
+        if "Reverse Stock Split" in title:
+            action = "Reverse Stock Split"
+        else:
+            action = "Corporate Action"
+
+        # Format the alert message
+        alert_message = (
+            f"🚨 Nasdaq Corporate Actions Alert:\n"
+            f"**{ticker} {action}**\n"
+            f"[Details Here]({url})"
+        )
         return alert_message
 
-    # Log an error and return a default message or None
     logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
-    return None  # Explicitly return None for unmatched content
+    return None  # Return None if no match is found
