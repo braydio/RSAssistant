@@ -1,7 +1,7 @@
 
 # RSAssistant
 
-RSAssistant is a Python-powered Discord bot designed to assist with stock market operations, particularly tracking reverse splits, account management, and logging activity. Built with modularity and scalability in mind, it integrates with Discord for real-time monitoring and notifications.
+RSAssistant is a Python-powered Discord bot designed to assist with stock market operations, particularly tracking reverse splits, account management, and logging activity. Built with modularity and scalability in mind, it integrates with Discord for real-time monitoring and notifications. RSAssistant is designed to work with [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md), which is essential for order execution and holdings retrieval.
 
 ## Table of Contents
 
