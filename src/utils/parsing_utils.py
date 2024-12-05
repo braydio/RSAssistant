@@ -296,6 +296,7 @@ def handle_incomplete_order(match, broker_name, broker_number):
         logging.error(f"Error in handle_incomplete_order: {e}")
 
 def handle_verification(match, broker_name, broker_number):
+    quantity = 1  # Set a default value to avoid "referenced before assignment" error
     """Processes order verification and finalizes incomplete orders."""
     try:
         # Initialize variables
@@ -346,6 +347,7 @@ def handle_verification(match, broker_name, broker_number):
                 order["action"] = order.get("action") or action
                 order["quantity"] = order.get("quantity") or 1  # Default to 1 if missing
                 process_verified_orders(broker_name, broker_number, account_number, order)
+                order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
                 del incomplete_orders[key]
                 logging.info(
                     f"Verified and removed temporary order for Account {account_number}"
@@ -368,6 +370,7 @@ def handle_verification(match, broker_name, broker_number):
         logging.error(f"Unexpected error in handle_verification: {e}")
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
+    order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
     """Processes and finalizes a verified order by passing it to handle_complete_order."""
     logging.info(
         f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
