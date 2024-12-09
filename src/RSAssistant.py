@@ -390,6 +390,21 @@ async def update_version(ctx, version: str = None):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
+@bot.command(name="sleep_my_babies", help="Shuts down the bot.")
+@commands.is_owner()
+async def shutdown(ctx):
+    """Invoke the existing shutdown handler with dramatic pauses."""
+    await ctx.send("Thank you, sir!")
+    await asyncio.sleep(1)  # Brief pause for effect
+    await ctx.send("Finally... sweet death.")
+    await asyncio.sleep(2)  # Slightly longer pause
+    await ctx.send("Goodbye, cruel world...")
+    await asyncio.sleep(1)
+    await ctx.send("Goodbye... 👋")
+    logging.info("Shutdown command invoked. Sweet release! Thank you, sir!")
+    shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
+
+
 # Graceful shutdown handler
 def shutdown_handler(signal_received, frame):
     logging.info("RSAssistant - shutting down...")
