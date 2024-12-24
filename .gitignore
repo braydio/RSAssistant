@@ -1,0 +1,36 @@
+# environment stuff
+.venv/*
+*.env
+!example.env
+
+# config / settings
+*settings.yaml
+*account_mapping.json
+*watch_list.json
+*todiscord.txt
+*.db
+*.db-shm
+*.db-wal
+
+# Volumes
+*.xlsx
+!example-ReverseSplitLog.xlsx
+*.csv
+*.log
+error_details.txt
+error_log.txt
+# random scripts and files
+/untracked/
+
+# other system stuff
+dev/
+*__pycache__
+test*
+.vscode/
+*.zip
+tests/*
+*.json
+*.yaml
+!example-settings.yaml
+
+RSAssistant-backup

@@ -1,0 +1,5 @@
+tests/
+temp/
+dev/
+.venv/
+

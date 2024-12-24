@@ -1,0 +1,11 @@
+APScheduler==3.10.4
+colorama==0.4.6
+discord.py==2.4.0
+openpyxl==3.1.5
+pandas==2.2.3
+paramiko==3.5.0
+python-dotenv==1.0.1
+PyYAML==6.0.2
+PyYAML==6.0.2
+scp==0.15.0
+yfinance==0.2.43
