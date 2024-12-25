@@ -11,20 +11,13 @@ from datetime import datetime, timedelta
 import discord
 import yfinance as yf
 
-from utils.init import get_account_nickname, load_account_mappings, load_config
+from utils.config_utils import (
+    load_config, get_account_nickname, load_account_mappings,
+    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, MANUAL_ORDER_ENTRY_FILE, ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE
+)
 
 # Load configuration and holdings data
 config = load_config()
-ACCOUNT_MAPPING_FILE = config["paths"]["account_mapping"]
-HOLDINGS_LOG_CSV = config["paths"]["holdings_log"]
-ORDERS_CSV_FILE = config["paths"]["orders_log"]
-MANUAL_ORDER_ENTRY_TXT = config["paths"]["manual_orders"]
-
-
-
-account_mapping = load_account_mappings()
-
-
 
 def check_holdings_timestamp(filename):
     """Reads the latest timestamp from the specified CSV file."""
@@ -58,7 +51,7 @@ async def track_ticker_summary(
     ticker = ticker.upper().strip()  # Standardize ticker format
 
     # Load account mappings
-    account_mapping = load_account_mappings()
+    mapped_accounts = ACCOUNT_MAPPING
 
     try:
         # Read holdings log
@@ -104,10 +97,10 @@ async def track_ticker_summary(
         # Decide which view to show based on the specific_broker argument
         if specific_broker:
             await get_detailed_broker_view(
-                ctx, ticker, specific_broker, holdings, account_mapping
+                ctx, ticker, specific_broker, holdings, mapped_accounts
             )
         else:
-            await get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping)
+            await get_aggregated_broker_summary(ctx, ticker, holdings, mapped_accounts)
 
     except FileNotFoundError:
         await ctx.send(
@@ -548,7 +541,7 @@ def all_brokers_summary_by_owner(specific_broker=None):
 
     # Debug: Print the structure of account_mapping
     print("\nAccount Mapping Structure:")
-    for broker, broker_data in account_mapping.items():
+    for broker, broker_data in ACCOUNT_MAPPING.items():
         print(f"{broker}: {broker_data}")
 
     processed_accounts = set()  # Track processed accounts to avoid duplicates
@@ -586,8 +579,8 @@ def all_brokers_summary_by_owner(specific_broker=None):
             )
 
             nickname = ""
-            if broker_name in account_mapping:
-                for broker_number, accounts in account_mapping[broker_name].items():
+            if broker_name in ACCOUNT_MAPPING:
+                for broker_number, accounts in ACCOUNT_MAPPING[broker_name].items():
                     if account_number in accounts:
                         nickname = accounts[account_number]
                         break
@@ -652,7 +645,7 @@ def generate_broker_summary_embed(ctx, specific_broker=None):
     embed = discord.Embed(title=embed_title, color=discord.Color.blue())
 
     for broker, owner_totals in brokers_summary.items():
-        account_count = len(account_mapping.get(broker, {}))
+        account_count = len(ACCOUNT_MAPPING.get(broker, {}))
         broker_total = sum(
             owner_totals.values()
         )  # Calculate the total holdings for the broker
@@ -704,7 +697,7 @@ def get_fennel_account_number(account_str):
 
 
 # Function to print lines from a file to Discord
-async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_TXT, delay=1):
+async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_FILE, delay=1):
     """
     Reads a file line by line and sends each line as a message to Discord.
     Args:

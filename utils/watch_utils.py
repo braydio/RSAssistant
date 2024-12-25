@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 import discord
 import pandas as pd
 
-from utils.init import (
-    load_config, load_account_mappings,
-    WATCH_FILE, TARGET_CHANNEL_ID, EXCLUDED_BROKERS
+from utils.config_utils import (
+    load_account_mappings, load_config,
+    WATCH_FILE
 )
 from utils.utility_utils import send_large_message_chunks, get_last_stock_price
 from utils.excel_utils import add_stock_to_excel_log
@@ -21,7 +21,7 @@ from utils.excel_utils import add_stock_to_excel_log
 # Load configuration and paths from settings
 config = load_config()
 account_mapping = load_account_mappings
-EXCLUDED_BROKERS = config.get("excluded_brokers", {})
+
 
 # WatchList Manager
 class WatchListManager:

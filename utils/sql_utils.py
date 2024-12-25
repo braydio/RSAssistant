@@ -4,13 +4,13 @@ import sqlite3
 import uuid
 from datetime import datetime
 
-from utils.init import load_config, setup_logging
+from utils.config_utils import SQL_DATABASE_DB, load_config, setup_logging
 
 # Config and setup
 config = load_config()
 setup_logging()
 
-DB_FILE = config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
+DB_FILE = SQL_DATABASE_DB # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
 
 
@@ -411,3 +411,5 @@ def bot_query_table(table_name, args):
     filters = {arg.split("=")[0]: arg.split("=")[1] for arg in args if "=" in arg}
     limit = next((int(arg.split("=")[1]) for arg in args if arg.startswith("limit=")), None)
     return get_table_data(table_name, filters, limit)
+
+
