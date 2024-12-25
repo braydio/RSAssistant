@@ -113,19 +113,45 @@ def get_setting(key, default=None):
         logging.warning(f"Setting not found: {key}. Using default: {default}")
         return default
 
-def load_account_mappings(ACCOUNT_MAPPING_FILE):
+
+token = os.getenv("BOT_TOKEN")
+logging.info(f"Loaded BOT_TOKEN: {token}")
+# Pre-resolve paths for shared use
+config = load_config()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL"))
+DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL"))
+ACCOUNT_MAPPING_FILE = resolve_path(get_setting("paths.account_mapping"), create_if_missing=True)
+EXCEL_FILE_MAIN = resolve_path(get_setting("paths.excel_file"), create_if_missing=True)
+HOLDINGS_LOG_CSV = resolve_path(get_setting("paths.holdings_log"), create_if_missing=True)
+ORDERS_LOG_CSV = resolve_path(get_setting("paths.orders_log"), create_if_missing=True)
+SQL_DATABASE_DB = resolve_path(get_setting("paths.sql_db", "db/reverse_splits.db"), create_if_missing=True)
+ERROR_LOG_FILE = resolve_path(get_setting("paths.error_log", "db/reverse_splits.db"), create_if_missing=True)
+WATCH_FILE = resolve_path(get_setting("paths.watch_file"), create_if_missing=True)
+VERSION = get_setting("app_version", "0.0.0")
+MANUAL_ORDER_ENTRY_FILE = get_setting("paths.manual_orders", "manual_orders.txt")
+
+
+logging.info(f"Resolved EXCEL_FILE_MAIN_PATH: {EXCEL_FILE_MAIN}")
+logging.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
+logging.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
+logging.info(f"Resolved DATABASE_FILE: {SQL_DATABASE_DB}")
+logging.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
+logging.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
+
+def load_account_mappings(file=ACCOUNT_MAPPING_FILE):
     """Loads account mappings from the JSON file and ensures the data structure is valid."""
-    if not os.path.exists(ACCOUNT_MAPPING_FILE):
-        logging.error(f"Account mapping file {ACCOUNT_MAPPING_FILE} not found.")
+    if not os.path.exists(file):
+        logging.error(f"Account mapping file {file} not found.")
         return {}
 
     try:
-        with open(ACCOUNT_MAPPING_FILE, "r", encoding="utf-8") as file:
+        with open(file, "r", encoding="utf-8") as file:
             data = json.load(file)
 
             if not isinstance(data, dict):
                 logging.error(
-                    f"Invalid account mapping structure in {ACCOUNT_MAPPING_FILE}."
+                    f"Invalid account mapping structure in {file}."
                 )
                 return {}
 
@@ -144,7 +170,7 @@ def load_account_mappings(ACCOUNT_MAPPING_FILE):
             return data
 
     except json.JSONDecodeError as e:
-        logging.error(f"Error decoding JSON from {ACCOUNT_MAPPING_FILE}: {e}")
+        logging.error(f"Error decoding JSON from {file}: {e}")
         return {}
 
 def save_account_mappings(mappings):
@@ -170,32 +196,10 @@ def get_account_nickname(broker, group_number, account_number):
     group_accounts = broker_accounts.get(group_number_str, {})
     return group_accounts.get(account_number_str, account_number_str)
 
-token = os.getenv("BOT_TOKEN")
-logging.info(f"Loaded BOT_TOKEN: {token}")
-# Pre-resolve paths for shared use
-config = load_config()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL"))
-DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL"))
-ACCOUNT_MAPPING_FILE = resolve_path(get_setting("paths.account_mapping"), create_if_missing=True)
-EXCEL_FILE_MAIN = resolve_path(get_setting("paths.excel_file"), create_if_missing=True)
-HOLDINGS_LOG_CSV = resolve_path(get_setting("paths.holdings_log"), create_if_missing=True)
-ORDERS_LOG_CSV = resolve_path(get_setting("paths.orders_log"), create_if_missing=True)
-SQL_DATABASE_DB = resolve_path(get_setting("paths.sql_db", "db/reverse_splits.db"), create_if_missing=True)
-ERROR_LOG_FILE = resolve_path(get_setting("paths.error_log", "db/reverse_splits.db"), create_if_missing=True)
-WATCH_FILE = resolve_path(get_setting("paths.watch_file"), create_if_missing=True)
-VERSION = get_setting("app_version", "0.0.0")
-MANUAL_ORDER_ENTRY_FILE = get_setting("paths.manual_orders", "manual_orders.txt")
-ACCOUNT_MAPPING = load_account_mappings(ACCOUNT_MAPPING_FILE=ACCOUNT_MAPPING_FILE)
 
-
+ACCOUNT_MAPPING = load_account_mappings(file=ACCOUNT_MAPPING_FILE)
 logging.info(f"Resolved ACCOUNT_MAPPING_FILE: {ACCOUNT_MAPPING_FILE}")
-logging.info(f"Resolved EXCEL_FILE_MAIN_PATH: {EXCEL_FILE_MAIN}")
-logging.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
-logging.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
-logging.info(f"Resolved DATABASE_FILE: {SQL_DATABASE_DB}")
-logging.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
-logging.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
+
 
 ENABLE_CSV_LOGGING = config.get("general_settings", {}).get("enable_csv_logging", False)
 ENABLE_EXCEL_LOGGING = config.get("general_settings", {}).get("enable_excel_logging", False)

@@ -23,8 +23,8 @@ from utils.config_utils import (load_config,
     HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, SQL_DATABASE_DB, VERSION
 )
 # Webdriver imports
-from utils.rs_roundup import fetch_results
-from utils.webdrive_utils import StockSplitScraper
+from utils.Webdriver_FindFilings import fetch_results
+from utils.Webdriver_Scraper import StockSplitScraper
 
 from utils.excel_utils import (clear_account_mappings, index_account_details,
                                map_accounts_in_excel_log)
