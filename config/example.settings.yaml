@@ -1,0 +1,101 @@
+# INSTRUCTIONS FOR UPDATING SETTINGS
+
+# 1. Copy the settings block below, starting from "BEGIN COPY BLOCK" to "END COPY BLOCK".
+# 2. Paste this block into your EXISTING settings.yaml file, and overwrite ONLY the sections within the COPY BLOCK.
+# 3. Each field in this block is configurable per comments. Feel free to make changes to these settings after the script has been initialized with the default settings.
+# 4. IMPORTANT: Do NOT overwrite sections marked as "USER SPECIFIC SETTINGS" unless updating your personal IDs and account details.
+
+# -------------------------------------------------------------------
+# BEGIN COPY BLOCK
+# -------------------------------------------------------------------
+
+# General settings
+general_settings:
+  app_name:  'RSAssistant'
+  file_version: '2.0'
+# Paths for logs and other files - Paths can be adjusted based on your project directory structure, but likely do not need to be changed.
+paths:
+  account_mapping: ..\config\account_mapping.json
+  excel_file: ..\volumes\excel\ReverseSplitLog.xlsx
+  holdings_log: ..\volumes\logs\holdings_log.csv
+  orders_log: ..\volumes\logs\orders_log.csv
+  error_log: ..\volumes\logs\error_log.txt
+  error_order: DEPRECATED
+  sql_db: ..\volumes\db\reverse_splits.db
+  watch_file: ..\config\watch_list.json
+  manual_orders: ..volumes\logs\todiscord.txt
+  
+# Header settings for csv logs
+header_settings:
+  holdings_headers:
+  - Key
+  - Broker Name
+  - Broker Number
+  - Account Number
+  - Stock
+  - Quantity
+  - Price
+  - Position Value
+  - Account Total
+  - Timestamp
+  orders_headers:
+  - Broker Name
+  - Broker Number
+  - Account Number
+  - Order Type
+  - Stock
+  - Quantity
+  - Price
+  - Date
+  - Timestamp
+
+# Logging settings - Adjust logging levels and rotation settings.
+logging:
+  level: "INFO"                 # Logging level options: DEBUG, INFO, WARNING, ERROR
+  file: volumes/logs/rsassistant.log  # Log file location
+  max_size: 10MB                # Maximum log file size before rotation
+  backup_count: 2               # Number of old log files to retain (adjustable)
+
+# Runtime environment for development or production - Set to "production" for production
+environment:
+  mode: production
+
+# -------------------------------------------------------------------
+# END COPY BLOCK
+# -------------------------------------------------------------------
+
+# USER SPECIFIC SETTINGS -- DO NOT OVERWRITE ONCE SET UP:
+
+# Discord ID settings
+discord_ids:  # THESE ARE NOW SET IN .env FILE 
+  channel_id:
+  channel_id2: 
+  target_bot: 
+  my_id: 
+
+# Discord bot settings
+discord:
+  token:
+  prefix: ".."  # Command prefix for bot commands - feel free to change
+  intents:
+    message_content: true
+    guilds: true
+    members: true
+
+# Account Owners List - Customizable account ownership - set in Account Nicknames as per your Excel log > Account Details
+account_owners : 
+  1 : Braydio     # Example: Fidelity 1 xxxx1234 will map to Braydio in summary view
+  2 : Dre         # Example: Fidelity 2 xxxx5678 will map to Dre in summary view
+  3 : Lem         # Example: Fidelity 3 xxxx9012 will map to Lem in summary view
+
+# Brokers / Accounts to exclude from summary views - Adjust as needed
+excluded_brokers:
+  # Example formats:
+  # BrokerName: []          # Exclude no accounts
+  # BrokerName: null        # Exclude all accounts for this broker
+  # BrokerName:
+  #   accounts:
+  #     - "Account Nickname"
+  #   exclude_all: false     # Set to true to exclude all accounts for this broker
+
+# NOTE: Do NOT modify the "USER SPECIFIC SETTINGS" unless updating your personal IDs and account mappings.
