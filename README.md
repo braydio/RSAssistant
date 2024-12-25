@@ -95,7 +95,7 @@ Defines paths, logging levels, and Excel-related settings.
 
 ### Prerequisites
 
-- [auto-rsa bby NelsonDane](https://github.com/NelsonDane/auto-rsa) 
+- [auto-rsa by NelsonDane](https://github.com/NelsonDane/auto-rsa) 
 - Python 3.8 or newer
 - `pip` (Python package manager)
 - [Docker](https://www.docker.com/) (optional, for containerized deployments)
