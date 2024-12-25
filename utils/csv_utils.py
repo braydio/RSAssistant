@@ -124,7 +124,7 @@ def save_order_to_csv(order_data):
     # Saves order, deletes duplicates and stale entries
     try:
         ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
-        logging.info("Processing new order, checking for duplicates and stale entries.")
+        logging.info("Processing new order in csv_utils, checking for duplicates and stale entries.")
 
         # Add a current timestamp to the order data if not already set
         if "Timestamp" not in order_data or not order_data["Timestamp"]:
@@ -147,9 +147,13 @@ def save_order_to_csv(order_data):
 
         # Write updated orders back to the CSV (if enabled)
         write_orders_to_csv(updated_orders, ORDERS_LOG_CSV)
-        logging.info(f"Order saved to csv: {order_data} updating excel log.")
+        logging.info(f"Order saved to csv: {order_data}")
 
-        update_excel_log(order_data)
+        excel_log_updated = update_excel_log(order_data)
+        if excel_log_updated:
+            logging.info("Excel log updated successfully.")
+        else:
+            logging.warning("Order not saved to excel log, returning from csv_utils.")
 
     except Exception as e:
         logging.error(f"Error saving order to CSV: {e}")

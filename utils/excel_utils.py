@@ -604,7 +604,6 @@ def update_excel_log(
                     # Remove error logs on success
                     identifier = f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
                     remove_error_from_log(ERROR_LOG_FILE, identifier)
-                    remove_error_from_log(ERROR_ORDER_DETAILS_FILE, identifier)
                 else:
                     # Record the error if the stock is not found
                     error_message = (
@@ -650,10 +649,12 @@ def record_error_message(error_message, order_details, error_log_file=ERROR_LOG_
 
 
 def log_error_order_details(order_details):
+    print("Deprecating function called log_error_order_details in excel_utils -- returning")
+    return
     """Log detailed order information for manual tracking."""    
-    if not check_log_for_entry(ERROR_ORDER_DETAILS_FILE, order_details):
-        append_to_log(ERROR_ORDER_DETAILS_FILE, order_details + "\n")
-        logging.info(f"Order details logged to {ERROR_ORDER_DETAILS_FILE}")
+    # if not check_log_for_entry(ERROR_ORDER_DETAILS_FILE, order_details):
+    #     append_to_log(ERROR_ORDER_DETAILS_FILE, order_details + "\n")
+    #     logging.info(f"Order details logged to {ERROR_ORDER_DETAILS_FILE}")
 
 
 def remove_error_from_log(file_path, identifier):

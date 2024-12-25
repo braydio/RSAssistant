@@ -4,7 +4,8 @@
 !example.env
 
 # config / settings
-*settings.yaml
+*.yaml
+!example.settings.yaml
 *account_mapping.json
 *watch_list.json
 *todiscord.txt
@@ -14,7 +15,7 @@
 
 # Volumes
 *.xlsx
-!example-ReverseSplitLog.xlsx
+!example.ReverseSplitLog.xlsx
 *.csv
 *.log
 error_details.txt
