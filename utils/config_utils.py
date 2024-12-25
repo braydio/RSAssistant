@@ -5,21 +5,29 @@ import json
 from pathlib import Path
 import dotenv
 
+from utils.logging_setup import setup_logging
+
 # Paths
 ENV_PATH = './config/.env'
-DEFAULT_CONFIG_PATH = './config/settings.yaml'
+DEFAULT_CONFIG_PATH = 'config/settings.yaml'
 
 # Cache for loaded configuration
 _config_cache = None
 
 # Resolved Paths
+DISCORD_PRIMARY_CHANNEL = None
+DISCORD_PRIMARY_CHANNEL = None
 ACCOUNT_MAPPING_FILE = None
-EXCEL_FILE_ACTIVE = None
+EXCEL_FILE_MAIN = None
 HOLDINGS_LOG_CSV = None
 ORDERS_LOG_CSV = None
 SQL_DATABASE_DB = None
+WATCH_FILE = None
+VERSION = None
 
 
+setup_logging()
+'''
 def setup_logging():
     """
     Set up basic logging configuration.
@@ -32,6 +40,7 @@ def setup_logging():
             logging.FileHandler("application.log")  # Log to a file
         ]
     )
+'''
 
 def load_env(env_path=ENV_PATH):
     """
@@ -41,9 +50,12 @@ def load_env(env_path=ENV_PATH):
     if env_file.exists():
         from dotenv import load_dotenv
         load_dotenv(dotenv_path=env_file)
+        
         logging.info(f"Environment variables loaded from {env_file}")
     else:
         logging.warning(f".env file not found at {env_file}")
+
+load_env()
 
 def initialize_config(config_path=DEFAULT_CONFIG_PATH):
     """
@@ -101,23 +113,7 @@ def get_setting(key, default=None):
         logging.warning(f"Setting not found: {key}. Using default: {default}")
         return default
 
-# Pre-resolve paths for shared use
-config = load_config()
-ACCOUNT_MAPPING_FILE = resolve_path(get_setting("paths.account_mapping"), create_if_missing=True)
-EXCEL_FILE_ACTIVE = resolve_path(get_setting("paths.excel_main"), create_if_missing=True)
-HOLDINGS_LOG_CSV = resolve_path(get_setting("paths.holdings_log"), create_if_missing=True)
-ORDERS_LOG_CSV = resolve_path(get_setting("paths.orders_log"), create_if_missing=True)
-SQL_DATABASE_DB = resolve_path(get_setting("paths.database", "db/reverse_splits.db"), create_if_missing=True)
-
-logging.info(f"Resolved ACCOUNT_MAPPING_FILE: {ACCOUNT_MAPPING_FILE}")
-logging.info(f"Resolved EXCEL_FILE_MAIN_PATH: {EXCEL_FILE_ACTIVE}")
-logging.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
-logging.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
-logging.info(f"Resolved DATABASE_FILE: {SQL_DATABASE_DB}")
-
-# Account Mapping / Nicknames
-
-def load_account_mappings():
+def load_account_mappings(ACCOUNT_MAPPING_FILE):
     """Loads account mappings from the JSON file and ensures the data structure is valid."""
     if not os.path.exists(ACCOUNT_MAPPING_FILE):
         logging.error(f"Account mapping file {ACCOUNT_MAPPING_FILE} not found.")
@@ -151,19 +147,17 @@ def load_account_mappings():
         logging.error(f"Error decoding JSON from {ACCOUNT_MAPPING_FILE}: {e}")
         return {}
 
-
 def save_account_mappings(mappings):
     """Save the account mappings to the JSON file."""
     with open(ACCOUNT_MAPPING_FILE, "w", encoding="utf-8") as f:
         json.dump(mappings, f, indent=4)
-
 
 def get_account_nickname(broker, group_number, account_number):
     """
     Retrieves the account nickname from the account mapping,
     or returns the account number if the mapping is not found.
     """
-    account_mapping = load_account_mappings()
+    account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
 
     account_number_str = str(account_number)
     group_number_str = str(group_number)
@@ -175,3 +169,64 @@ def get_account_nickname(broker, group_number, account_number):
 
     group_accounts = broker_accounts.get(group_number_str, {})
     return group_accounts.get(account_number_str, account_number_str)
+
+token = os.getenv("BOT_TOKEN")
+logging.info(f"Loaded BOT_TOKEN: {token}")
+# Pre-resolve paths for shared use
+config = load_config()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL"))
+DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL"))
+ACCOUNT_MAPPING_FILE = resolve_path(get_setting("paths.account_mapping"), create_if_missing=True)
+EXCEL_FILE_MAIN = resolve_path(get_setting("paths.excel_file"), create_if_missing=True)
+HOLDINGS_LOG_CSV = resolve_path(get_setting("paths.holdings_log"), create_if_missing=True)
+ORDERS_LOG_CSV = resolve_path(get_setting("paths.orders_log"), create_if_missing=True)
+SQL_DATABASE_DB = resolve_path(get_setting("paths.sql_db", "db/reverse_splits.db"), create_if_missing=True)
+ERROR_LOG_FILE = resolve_path(get_setting("paths.error_log", "db/reverse_splits.db"), create_if_missing=True)
+WATCH_FILE = resolve_path(get_setting("paths.watch_file"), create_if_missing=True)
+VERSION = get_setting("app_version", "0.0.0")
+MANUAL_ORDER_ENTRY_FILE = get_setting("paths.manual_orders", "manual_orders.txt")
+ACCOUNT_MAPPING = load_account_mappings(ACCOUNT_MAPPING_FILE=ACCOUNT_MAPPING_FILE)
+
+
+logging.info(f"Resolved ACCOUNT_MAPPING_FILE: {ACCOUNT_MAPPING_FILE}")
+logging.info(f"Resolved EXCEL_FILE_MAIN_PATH: {EXCEL_FILE_MAIN}")
+logging.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
+logging.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
+logging.info(f"Resolved DATABASE_FILE: {SQL_DATABASE_DB}")
+logging.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
+logging.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
+
+ENABLE_CSV_LOGGING = config.get("general_settings", {}).get("enable_csv_logging", False)
+ENABLE_EXCEL_LOGGING = config.get("general_settings", {}).get("enable_excel_logging", False)
+ENABLE_SQL_LOGGING = config.get("general_settings", {}).get("enable_sql_logging", False)
+
+def csv_toggle(func):
+    """
+    Decorator to ensure CSV logging is enabled before executing the function.
+    """
+    def wrapper(*args, **kwargs):
+        if not ENABLE_CSV_LOGGING:
+            logging.warning(f"CSV logging is disabled. Skipping {func.__name__}.")
+            logging.error(f"Most core functionality of this script relies on CSV logging. Please enable it in the configuration.")
+            logging.info(f"Check the settings.yaml at {DEFAULT_CONFIG_PATH}")
+            return None  # Skip execution
+        return func(*args, **kwargs)
+    return wrapper
+
+def excel_toggle(func):
+    def wrapper(*args, **kwargs):
+        if not ENABLE_EXCEL_LOGGING:
+            logging.warning(f"Excel logging is disabled. Skipping {func.__name__}.")
+            return None
+        return func(*args, **kwargs)
+    return wrapper
+
+def sql_toggle(func):
+    def wrapper(*args, **kwargs):
+        if not ENABLE_SQL_LOGGING:
+            logging.warning(f"SQL logging is disabled. Skipping {func.__name__}.")
+            return None
+        return func(*args, **kwargs)
+    return wrapper
+

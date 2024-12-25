@@ -11,10 +11,10 @@ from discord import embeds
 # from RSAssistant import send_discord_alert
 from utils.utility_utils import get_last_stock_price
 from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
-from utils.init import (
+from utils.config_utils import (
     get_account_nickname,
-    load_account_mappings,
-    TARGET_CHANNEL_ID
+    ACCOUNT_MAPPING,
+    DISCORD_PRIMARY_CHANNEL
 )
 from utils.sql_utils import (
     get_db_connection,
@@ -22,6 +22,8 @@ from utils.sql_utils import (
     add_order,
     insert_holdings
     )
+
+account_mapping = ACCOUNT_MAPPING
 
 # Store incomplete orders
 incomplete_orders = {}
@@ -173,9 +175,27 @@ def handle_complete_order(match, broker_name, broker_number):
         # Normalize data
         broker_name, broker_number, action, quantity, stock, account_number = (
             normalize_order_data(
-                broker_name, broker_number, action, quantity, stock, account_number
-            )
-        )
+                broker_name, broker_number, action, quantity, stock, account_number))
+
+        price = get_last_stock_price(stock)
+        date = datetime.now().strftime("%Y-%m-%d")
+                # Prepare order data
+        order_data = {
+            "Broker Name": broker_name,
+            "Broker Number": broker_number,
+            "Account Number": account_number,
+            "Order Type": action.capitalize(),
+            "Stock": stock,
+            "Quantity": quantity,
+            "Price": price,
+            "Date": date,  
+        }
+        logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV")
+
+        logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV and database")
+        # Save the order data to CSV
+        handoff_order_data(order_data, broker_name, broker_number, account_number)
+
         logging.info(
             f"Normalized function handled for: {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
         )
@@ -270,7 +290,7 @@ def handle_incomplete_order(match, broker_name, broker_number):
         logging.info(
             f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {stock}"
         )
-        account_mapping = load_account_mappings()
+
         broker_accounts = account_mapping.get(broker_name, {}).get(str(broker_number))
         if broker_accounts:
             for account, nickname in broker_accounts.items():
@@ -404,20 +424,9 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
         "Date": date,
     }
 
-    logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV")
+    logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV and database.")
     # Save the order data to CSV
-    save_order_to_csv(order_data)
-
-    # Save the order data to the database
-    logging.info(f"Passing to database for {broker_name} {account_number}")
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        account_id = get_account_id(
-            cursor, broker_name, broker_number, account_number
-        )
-        order_data["Account ID"] = account_id
-        add_order(order_data)
-        logging.info(f"Order successfully saved to database for stock {stock}")
+    handoff_order_data(order_data, broker_name, broker_number, account_number)
 
 def handle_failed_order(match, broker_name, broker_number):
     """Handles failed orders by removing incomplete entries."""
@@ -436,7 +445,22 @@ def handle_failed_order(match, broker_name, broker_number):
     except Exception as e:
         logging.error(f"Error handling failed order: {e}")
 
+def handoff_order_data(order_data, broker_name, broker_number, account_number):
+    logging.info(f"Processed order data, passing to logs and database.")
+    # Save the order data to CSV
+    save_order_to_csv(order_data)
+    logging.info(f"Order successfully saved to CSV for stock {order_data['Stock']}")
+    # Save the order data to the database
 
+    logging.info(f"Passing to database for {broker_name} {account_number}")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        account_id = get_account_id(
+            cursor, broker_name, broker_number, account_number
+        )
+        order_data["Account ID"] = account_id
+        add_order(order_data)
+    logging.info(f"Completed order processing loop for {broker_name} {account_number}")
 
 # Chapt Parse Holdings
 def parse_embed_message(embed):
@@ -687,13 +711,14 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
     """
     try:
         # Assuming get_account_nickname is the existing function to retrieve the account nickname
+        logging.info(f"Getting account nickname for {broker_name} {group_number} {account_number}")
         return get_account_nickname(broker_name, group_number, account_number)
     except KeyError:
         # If the account is not found, return 'AccountNotMapped'
         return "Unmapped Account"
 
 # Chapt Alerts Message Logic
-async def send_negative_holdings(TARGET_CHANNEL_ID, quantity, stock, broker_name, broker_number, account_number):
+async def send_negative_holdings(DISCORD_SECONDARY_CHANNEL, quantity, stock, broker_name, broker_number, account_number):
     """
     Sends a negative holdings alert to a Discord channel.
 
@@ -707,9 +732,9 @@ async def send_negative_holdings(TARGET_CHANNEL_ID, quantity, stock, broker_name
     """
     try:
         # Fetch the target channel
-        channel = (TARGET_CHANNEL_ID)
+        channel = (DISCORD_SECONDARY_CHANNEL)
         if not channel:
-            logging.error(f"Channel ID {TARGET_CHANNEL_ID} not found. Cannot send alert.")
+            logging.error(f"Channel ID {DISCORD_SECONDARY_CHANNEL} not found. Cannot send alert.")
             return
 
         # Create the alert embed

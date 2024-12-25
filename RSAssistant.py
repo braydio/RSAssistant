@@ -17,13 +17,20 @@ from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
+from utils.config_utils import (load_config, 
+    BOT_TOKEN, EXCEL_FILE_MAIN, ACCOUNT_MAPPING, WATCH_FILE,
+    DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL,
+    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, SQL_DATABASE_DB, VERSION
+)
+# Webdriver imports
+from utils.rs_roundup import fetch_results
 from utils.webdrive_utils import StockSplitScraper
+
 from utils.excel_utils import (clear_account_mappings, index_account_details,
                                map_accounts_in_excel_log)
 from utils.parsing_utils import (parse_embed_message, alert_channel_message,
-                                 parse_manual_order_message,
                                  parse_order_message)
-from utils.sql_utils import get_db_connection, init_db
+from utils.sql_utils import get_db_connection, init_db, bot_query_table
 from utils.csv_utils import clear_holdings_log, send_top_holdings_embed
 from utils.utility_utils import (all_account_nicknames, all_brokers,
                                  generate_broker_summary_embed,
@@ -32,45 +39,34 @@ from utils.utility_utils import (all_account_nicknames, all_brokers,
 from utils.watch_utils import (list_watched_tickers,
                                periodic_check, send_reminder_message_embed,
                                stop_watching, watch_ratio, watch_ticker)
-from utils.init import (FILE_VERSION, APP_NAME, RUNTIME_ENVIRONMENT,
-                        ACCOUNT_MAPPING_FILE, HOLDINGS_LOG_CSV,
-                        EXCEL_FILE_MAIN_PATH, CONFIG_PATH, BOT_TOKEN,
-                        DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL,                      
-                        config, load_account_mappings, setup_logging)
 
-RUNTIME_UPPER = RUNTIME_ENVIRONMENT.capitalize()
-bot_info = (f'{APP_NAME} - v{FILE_VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
-
+bot_info = (f'RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
+runtime = "Development"
 # Load configuration and logging
-setup_logging(config)
+# setup_logging()
 init_db()
+config = load_config()
 
-account_mapping = load_account_mappings
-CONFIG_TOKEN = config["discord"]["token"]
-CONFIG_CHANNEL = config["discord_ids"]['channel_id']
-CONFIG_CHANNEL2 = config["discord_ids"]['channel_id2']
-
-
+CONFIG_TOKEN = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]["token"]
+CONFIG_CHANNEL_PRIMARY = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]['channel_id']
+CONFIG_CHANNEL_SECONDARY = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]['channel_id2']
 # Chapt Environment variables
-critical_env = "Terminating startup. Missing critical environment variable: "
-BOT_TOKEN = os.getenv("BOT_TOKEN", CONFIG_TOKEN)
-if not BOT_TOKEN:
-    logging.error(f"{critical_env} BOT_TOKEN")
-    sys.exit(f"{critical_env} BOT_TOKEN")
-TARGET_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", CONFIG_CHANNEL))
-ALERTS_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID2", CONFIG_CHANNEL2))
 
-logging.info(f"Target channel {TARGET_CHANNEL_ID}")
+TARGET_CHANNEL_ID = DISCORD_PRIMARY_CHANNEL
+ALERTS_CHANNEL_ID = DISCORD_SECONDARY_CHANNEL
+BOT_TOKEN = BOT_TOKEN
+logging.info(f"Environment Variables loaded from dotenv : BOT_TOKEN {BOT_TOKEN}, PRIMARY CHANNEL ID {DISCORD_PRIMARY_CHANNEL}, SECONDARY CHANNEL ID {DISCORD_SECONDARY_CHANNEL}")
+
+
 # Set up bot intents
 intents = discord.Intents.default()
-intents.message_content = config["discord"]["intents"]["message_content"]
-intents.guilds = config["discord"]["intents"]["guilds"]
-intents.members = config["discord"]["intents"]["members"]
-
+intents.message_content = True
+intents.guilds = True
+intents.members = True
 
 # Initialize bot
 bot = commands.Bot(
-    command_prefix=config["discord"]["prefix"], case_insensitive=True, intents=intents
+    command_prefix="..", case_insensitive=True, intents=intents
 )
 
 global periodic_task, reminder_scheduler
@@ -80,19 +76,18 @@ async def on_ready():
     """Triggered when the bot is ready."""
     
     await asyncio.sleep(2)
-    logging.info(f"{APP_NAME} by @braydio - GitHub: https://github.com/braydio/RSAssistant")
-    logging.info(f"Version {FILE_VERSION} | Runtime Environment: {RUNTIME_UPPER}")
+    logging.info(f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant")
+    logging.info(f"Version {VERSION} | Runtime Environment: Production")
     await asyncio.sleep(3)
     channel = bot.get_channel(TARGET_CHANNEL_ID)
     
-    account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_MAIN_PATH}`\n\nThen run: `..loadmap` and `..loadlog`."
+    account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_MAIN}`\n\nThen run: `..loadmap` and `..loadlog`."
     
     try:
-        with open(ACCOUNT_MAPPING_FILE, "r") as file:
-            account_mappings = json.load(file)
+        ready_mapped = ACCOUNT_MAPPING
         ready_message = (
             account_setup_message
-            if not account_mappings
+            if not ready_mapped
             else "...watching for order activity...\n(✪‿✪)"
         )
     except (FileNotFoundError, json.JSONDecodeError):
@@ -103,7 +98,7 @@ async def on_ready():
     else:
         logging.warning(f"Target Channel not found - ID: {TARGET_CHANNEL_ID} on startup.")
 
-    logging.info(f"Initializing Application in {RUNTIME_ENVIRONMENT} environment.")
+    logging.info(f"Initializing Application in {runtime} environment.")
     logging.info(f"{bot.user} has connected to Discord!")
 
     # Start periodic check task if not already running
@@ -123,18 +118,6 @@ async def on_ready():
     else:
         logging.info("Reminder scheduler already running.")
     category = "Startup and Shutdown"
-
-@bot.command(name="version", help="Displays the current app version.")
-async def version(ctx):
-    embed_version = discord.Embed(
-        color=discord.Color.green()
-        )
-    embed_version.add_field(
-        name=f"{APP_NAME} - Version Details: ",
-        value=bot_info
-    )
-    await ctx.send(embed=embed_version)
-    # await ctx.send(f"{APP_NAME} - Version: {FILE_VERSION}")
 
 @bot.command(name="restart")
 async def restart(ctx):
@@ -159,7 +142,8 @@ async def on_message(message):
     if message.channel.id == TARGET_CHANNEL_ID:
 
         if message.content.lower().startswith("manual"):
-            parse_manual_order_message(message.content)
+            logging.warning(f"Manual order detected: {message.content}")
+            # manual_order(message.content)
         elif message.embeds:
             parse_embed_message(message.embeds[0])
         else:
@@ -190,10 +174,6 @@ async def send_buy(ctx):
     # "!rsa buy 1 slxn chase"
     await ctx.send(order_details)
 
-@bot.command(name="websearch", help="Surfin' the web!")
-async def splits_search(ctx, mode: str, ticker: str = None):
-    scraper = StockSplitScraper()
-    await scraper.run(ctx, mode, ticker)
 
 @bot.command(name="reminder", help="Shows daily reminder")
 async def show_reminder(ctx):
@@ -260,8 +240,6 @@ async def top_holdings_command(ctx, range: int = 3):
 
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
-
-
 
 @bot.command(name="watch",
     help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'",
@@ -357,51 +335,118 @@ async def clear_holdings(ctx):
     success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
     await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
-@bot.command(name="updateconfig", help="Dev tool to get or update file version.")
-async def update_version(ctx, version: str = None):
+
+@bot.command(
+    name="websearch",
+    help=(
+        "Surfin' the Web!\n\n"
+        "**Arguments:**\n"
+        "`mode` (required): The mode of operation. Choose from:\n"
+        "  - `search <ticker>`: Search for splits for a specific ticker.\n"
+        "  - `report`: Generate a weekly report of stock splits.\n"
+        "  - `custom <start_date> <end_date>`: Fetch splits for a custom date range (YYYY-MM-DD).\n"
+        "`args` (optional): Additional arguments depending on the mode."
+    ),
+    brief="Search stock splits",
+    category="Web Search"
+)
+async def websearch(ctx, mode: str, *args):
     """
-    Gets or updates the file version in the configuration.
-    
+    Handles web search commands for stock splits.
+
     Args:
-        ctx: Discord context.
-        version (str): Optional. If provided, updates the file version. If not, retrieves the current file version.
+        ctx (commands.Context): The context of the command.
+        mode (str): The mode of operation ('search', 'report', 'custom').
+        args (tuple): Additional arguments for the selected mode.
     """
-    try:
-        if version:
-            # Update the file version if a new version is provided
-            success = update_file_version(config_path=CONFIG_PATH, version=version)
-            if success:
-                await ctx.send(f"Configuration updated successfully to version {version}.")
-            else:
-                await ctx.send(f"Failed to update configuration.")
+    scraper = StockSplitScraper()
+
+    if mode == "search" and args:
+        ticker = args[0]
+        await scraper.run(ctx, mode="search_ticker", ticker=ticker)
+    elif mode == "report":
+        await scraper.run(ctx, mode="weekly_report")
+    elif mode == "custom" and len(args) == 2:
+        start_date, end_date = args
+        await scraper.run(ctx, mode="custom_report", custom_dates=(start_date, end_date))
+    await ctx.send(
+        "Invalid usage. Try one of the following:\n"
+        "`..websearch search <ticker>`\n"
+        "`..websearch report`\n"
+        "`..websearch custom <start_date> <end_date>`"
+    )
+
+
+@bot.command(
+    name="rsasearch",
+    help=(
+        "Fetch recent filings related to reverse stock splits.\n\n"
+        "**Optional Arguments:**\n"
+        "- `excerpt`: Include excerpts from filings that match the search terms.\n"
+        "- `summary`: Provide a summary of the results instead of a detailed list."
+    )
+)
+async def rs_roundup(ctx, *args):
+    include_excerpt = "excerpt" in args
+    summary = "summary" in args
+
+    await ctx.send("Fetching filings, please wait...")
+    results = fetch_results(include_excerpt=include_excerpt)
+
+    if isinstance(results, str):  # Check for error message
+        await ctx.send(results)
+    elif results:
+        if summary:
+            message = (
+                f"**Summary**:\n"
+                f"Total Results: {len(results)}\n"
+                f"Forms: {', '.join(set(r['form_type'] for r in results))}\n"
+                f"Companies: {', '.join(set(r['company_name'] for r in results))}\n"
+            )
+            await ctx.send(message)
         else:
-            # Fetch the current file version if no version is provided
-            file_version = get_file_version(config_path=CONFIG_PATH)
-            if file_version:
-                await ctx.send(f"Current file version: {file_version}")
-            else:
-                await ctx.send(f"Failed to fetch the current file version.")
+            for result in results:
+                message = (
+                    f"**Company**: {result['company_name']}\n"
+                    f"**Form Type**: {result['form_type']}\n"
+                    f"**Description**: {result['description']}\n"
+                    f"**File Date**: {result['file_date']}\n"
+                )
+                if include_excerpt:
+                    message += f"**Excerpt**: {result['excerpt']}\n"
+                await ctx.send(message)
+    else:
+        await ctx.send("No relevant filings found.")
+
+
+@bot.command(
+    name="sql",
+    help=(
+        "Query a table from the database.\n\n"
+        "**Arguments:**\n"
+        "- `table`: Name of the table to query (e.g., Orders, Holdings).\n"
+        "- `filters`: Optional key=value pairs for filtering (e.g., ticker=AAPL).\n"
+        "- `limit`: Optional row limit (e.g., limit=5)."
+    ),
+)
+async def query_table(ctx, table: str, *args):
+    try:
+        results = bot_query_table(table, list(args))
+        if not results:
+            await ctx.send(f"No results found for table `{table}` with the provided filters.")
+            return
+
+        # Send results as a message
+        response = ""
+        for row in results:
+            response += "\n".join([f"{key}: {value}" for key, value in row.items()]) + "\n\n"
+        
+        # Send response (Discord limits messages to 2000 characters)
+        for chunk in [response[i:i+2000] for i in range(0, len(response), 2000)]:
+            await ctx.send(chunk)
     except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
-
-@bot.command(name="shutdown", help="Shuts down the bot.")
-async def shutdown(ctx):
-    await ctx.send("no you")
-    logging.info("Shutdown from main. Deactivating.")
-    shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
-
-# Graceful shutdown handler
-def shutdown_handler(signal_received, frame):
-    logging.info("RSAssistant - shutting down...")
-    global periodic_check, reminder_scheduler
-    if periodic_check and not periodic_check.done():
-        periodic_check.cancel()
-    if reminder_scheduler:
-        reminder_scheduler.shutdown()
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, shutdown_handler)
-signal.signal(signal.SIGTERM, shutdown_handler)
+        await ctx.send(f"Error querying table `{table}`: {e}")
+        
 
 async def send_negative_holdings(quantity, stock, alert_type, broker_name, broker_number, account_number):
     """
@@ -445,6 +490,32 @@ async def send_negative_holdings(quantity, stock, alert_type, broker_name, broke
         logging.error(f"Error sending negative holdings alert: {e}")
 
 
+@bot.command(
+    name="shutdown",
+    help="Gracefully shuts down the bot.",
+    brief="Stop the bot",
+    category="Admin"
+    )
+async def shutdown(ctx):
+    await ctx.send("no you")
+    logging.info("Shutdown from main. Deactivating.")
+    shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
+
+# Graceful shutdown handler
+def shutdown_handler(signal_received, frame):
+    logging.info("RSAssistant - shutting down...")
+    global periodic_check, reminder_scheduler
+    if periodic_check and not periodic_check.done():
+        periodic_check.cancel()
+    if reminder_scheduler:
+        reminder_scheduler.shutdown()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
+
+
+
 # Start the bot with the token from the .env
 if __name__ == "__main__":
-    bot.run(BOT_TOKEN)
+    bot.run(BOT_TOKEN)  

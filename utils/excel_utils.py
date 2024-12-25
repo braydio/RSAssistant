@@ -10,39 +10,35 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 # Import configuration and functions from init.py
-from utils.init import (config,
+from utils.config_utils import (HOLDINGS_LOG_CSV, ACCOUNT_MAPPING_FILE,
+                        ERROR_LOG_FILE, EXCEL_FILE_MAIN, ACCOUNT_MAPPING,
                         get_account_nickname, load_account_mappings,
-                        load_config, setup_logging, today, tomorrow)
+                        load_config, setup_logging)
 
-config = load_config()
-
-EXCEL_FILE_DIRECTORY = config['paths']['excel_directory']
-EXCEL_FILE_NAME = config['paths']['excel_file_name']
-BASE_EXCEL_FILE = config['paths']['base_excel_file']
-HOLDINGS_LOG_CSV = config['paths']['holdings_log']
-ACCOUNT_MAPPING = config['paths']['account_mapping']
-ERROR_LOG_FILE = config['paths']['error_log']
-ERROR_ORDER_DETAILS_FILE = config['paths']['error_order']
+EXCEL_FILE_DIRECTORY = './volumes/excel/'
+EXCEL_FILE_NAME = 'ReverseSplitLog'
+BASE_EXCEL_FILE = 'ReverseSplitLog.xlsx'
 
 # Load Excel log settings
-stock_row = config["excel_log_settings"]["stock_row"]
-date_row = config["excel_log_settings"]["date_row"]
-ratio_row = config["excel_log_settings"]["ratio_row"]
-order_row = config["excel_log_settings"]["order_row"]
-account_start_row = config["excel_log_settings"]["account_start_row"]
-account_start_column = config["excel_log_settings"]["account_start_column"]
-days_keep_backup = config["excel_log_settings"]["days_keep_backup"]
+stock_row = 1
+date_row = 1
+ratio_row = 2
+order_row = 3
+account_start_row = 4
+account_start_column = 1
+days_keep_backup = 2   
 
-setup_logging(config)
+
+# setup_logging()
+
+today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
+tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
 
 def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
     """
     Returns the path of the base Excel file (without date).
     If today's backup or tomorrow's backup doesn't exist, it creates them from the base file or today's file.
     """
-    today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
-
     # Logging: Log directory and filename values
     logging.debug(f"directory={directory}, filename={filename}")
 
@@ -135,7 +131,7 @@ EXCEL_FILE_LIVE = load_excel_workbook(EXCEL_FILE_PATH)
 # -- Update Account Mappings
 
 async def index_account_details(
-    ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING
+    ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING_FILE
 ):
     """Index account details from an Excel file, update account mappings in JSON, and notify about changes."""
 
@@ -151,7 +147,7 @@ async def index_account_details(
         return
 
     # Load the existing account mappings using the function from config_utils
-    account_mappings = load_account_mappings()
+    account_mappings = ACCOUNT_MAPPING
 
     # Keep track of changes
     changes = []
@@ -173,7 +169,7 @@ async def index_account_details(
                     broker_name,
                     group_number,
                     account_number,
-                    mapping_file=ACCOUNT_MAPPING,
+                    mapping_file=ACCOUNT_MAPPING_FILE,
                 )
             if (
                 not broker_name
@@ -236,7 +232,7 @@ async def index_account_details(
 
 
 async def map_accounts_in_excel_log(
-    ctx, filename=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING
+    ctx, filename=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING_FILE
 ):
     """Update the Reverse Split Log sheet by inserting new rows, copying data and formatting, and deleting original rows."""
 
@@ -351,7 +347,7 @@ async def map_accounts_in_excel_log(
         await ctx.send(f"Error saving Excel file: {e}")
 
 
-async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
+async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING_FILE):
     """Clear the account mappings JSON file and notify the user."""
 
     try:
@@ -403,7 +399,7 @@ def generate_account_nickname(
 
     # Load current account mappings from JSON file
     try:
-        with open(ACCOUNT_MAPPING, "r") as f:
+        with open(ACCOUNT_MAPPING_FILE, "r") as f:
             account_mappings = json.load(f)
     except FileNotFoundError:
         logging.info(f"")
@@ -534,7 +530,7 @@ def find_last_filled_column(ws, row):
 
 
 def update_excel_log(
-    order_data, order_type=None, filename=BASE_EXCEL_FILE, config=config
+    order_data, order_type=None, filename=BASE_EXCEL_FILE
 ):
     """Update the Excel log with buy or sell orders, handling single or multiple orders."""
     logging.info("Updating excel log.")
@@ -685,7 +681,7 @@ def remove_error_from_log(file_path, identifier):
 def delete_stale_backups(
     directory=EXCEL_FILE_DIRECTORY,
     archive_folder="archive",
-    days_to_keep=days_keep_backup,
+    days_to_keep=2,
 ):
     """Delete backup files older than the specified number of days."""
     now = datetime.now()
