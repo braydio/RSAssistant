@@ -43,4 +43,4 @@ done
 
 # Start the main script
 echo "Starting RSAssistant script..."
-exec python /app/src/RSAssistant.py
+exec python /app/RSAssistant.py

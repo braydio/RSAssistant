@@ -13,17 +13,6 @@
 general_settings:
   app_name:  'RSAssistant'
   file_version: '2.0'
-# Paths for logs and other files - Paths can be adjusted based on your project directory structure, but likely do not need to be changed.
-paths:
-  account_mapping: ..\config\account_mapping.json
-  excel_file: ..\volumes\excel\ReverseSplitLog.xlsx
-  holdings_log: ..\volumes\logs\holdings_log.csv
-  orders_log: ..\volumes\logs\orders_log.csv
-  error_log: ..\volumes\logs\error_log.txt
-  error_order: DEPRECATED
-  sql_db: ..\volumes\db\reverse_splits.db
-  watch_file: ..\config\watch_list.json
-  manual_orders: ..volumes\logs\todiscord.txt
   
 # Header settings for csv logs
 header_settings:

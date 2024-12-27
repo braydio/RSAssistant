@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 # Third-party imports
-import discord
+import discord 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
@@ -18,7 +18,7 @@ from discord.ext import commands
 
 # Local utility imports
 from utils.config_utils import (load_config, 
-    BOT_TOKEN, EXCEL_FILE_MAIN, ACCOUNT_MAPPING, WATCH_FILE,
+    DISCORD_TOKEN, EXCEL_FILE_MAIN, ACCOUNT_MAPPING, WATCH_FILE,
     DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL,
     HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, SQL_DATABASE_DB, VERSION
 )
@@ -41,20 +41,18 @@ from utils.watch_utils import (list_watched_tickers,
                                stop_watching, watch_ratio, watch_ticker)
 
 bot_info = (f'RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
-runtime = "Development"
-# Load configuration and logging
-# setup_logging()
+
 init_db()
 config = load_config()
 
 CONFIG_TOKEN = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]["token"]
-CONFIG_CHANNEL_PRIMARY = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]['channel_id']
-CONFIG_CHANNEL_SECONDARY = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]['channel_id2']
+CONFIG_CHANNEL_PRIMARY = "ERROR : Cannot locate critical environment variable  : DISCORD PRIMARY CHANNEL" # config["discord"]['channel_id']
+CONFIG_CHANNEL_SECONDARY = "ERROR : Cannot locate critical environment variable  : DISCORD SECONDARY CHANNEL" # config["discord"]['channel_id2']
 # Chapt Environment variables
 
 TARGET_CHANNEL_ID = DISCORD_PRIMARY_CHANNEL
 ALERTS_CHANNEL_ID = DISCORD_SECONDARY_CHANNEL
-BOT_TOKEN = BOT_TOKEN
+BOT_TOKEN = DISCORD_TOKEN
 logging.info(f"Environment Variables loaded from dotenv : BOT_TOKEN {BOT_TOKEN}, PRIMARY CHANNEL ID {DISCORD_PRIMARY_CHANNEL}, SECONDARY CHANNEL ID {DISCORD_SECONDARY_CHANNEL}")
 
 

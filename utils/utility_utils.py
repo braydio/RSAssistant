@@ -13,7 +13,7 @@ import yfinance as yf
 
 from utils.config_utils import (
     load_config, get_account_nickname, load_account_mappings,
-    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, MANUAL_ORDER_ENTRY_FILE, ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE
+    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE
 )
 
 # Load configuration and holdings data
@@ -697,7 +697,7 @@ def get_fennel_account_number(account_str):
 
 
 # Function to print lines from a file to Discord
-async def print_to_discord(ctx, file_path=MANUAL_ORDER_ENTRY_FILE, delay=1):
+async def print_to_discord(ctx, file_path='todiscord.txt', delay=1):
     """
     Reads a file line by line and sends each line as a message to Discord.
     Args:

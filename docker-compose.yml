@@ -1,0 +1,35 @@
+services:
+  rsassistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: RSAssistant
+    env_file:
+      - ./config/.env  # assuming .env is in the root directory
+    volumes:
+      - ./volumes/logs:/app/volumes/logs   # Persist logs
+      - ./volumes/db:/app/volumes/db       # Persist database
+      - ./volumes/excel:/app/volumes/excel # Persist Excel
+      - ./config:/app/config               # Shared config files
+    environment:
+      ENVIRONMENT: production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  db:
+    image: postgres:14
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: reverse_splits
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  db_data:
