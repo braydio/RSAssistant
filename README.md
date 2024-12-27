@@ -1,19 +1,7 @@
 
 # RSAssistant
 
-RSAssistant is a Python-powered Discord bot designed to assist with stock market operations, particularly tracking reverse splits, account management, and logging activity. Built with modularity and scalability in mind, it integrates with Discord for real-time monitoring and notifications. RSAssistant is designed to work with [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md), which is essential for order execution and holdings retrieval.
-
-## Table of Contents
-
-- [Features](#features)
-- [Directory Structure](#directory-structure)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Commands](#commands)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [Dependencies](#dependencies)
-- [License](#license)
+RSAssistant is a Python-powered Discord bot designed to be run adjacent to [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md). It aids in reverse-split arbitrage trades using auto-rsa, leveraging functoinality for tracking reverse splits with quick summary views for holdings and order activity. Make sure to set up and run the auto-rsa bot as described in its repository before using RSAssistant.
 
 ---
 
@@ -21,54 +9,97 @@ RSAssistant is a Python-powered Discord bot designed to assist with stock market
 
 - **Discord Integration**:
   - Real-time notifications for split activity and account updates.
-  - Automates reminders and periodic tasks.
+  - Automated periodic reminders.
+  - Support for slash commands and text-based commands.
+
 - **Reverse Split Tracking**:
-  - Watch and unwatch tickers with custom split dates and ratios.
-  - Summarize ticker activity by broker or account.
-- **Account Management**:
-  - Map accounts across brokers for consolidated views.
-  - Maintain detailed account mapping logs in JSON or Excel formats.
-- **Logging and Archiving**:
-  - Maintain detailed logs for orders, holdings, and errors.
-  - Automatic archiving and backup of critical data.
+  - Add, track, and remove tickers with associated split dates and ratios.
+  - Advanced commands to query brokers and holdings by ticker or summary.
+
+- **Account and Order Management**:
+  - Map accounts from Excel sheets.
+  - Sync and update mappings to Excel logs.
+  - Query accounts and orders via SQL-based commands.
+
+- **Web Search Integration**:
+  - Search stock splits by ticker, date range, or generate weekly reports.
+  - Fetch and display reverse split filings from SEC sources.
+
+- **Logging and Alerts**:
+  - Notify users of negative holdings or abnormal activity.
+  - Comprehensive logging for errors, commands, and bot activity.
+
+- **Docker Support**:
+  - Deploy seamlessly using Docker for containerized environments.
 
 ---
 
-## Directory Structure
+## Commands Overview
 
-```plaintext
-RSAssistant/
-├── config/               # Core configuration files
-│   ├── .env              # Environment variables
-│   ├── settings.yaml     # Main configuration
-│   ├── example.env       # Example environment variables
-│   └── example-settings.yaml  # Example YAML configuration
-├── deploy/               # Deployment configurations
-│   ├── Dockerfile        # Docker build file
-│   ├── docker-compose.yml
-│   └── entrypoint.sh     # Entrypoint script
-├── dev/                  # Development-specific files
-│   ├── RSAssistant.py    # Main development script
-│   ├── utils/            # Utility modules
-│   └── volumes/          # Local development storage
-├── src/                  # Production-ready code
-│   ├── RSAssistant.py    # Main production script
-│   ├── utils/            # Utility modules
-│   └── volumes/          # Persistent storage
-├── tests/                # Test cases and test resources
-└── README.md             # This README file
-```
+| Command               | Description                                                                      |
+|-----------------------|----------------------------------------------------------------------------------|
+| `..watch`             | Add a ticker to the watchlist with split date and ratio.                        |
+| `..watchlist`         | List all currently watched tickers.                                             |
+| `..watched`           | Remove a ticker from the watchlist.                                             |
+| `..loadmap`           | Map accounts from the Excel sheet.                                              |
+| `..loadlog`           | Sync mapped accounts to the Excel log.                                          |
+| `..brokerlist`        | List all active brokers, optionally filter by broker name.                      |
+| `..brokerwith`        | Show broker-level summary for a specific ticker.                                |
+| `..grouplist`         | Show summary of accounts by owner group.                                        |
+| `..top`               | Display the top holdings by dollar value, grouped by broker.                    |
+| `..rsasearch`         | Fetch reverse split filings, with optional excerpts or summaries.               |
+| `..websearch`         | Search splits by ticker, date range, or generate weekly reports.                |
+| `..clearholdings`     | Clear all entries in the holdings log.                                          |
+| `..clearmap`          | Clear all account mappings from the configuration.                              |
+| `..restart`           | Restart the bot (under development).                                            |
+| `..shutdown`          | Gracefully shut down the bot.                                                   |
+
+---
+
+## Web Search Integration
+
+RSAssistant integrates with web scraping utilities to fetch and display reverse stock split data. Supported modes:
+
+1. **Search by Ticker**:
+   ```bash
+   ..websearch search <ticker>
+   ```
+
+2. **Weekly Report**:
+   ```bash
+   ..websearch report
+   ```
+
+3. **Custom Date Range**:
+   ```bash
+   ..websearch custom <start_date> <end_date>
+   ```
+
+---
+
+## Configuration
+
+### Environment Variables (`.env`)
+
+- `BOT_TOKEN`: Discord bot token.
+- `DISCORD_PRIMARY_CHANNEL`: Channel ID for main operations.
+- `DISCORD_SECONDARY_CHANNEL`: Channel ID for alerts.
+
+### YAML Configuration (`settings.yaml`)
+
+Defines paths, logging levels, and Excel-related settings.
 
 ---
 
 ## Installation
 
-### Requirements
+### Prerequisites
 
+- [auto-rsa by NelsonDane](https://github.com/NelsonDane/auto-rsa) 
 - Python 3.8 or newer
 - `pip` (Python package manager)
 - [Docker](https://www.docker.com/) (optional, for containerized deployments)
-- [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md)
+
 
 ### Steps
 
@@ -78,130 +109,50 @@ RSAssistant/
    cd RSAssistant
    ```
 
-2. **Set Up Virtual Environment**:
+2. **Install Dependencies**:
    ```bash
-   python -m venv venv
-   source venv/bin/activate   # On Windows: venv\Scriptsctivate
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
    ```
 
-3. **Install Dependencies**:
-   ```bash
-   pip install -r deploy/requirements.txt
-   ```
+3. **Set Up Configuration**:
+   - Copy `.env.example` to `.env` and set your variables.
+   - Adjust `config/settings.yaml` to suit your environment.
 
-4. **Configure Environment Variables**:
-   Copy the example `.env` file and customize it.
-   ```bash
-   cp config/example.env config/.env
-   ```
-
-5. **Run the Bot**:
+4. **Run the Bot**:
    ```bash
    python src/RSAssistant.py
    ```
 
 ### Docker Deployment
 
-For containerized deployment, use Docker:
-1. Build the image:
+1. Build and run the container:
    ```bash
-   docker build -t rsassistant .
-   ```
-2. Run the container:
-   ```bash
-   docker-compose up -d
+   docker-compose up --build -d
    ```
 
----
-
-## Configuration
-
-### Environment Variables (`.env`)
-
-- `DISCORD_TOKEN`: Your Discord bot token.
-- `DISCORD_CHANNEL_ID`: The channel ID where the bot will operate.
-- `ENVIRONMENT`: `production`
-
-### YAML Configuration (`settings.yaml`)
-
-- **discord**: Bot prefix and Discord intents.
-- **paths**: Define file locations for logs, backups, and mappings.
-- **excel_settings**: Customizable Excel log handling.
-
-#### Example:
-```yaml
-discord:
-  prefix: ".."
-  intents:
-    message_content: true
-    guilds: true
-
-paths:
-  holdings_log: "volumes/logs/holdings_log.csv"
-  excel_directory: "volumes/excel/"
-```
+2. Stop the container:
+   ```bash
+   docker-compose down
+   ```
 
 ---
 
-## Commands
+## Logging and Alerts
 
-| Command       | Description                                                |
-|---------------|------------------------------------------------------------|
-| `..watch`      | Add a ticker to the watchlist with split details.          |
-| `..watchlist`  | List all watched tickers.                                  |
-| `..watched`    | Remove a ticker from the watchlist.                        |
-| `..loadmap`    | Load account mappings from an Excel file.                  |
-| `..loadlog`    | Sync account mappings to the Excel log.                    |
-| `..brokerlist` | List all currently active brokers.                         |
-| `..restart`    | Restart the bot process.                                   |
-
-For a full list of commands, see the `..help` command in Discord.
-
----
-
-## Usage
-
-### Watchlist Management
-
-- Add a ticker with a split date and ratio:
-  ```bash
-  ..watch <ticker> <split_date> <split_ratio>
-  ```
-  Example:
-  ```
-  ..watch EFSH 11/8 1-10
-  ```
-
-- View all watched tickers:
-  ```
-  ..watchlist
-  ```
-
-- Remove a ticker:
-  ```
-  ..watched <ticker>
-  ```
-
-### Account Management
-
-- Map accounts:
-  ```
-  ..loadmap
-  ```
-- Sync mappings to the Excel log:
-  ```
-  ..loadlog
-  ```
+- Log files are stored in the `volumes/` directory and persist across docker runs and CLI runs.
+- Alerts and reminders are sent to the specified Discord channels.
 
 ---
 
 ## Contributing
 
-Contributions are welcome.. Please follow these steps:
+Contributions are welcome. Please follow these steps:
 
 1. Fork the repository.
-2. Create a new feature branch.
-3. Write and test your code.
+2. Create a feature branch.
+3. Write and test your changes.
 4. Submit a pull request.
 
 ---
@@ -212,8 +163,8 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
+
 ## Dependencies
 
-This project relies on [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) for key stock-related data processing and order flow management. Make sure to set up and run the auto-rsa bot as described in its repository before using RSAssistant.
-
+This project relies on [auto-rsa by Nelson Dane](https://github.com/NelsonDane/auto-rsa/blob/main/guides/discordBot.md) for key stock-related data processing and order flow management
 For more details, visit the [auto-rsa repository](https://github.com/NelsonDane/auto-rsa/blob/main/README.md)
