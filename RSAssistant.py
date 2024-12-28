@@ -96,7 +96,7 @@ async def on_ready():
     else:
         logging.warning(f"Target Channel not found - ID: {TARGET_CHANNEL_ID} on startup.")
 
-    logging.info(f"Initializing Application in {runtime} environment.")
+    logging.info(f"Initializing Application in Production environment.")
     logging.info(f"{bot.user} has connected to Discord!")
 
     # Start periodic check task if not already running

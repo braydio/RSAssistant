@@ -556,9 +556,9 @@ def all_brokers_summary_by_owner(specific_broker=None):
 
             account_number = row["Account Number"]
             if (broker_name, account_number) in processed_accounts:
-                print(
-                    f"Skipping duplicate entry for {broker_name}, Account Number: {account_number}"
-                )
+                # print(
+                #     f"Skipping duplicate entry for {broker_name}, Account Number: {account_number}"
+                # )
                 continue  # Skip if this account has already been processed
 
             total_str = row["Account Total"].strip()
@@ -574,9 +574,9 @@ def all_brokers_summary_by_owner(specific_broker=None):
             processed_accounts.add((broker_name, account_number))
 
             # Debug: Print account lookup details
-            print(
-                f"\nProcessing Broker: {broker_name}, Account Number: {account_number}"
-            )
+            # print(
+            #    f"\nProcessing Broker: {broker_name}, Account Number: {account_number}"
+            # )
 
             nickname = ""
             if broker_name in ACCOUNT_MAPPING:
@@ -603,10 +603,10 @@ def all_brokers_summary_by_owner(specific_broker=None):
                     matched = True
                     print(f"Match found! Indicator: '{indicator}' -> Owner: {owner}")
                     break
-                else:
-                    print(
-                        f"No match for indicator '{indicator}' in nickname '{nickname}'."
-                    )
+                # else:
+                    # print(
+                    #    f"No match for indicator '{indicator}' in nickname '{nickname}'."
+                    # )
 
             # Initialize broker in summary if it doesn't exist
             if broker_name not in brokers_summary:
@@ -645,13 +645,19 @@ def generate_broker_summary_embed(ctx, specific_broker=None):
     embed = discord.Embed(title=embed_title, color=discord.Color.blue())
 
     for broker, owner_totals in brokers_summary.items():
-        account_count = len(ACCOUNT_MAPPING.get(broker, {}))
-        broker_total = sum(
-            owner_totals.values()
-        )  # Calculate the total holdings for the broker
+        # Calculate the total number of accounts for the broker
+        account_owner_count = sum(
+            len(accounts)
+            for broker_number, accounts in ACCOUNT_MAPPING.get(broker, {}).items()
+        )
+
+        broker_total = sum(owner_totals.values())  # Calculate the total holdings for the broker
 
         # Include broker total in the summary header
-        broker_summary = f"({account_count} accounts, Total: ${broker_total:,.2f})\n"
+        broker_summary = f"({account_owner_count} Owner groups, Total: ${broker_total:,.2f})\n"
+
+        for account_owner, account_totals in owner_totals.items():
+            broker_summary += f"{account_owner}: ${account_totals:,.2f}\n"
 
         # Filter out zero-balance owners
         filtered_totals = {
