@@ -53,8 +53,11 @@ CONFIG_CHANNEL_SECONDARY = "ERROR : Cannot locate critical environment variable 
 TARGET_CHANNEL_ID = DISCORD_PRIMARY_CHANNEL
 ALERTS_CHANNEL_ID = DISCORD_SECONDARY_CHANNEL
 BOT_TOKEN = DISCORD_TOKEN
+
 logging.info(f"Environment Variables loaded from dotenv : BOT_TOKEN {BOT_TOKEN}, PRIMARY CHANNEL ID {DISCORD_PRIMARY_CHANNEL}, SECONDARY CHANNEL ID {DISCORD_SECONDARY_CHANNEL}")
 
+logging.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
+logging.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
 
 # Set up bot intents
 intents = discord.Intents.default()

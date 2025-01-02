@@ -2,4 +2,4 @@ tests/
 temp/
 dev/
 .venv/
-
+dev*
