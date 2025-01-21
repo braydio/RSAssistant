@@ -8,7 +8,8 @@ import yfinance as yf
 import discord
 from discord import Embed
 
-from utils.excel_utils import update_excel_log 
+from utils.excel_utils import update_excel_log
+from utils.sql_utils import update_holdings_live, insert_order_history
 from utils.config_utils import (
     csv_toggle, load_config, 
     HOLDINGS_LOG_CSV, ORDERS_LOG_CSV
@@ -36,25 +37,40 @@ def load_csv_log(file_path):
     return []
 
 
-def archive_stale_orders(existing_orders, cutoff_date, working_file_path):
-    """Archives stale orders older than the cutoff date."""
-    # ARCHIVE_FILE_CSV = working_file_path os.
+def archive_stale_orders(existing_orders, cutoff_date, archive_file_path):
+    """
+    Archives stale orders older than the cutoff date into a separate file and returns the updated list of non-stale orders.
+
+    Args:
+        existing_orders (list): List of existing orders.
+        cutoff_date (datetime): Orders older than this date are considered stale.
+        archive_file_path (str): Path to the archive CSV file.
+
+    Returns:
+        list: Non-stale orders remaining after archiving.
+    """
+    # Identify stale orders
     stale_orders = [
-        order
-        for order in existing_orders
+        order for order in existing_orders
         if datetime.strptime(order["Date"], "%Y-%m-%d") < cutoff_date
     ]
+
+    # Save stale orders to the archive file
     if stale_orders:
-        mode = "a" if os.path.exists(working_file_path) else "w"
-        with open(working_file_path, mode=mode, newline="") as archive_file:
+        mode = "a" if os.path.exists(archive_file_path) else "w"
+        with open(archive_file_path, mode=mode, newline="") as archive_file:
             writer = csv.DictWriter(archive_file, fieldnames=ORDERS_HEADERS)
             if mode == "w":
                 writer.writeheader()
             writer.writerows(stale_orders)
-    return [
-        order for order in existing_orders if order not in stale_orders
-    ]  # Return non-stale orders
 
+    # Filter out stale orders from the original list
+    non_stale_orders = [
+        order for order in existing_orders
+        if datetime.strptime(order["Date"], "%Y-%m-%d") >= cutoff_date
+    ]
+
+    return non_stale_orders
 
 def identify_latest_orders(orders, new_order):
     """Keeps the latest order for each unique key based on Timestamp."""
@@ -149,6 +165,10 @@ def save_order_to_csv(order_data):
         write_orders_to_csv(updated_orders, ORDERS_LOG_CSV)
         logging.info(f"Order saved to csv: {order_data}")
 
+        # Save to database
+        insert_order_history(order_data)
+        logging.info("Saved orders to sql database.")
+
         excel_log_updated = update_excel_log(order_data)
         if excel_log_updated:
             logging.info("Excel log updated successfully.")
@@ -229,6 +249,14 @@ def save_holdings_to_csv(parsed_holdings):
             ):  # Check if this combination already exists
                 new_holdings.append(holding_dict)  # If not, add it to new holdings
                 existing_keys.add(holding_key)  # Add the key to avoid future duplicates
+
+                # Save to database
+                insert_order_history(
+                    account_id=holding_dict["Account Number"],
+                    ticker=holding_dict["Stock"],
+                    quantity=holding_dict["Quantity"],
+                    average_price=holding_dict["Price"]
+                )
 
         # Write updated holdings list back to the CSV
         if new_holdings:  # Proceed only if there are new holdings to add
