@@ -16,12 +16,6 @@ from utils.config_utils import (
     ACCOUNT_MAPPING,
     DISCORD_PRIMARY_CHANNEL
 )
-from utils.sql_utils import (
-    get_db_connection,
-    get_account_id,
-    add_order,
-    insert_holdings
-    )
 
 account_mapping = ACCOUNT_MAPPING
 
@@ -32,7 +26,7 @@ order_patterns = {
     "complete": {
         "BBAE": r"(BBAE)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Fennel": r"(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)",
-        "Public": r"(Public)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
+        "Public": r"(Public)\s(\d+):\s(selling|buying)\s(\d+\.?\d*)\sof\s(\w+)|sell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Robinhood" : r"(Robinhood)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "WELLSFARGO": r"(WELLSFARGO)\s(\d+)\s\*\*\*(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
         "Fidelity": r"(Fidelity)\s(\d+)\saccount\s(?:xxxxx)?(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
@@ -450,17 +444,6 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
     # Save the order data to CSV
     save_order_to_csv(order_data)
     logging.info(f"Order successfully saved to CSV for stock {order_data['Stock']}")
-    # Save the order data to the database
-
-    logging.info(f"Passing to database for {broker_name} {account_number}")
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        account_id = get_account_id(
-            cursor, broker_name, broker_number, account_number
-        )
-        order_data["Account ID"] = account_id
-        add_order(order_data)
-    logging.info(f"Completed order processing loop for {broker_name} {account_number}")
 
 # Chapt Parse Holdings
 def parse_embed_message(embed):
@@ -471,7 +454,6 @@ def parse_embed_message(embed):
     parsed_holdings = main_embed_message(embed)
     # Step 2: Save the parsed holdings to CSV
     save_holdings_to_csv(parsed_holdings)
-    insert_holdings(parsed_holdings)
 
     logging.info("Holdings have been successfully parsed and saved.")
 
