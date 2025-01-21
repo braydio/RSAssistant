@@ -312,7 +312,7 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
     """
     Liquidates all holdings for a given brokerage.
     - Checks the holdings log for the brokerage.
-    - Sells the maximum quantity for each stock.
+    - Sells the smallest quantity found for each stock across all accounts.
     - Runs the sell command for each stock with a 30-second interval.
     
     Args:
@@ -337,13 +337,13 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
             await ctx.send(f"No holdings found for brokerage: {broker}.")
             return
 
-        # Group holdings by ticker and calculate max quantity
+        # Group holdings by ticker and calculate minimum quantity
         tickers = {}
         for holding in holdings:
             ticker = holding["Stock"].upper()
             quantity = float(holding["Quantity"])
             if ticker in tickers:
-                tickers[ticker] += quantity
+                tickers[ticker] = min(tickers[ticker], quantity)
             else:
                 tickers[ticker] = quantity
 
