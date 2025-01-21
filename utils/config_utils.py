@@ -107,7 +107,8 @@ ACCOUNT_MAPPING_FILE = None
 EXCEL_FILE_MAIN = None
 HOLDINGS_LOG_CSV = None
 ORDERS_LOG_CSV = None
-SQL_DATABASE_DB = None
+SQL_DATABASE_DB_V1 = None
+SQL_DATABASE_DB_V2 = None
 WATCH_FILE = None
 VERSION = None
 
@@ -127,17 +128,21 @@ ACCOUNT_MAPPING_FILE = resolve_path("config/account_mapping.json",create_if_miss
 EXCEL_FILE_MAIN = resolve_path("volumes/excel/ReverseSplitLog.xlsx",create_if_missing=True)
 HOLDINGS_LOG_CSV = resolve_path("volumes/logs/holdings_log.csv",create_if_missing=True)
 ORDERS_LOG_CSV = resolve_path("volumes/logs/orders_log.csv",create_if_missing=True)
-SQL_DATABASE_DB = resolve_path("volumes/db/reverse_splits.db", create_if_missing=True)
+SQL_DATABASE_DB_V1 = resolve_path("volumes/db/rsa_database.db", create_if_missing=True)
+SQL_DATABASE_DB_V2 = resolve_path("volumes/db/reverse_splits_secondary.db", create_if_missing=True)
 ERROR_LOG_FILE = resolve_path("volumes/logs/error_log.txt", create_if_missing=True)
 WATCH_FILE = resolve_path("config/watch_list.json",create_if_missing=True)
+SELLING_FILE = resolve_path("config/sell_list.json", create_if_missing=True)
 VERSION = ("app_version", "0.0.0")
 
 logging.info(f"Resolved EXCEL_FILE_MAIN_PATH: {EXCEL_FILE_MAIN}")
 logging.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
 logging.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
-logging.info(f"Resolved DATABASE_FILE: {SQL_DATABASE_DB}")
+logging.info(f"Resolved DATABASE_FILE: {SQL_DATABASE_DB_V1}")
+logging.info(f"Resolved NEW DATABASE_FILE: {SQL_DATABASE_DB_V2}")
 logging.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
 logging.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
+logging.info(f"Resolved SELLING_FILE: {SELLING_FILE}")
 
 def load_account_mappings(file=ACCOUNT_MAPPING_FILE):
     """Loads account mappings from the JSON file and ensures the data structure is valid."""
@@ -201,8 +206,6 @@ def get_account_nickname(broker, group_number, account_number):
 
 ACCOUNT_MAPPING = load_account_mappings(file=ACCOUNT_MAPPING_FILE)
 logging.info(f"Resolved ACCOUNT_MAPPING_FILE: {ACCOUNT_MAPPING_FILE}")
-
-
 
 ENABLE_CSV_LOGGING = config.get("general_settings", {}).get("enable_csv_logging", False)
 ENABLE_EXCEL_LOGGING = config.get("general_settings", {}).get("enable_excel_logging", False)
