@@ -32,7 +32,7 @@ from utils.excel_utils import (clear_account_mappings, index_account_details,
 from utils.parsing_utils import (parse_embed_message, alert_channel_message,
                                  parse_order_message)
 from utils.sql_utils import get_db_connection, init_db, bot_query_database
-from utils.csv_utils import clear_holdings_log, send_top_holdings_embed, save_order_to_csv
+from utils.csv_utils import clear_holdings_log, send_top_holdings_embed, sell_all_position
 from utils.utility_utils import (all_account_nicknames, all_brokers,
                                  generate_broker_summary_embed,
                                  print_to_discord, track_ticker_summary,
@@ -191,6 +191,26 @@ async def on_ready():
     else:
         logging.info("Reminder scheduler already running.")
     category = "Startup and Shutdown"
+
+@bot.command(name="liquidate", help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [live_mode=false]`")
+async def liquidate(ctx, broker: str, live_mode: str = "false"):
+    """
+    Liquidates all holdings for a given brokerage.
+    - Checks the holdings log for the brokerage.
+    - Sells the maximum quantity for each stock.
+    - Runs the sell command for each stock with a 30-second interval.
+    
+    Args:
+        broker (str): The name of the brokerage to liquidate.
+        live_mode (str): Set to "true" for live mode or "false" for dry run mode. Defaults to "false".
+    """
+    try:
+        logging.info(f"Liquidate position order logged for {broker}")
+        await sell_all_position(ctx, broker, live_mode)
+
+    except Exception as e:
+        logging.error(f"Error during liquidation: {e}")
+        await ctx.send(f"An error occurred: {str(e)}")    
 
 @bot.command(name="restart")
 async def restart(ctx):
@@ -553,7 +573,7 @@ async def query_table(ctx, table_name: str, *args):
         for chunk in [response[i:i+2000] for i in range(0, len(response), 2000)]:
             await ctx.send(chunk)
     except Exception as e:
-        await ctx.send(f"Error querying table `{table}`: {e}")
+        await ctx.send(f"Error querying table `{table_name}`: {e}")
 
 @bot.command(name="history", help="Shows historical holdings over time from the database. Usage: `..history <account> <ticker> <start_date> <end_date>`")
 async def sql_historical_holdings(ctx, account: str = None, ticker: str = None, start_date: str = None, end_date: str = None):

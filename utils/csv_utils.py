@@ -3,6 +3,7 @@ import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
+import asyncio
 
 import yfinance as yf
 import discord
@@ -303,6 +304,64 @@ def clear_holdings_log(filename):
             return False, f'Holdings at: "{filename}" is empty or improperly formatted.'
     except Exception as e:
         return False, f"Error clearing holdings log: {e}"
+
+
+# ! --- Sell All Command ---
+
+async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
+    """
+    Liquidates all holdings for a given brokerage.
+    - Checks the holdings log for the brokerage.
+    - Sells the maximum quantity for each stock.
+    - Runs the sell command for each stock with a 30-second interval.
+    
+    Args:
+        broker (str): The name of the brokerage to liquidate.
+        live_mode (str): Set to "true" for live mode or "false" for dry run mode. Defaults to "false".
+    """
+    try:
+        # Validate live_mode
+        if live_mode.lower() not in ["true", "false"]:
+            await ctx.send("Invalid live mode. Use 'true' for live mode or 'false' for dry run mode.")
+            return
+
+        # Load holdings from CSV
+        holdings = []
+        with open(HOLDINGS_LOG_CSV, mode="r", newline="") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                if row["Broker Name"].lower() == broker.lower():
+                    holdings.append(row)
+
+        if not holdings:
+            await ctx.send(f"No holdings found for brokerage: {broker}.")
+            return
+
+        # Group holdings by ticker and calculate max quantity
+        tickers = {}
+        for holding in holdings:
+            ticker = holding["Stock"].upper()
+            quantity = float(holding["Quantity"])
+            if ticker in tickers:
+                tickers[ticker] += quantity
+            else:
+                tickers[ticker] = quantity
+
+        # Liquidate each stock
+        for ticker, quantity in tickers.items():
+            sell_command = f"!rsa sell {quantity} {ticker} {broker} {live_mode}"
+            await ctx.send(sell_command)
+            logging.info(f"Executed: {sell_command}")
+
+            # Wait 30 seconds before the next stock
+            await asyncio.sleep(30)
+
+        await ctx.send(f"Liquidation completed for brokerage: {broker} in {'live' if live_mode == 'true' else 'dry'} mode.")
+        logging.info(f"Liquidation completed for brokerage: {broker}.")
+
+    except Exception as e:
+        logging.error(f"Error during liquidation: {e}")
+        await ctx.send(f"An error occurred: {str(e)}")
 
 
 # ! --- Holdings Summaries ---
