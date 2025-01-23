@@ -27,7 +27,7 @@ from utils.Webdriver_FindFilings import fetch_results
 from utils.Webdriver_Scraper import StockSplitScraper
 
 from utils.history_query import show_sql_holdings_history 
-from utils.excel_utils import (clear_account_mappings, index_account_details,
+from utils.excel_utils import (clear_account_mappings, add_account_mappings, index_account_details,
                                map_accounts_in_excel_log)
 from utils.parsing_utils import (parse_embed_message, alert_channel_message,
                                  parse_order_message)
@@ -140,8 +140,6 @@ async def process_order(ctx, action: str, quantity: float = 1, ticker: str = Non
         logging.error(f"Error scheduling {action} order: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
 
-
-
 global periodic_task, reminder_scheduler
 
 @bot.event
@@ -192,8 +190,8 @@ async def on_ready():
         logging.info("Reminder scheduler already running.")
     category = "Startup and Shutdown"
 
-@bot.command(name="liquidate", help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [live_mode=false]`")
-async def liquidate(ctx, broker: str, live_mode: str = "false"):
+@bot.command(name="liquidate", help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [test_mode=false]`")
+async def liquidate(ctx, broker: str, test_mode: str = "false"):
     """
     Liquidates all holdings for a given brokerage.
     - Checks the holdings log for the brokerage.
@@ -206,7 +204,7 @@ async def liquidate(ctx, broker: str, live_mode: str = "false"):
     """
     try:
         logging.info(f"Liquidate position order logged for {broker}")
-        await sell_all_position(ctx, broker, live_mode)
+        await sell_all_position(ctx, broker, test_mode)
 
     except Exception as e:
         logging.error(f"Error during liquidation: {e}")
@@ -249,25 +247,37 @@ async def on_message(message):
             logging.info(f"Received message: {message.content}")
             
             channel = bot.get_channel(TARGET_CHANNEL_ID)
-            parsed_message = alert_channel_message(message.content)
+            content = message.content
 
-            if parsed_message:
-                await channel.send(f"\n{parsed_message}")
-                logging.info("Alert sent successfully.")
-            else:
-                logging.warning("Parsed message is None. No alert sent.")
+            match = alert_channel_message(content)
 
-            # Optional notification
-            # await channel.send("Nasdaq Corporate Actions Alert: See channel #reverse-splits")
+            if match:
+                title = match.group(1)  # Extract the full title
+                ticker = match.group(2)  # Extract the stock ticker
+                url = match.group(3)  # Extract the URL
 
+                logging.info(f"Nasdaq Feed: {title} {ticker} {url}")
 
-    # Pass the message to the command processing so bot commands work
+                # Detect "Reverse Stock Split" in the title
+                if "Reverse Stock Split" in title:
+                    action = "Reverse Stock Split"
+                else:
+                    action = "Corporate Action"
+
+                # Format the alert message
+                alert_message = (
+                    f"🚨 Nasdaq Corporate Actions Alert:\n"
+                    f"**{ticker} {action}**\n"
+                    f"[Details Here]({url})"
+                )
+                logging.info("Alert Message")
+                channel.send(alert_message)
+
+            # Pass the message to the command processing so bot commands work
     await bot.process_commands(message)
 
-async def send_buy(ctx):
-    order_details = "!ping"
-    # "!rsa buy 1 slxn chase"
-    await ctx.send(order_details)
+    logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
+    return None  # Return None if no match is found
 
 @bot.command(name="reminder", help="Shows daily reminder")
 async def show_reminder(ctx):
@@ -316,6 +326,7 @@ async def view_sell_list(ctx):
             added_on = details.get("added_on", "N/A")
             embed.add_field(name=ticker, value=f"Added on: {added_on}", inline=False)
         await ctx.send(embed=embed)
+
 
 @bot.command(name="brokerlist", help="List all active brokers. Optional arg: Broker")
 async def brokerlist(ctx, broker: str = None):
@@ -422,6 +433,21 @@ async def print_by_line(ctx):
     """Prints contents of a file to Discord, one line at a time."""
     await print_to_discord(ctx)
 
+
+@bot.command(
+    name="addmap",
+    help="Usage: addmap <brokerage> <broker_no> <account (last 4)> <Account Nickname> | Adds mapping details for an account to the Account Mappings file."
+)
+async def add_account_mappings_command(ctx, brokerage: str, broker_no: str, account: str, nickname: str):
+    try:
+        # Validate the inputs
+        if not (brokerage and broker_no and account and nickname):
+            await ctx.send("All arguments are required: `<brokerage> <broker_no> <account> <nickname>`.")
+            return
+
+        await add_account_mappings(ctx, brokerage, broker_no, account, nickname)
+    except Exception as e:
+        logging.info(f"An error ocurred: {e}")
 
 @bot.command(name="loadmap", help="Maps accounts from Account Details excel sheet")
 async def load_account_mappings_command(ctx):

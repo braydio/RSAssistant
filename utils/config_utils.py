@@ -189,6 +189,7 @@ def get_account_nickname(broker, group_number, account_number):
     """
     logging.debug(f"Retrieving nickname for broker: {broker}, group: {group_number}, account: {account_number}")
     account_mapping = load_account_mappings(ACCOUNT_MAPPING_FILE)
+    account_details = f"{broker} {group_number} {account_number}"
 
     account_number_str = str(account_number)
     group_number_str = str(group_number)
@@ -196,7 +197,7 @@ def get_account_nickname(broker, group_number, account_number):
 
     if not broker_accounts:
         logging.warning(f"No account mappings found for broker: {broker}. Using account number as fallback.")
-        return account_number_str
+        return account_details
 
     group_accounts = broker_accounts.get(group_number_str, {})
     nickname = group_accounts.get(account_number_str, account_number_str)

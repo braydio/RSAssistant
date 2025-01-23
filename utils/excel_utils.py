@@ -361,6 +361,33 @@ async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING_FILE):
     except Exception as e:
         await ctx.send(f"Error clearing the JSON file: {e}")
 
+async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
+    try:
+        # Load the account mappings
+        account_mappings_file = ACCOUNT_MAPPING_FILE  # Path to account mappings file
+        with open(account_mappings_file, "r") as f:
+            account_mappings = json.load(f)
+
+        # Ensure the structure exists for the brokerage and broker_no
+        if brokerage not in account_mappings:
+            account_mappings[brokerage] = {}
+        if broker_no not in account_mappings[brokerage]:
+            account_mappings[brokerage][broker_no] = {}
+
+        # Add or update the account mapping
+        account_mappings[brokerage][broker_no][account] = nickname
+
+        # Save the updated mappings
+        with open(account_mappings_file, "w") as f:
+            json.dump(account_mappings, f, indent=4)
+
+        # Confirmation message
+        await ctx.send(f"Added mapping: {brokerage} - Broker No: {broker_no}, Account: {account}, Nickname: {nickname}")
+
+    except Exception as e:
+        await ctx.send(f"An error occurred: {str(e)}")
+
+
 
 def copy_complete_row(worksheet, source_row, target_row):
     """Copy both values and formatting from a source row to a target row in the worksheet."""

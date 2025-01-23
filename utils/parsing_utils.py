@@ -693,11 +693,13 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
     """
     try:
         # Assuming get_account_nickname is the existing function to retrieve the account nickname
+        account_details = f"{broker_name} {group_number} {account_number}"
         logging.info(f"Getting account nickname for {broker_name} {group_number} {account_number}")
         return get_account_nickname(broker_name, group_number, account_number)
     except KeyError:
         # If the account is not found, return 'AccountNotMapped'
-        return "Unmapped Account"
+        logging.info(f"Nickname not found for {account_details}")
+        return account_details
 
 # Chapt Alerts Message Logic
 async def send_negative_holdings(DISCORD_SECONDARY_CHANNEL, quantity, stock, broker_name, broker_number, account_number):
@@ -753,6 +755,10 @@ def alert_channel_message(content):
     match = re.search(alert_pattern, content)
 
     if match:
+        return match
+    else:
+        return None
+'''
         title = match.group(1)  # Extract the full title
         ticker = match.group(2)  # Extract the stock ticker
         url = match.group(3)  # Extract the URL
@@ -773,3 +779,4 @@ def alert_channel_message(content):
 
     logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
     return None  # Return None if no match is found
+'''
