@@ -63,62 +63,59 @@ def init_db():
         cursor.executescript(
             """
             CREATE TABLE IF NOT EXISTS Accounts (
-                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                broker TEXT NOT NULL,
-                account_number TEXT NOT NULL,
-                account_nickname TEXT,
-                broker_number TEXT
-            );
+            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker TEXT NOT NULL,
+            account_number TEXT NOT NULL,
+            account_nickname TEXT,
+            broker_number TEXT
+        );
 
-            CREATE TABLE IF NOT EXISTS HistoricalHoldings (
-                history_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER,
-                ticker TEXT NOT NULL,
-                date TEXT NOT NULL,
-                quantity REAL NOT NULL CHECK (quantity >= 0),
-                average_price REAL NOT NULL CHECK (average_price >= 0),
-                FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-            );
+        CREATE TABLE IF NOT EXISTS HistoricalHoldings (
+            history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER,
+            ticker TEXT NOT NULL,
+            date TEXT NOT NULL,
+            quantity REAL NOT NULL CHECK (quantity >= 0),
+            average_price REAL NOT NULL CHECK (average_price >= 0),
+            FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+        );
 
-            CREATE TABLE IF NOT EXISTS OrderHistory (
-                order_id TEXT PRIMARY KEY,
-                account_id INTEGER,
-                broker TEXT NOT NULL,
-                broker_name TEXT NOT NULL,
-                broker_number TEXT,
-                account_number TEXT NOT NULL,
-                ticker TEXT NOT NULL,
-                date TEXT NOT NULL,
-                action TEXT NOT NULL,
-                quantity REAL NOT NULL CHECK (quantity >= 0),
-                price REAL NOT NULL CHECK (price >= 0),
-                total_value REAL NOT NULL,
-                timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
-                FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-            );
+        CREATE TABLE IF NOT EXISTS OrderHistory (
+            order_id TEXT PRIMARY KEY,
+            account_id INTEGER,
+            broker TEXT NOT NULL,
+            broker_name TEXT NOT NULL,
+            broker_number TEXT,
+            account_number TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            date TEXT NOT NULL,
+            action TEXT NOT NULL,
+            quantity REAL NOT NULL CHECK (quantity >= 0),
+            price REAL NOT NULL CHECK (price >= 0),
+            total_value REAL NOT NULL,
+            timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
+            FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+        );
 
-            CREATE TABLE IF NOT EXISTS HoldingsLive (
-                holding_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER,
-                ticker TEXT NOT NULL,
-                quantity REAL NOT NULL CHECK (quantity >= 0),
-                average_price REAL NOT NULL CHECK (average_price >= 0),
-                timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
-                FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_ticker ON HistoricalHoldings(ticker);
-            CREATE INDEX IF NOT EXISTS idx_account_id ON OrderHistory(account_id);
-            CREATE INDEX IF NOT EXISTS idx_timestamp ON HistoricalHoldings(date);
-            """
+        CREATE TABLE IF NOT EXISTS HoldingsLive (
+            holding_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER,
+            ticker TEXT NOT NULL,
+            quantity REAL NOT NULL CHECK (quantity >= 0),
+            average_price REAL NOT NULL CHECK (average_price >= 0),
+            timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
+            FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+        );
+        """
         )
         conn.commit()
         logging.info("Database initialized with enhancements.")
 
 
-def update_holdings_live(broker, broker_number, account_number, ticker, quantity, average_price):
-    """Updates or inserts a holding into HoldingsLive, keeping only the latest two entries per day."""
+def update_holdings_live(broker, broker_number, account_number, ticker, quantity, price):
+    """Updates or inserts a holding into HoldingsLive."""
     account_id = get_or_create_account_id(broker, broker_number, account_number)
+    position_value = quantity * price  # Calculating position value
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -129,10 +126,10 @@ def update_holdings_live(broker, broker_number, account_number, ticker, quantity
             INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
             VALUES (?, ?, ?, ?, DATETIME('now'))
             """,
-            (account_id, ticker, quantity, average_price),
+            (account_id, ticker, quantity, price),
         )
 
-        # Delete older entries beyond the two most recent for the day
+        # Keep only the latest two entries per day
         cursor.execute(
             """
             DELETE FROM HoldingsLive
@@ -148,7 +145,7 @@ def update_holdings_live(broker, broker_number, account_number, ticker, quantity
         )
 
         conn.commit()
-        logging.info(f"Updated HoldingsLive for ticker {ticker}, account {account_id}.")
+        logging.info(f"Updated Holdings (Live) for ticker {ticker}, account {account_id}.")
 
 
 # Update historical holdings daily
@@ -169,7 +166,7 @@ def update_historical_holdings():
         )
 
         conn.commit()
-        logging.info("Updated HistoricalHoldings from HoldingsLive.")
+        logging.info("Updated Historical Holdings from Holdings Live.")
 
 # Insert an order into OrderHistory
 

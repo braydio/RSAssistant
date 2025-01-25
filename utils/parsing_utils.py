@@ -490,7 +490,7 @@ def parse_general_embed_message(embed):
         elif broker_name.upper() == "VANGUARD":
             broker_name = "Vanguard"
         elif broker_name.upper() == "SOFI":
-            broker_name == "Sofi"
+            broker_name == "SoFi"
 
         group_number = embed_split[1] if len(embed_split) > 1 else "1"
         account_number_match = re.search(r"x+(\d+)", name_field)

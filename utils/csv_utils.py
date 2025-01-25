@@ -199,7 +199,7 @@ def save_holdings_to_csv(parsed_holdings):
                 reader = csv.DictReader(file)
                 existing_holdings = list(reader)
 
-        # Create a set of unique keys to track existing entries (based on "Key", "Broker Name", "Broker Number", "Account Number", and "Stock")
+        # Create a set of unique keys to track existing entries
         existing_keys = set(
             (
                 holding["Key"],
@@ -211,16 +211,15 @@ def save_holdings_to_csv(parsed_holdings):
             for holding in existing_holdings
         )
 
-        # Add "Timestamp" to HOLDINGS_HEADERS if not present
+        # Ensure "Timestamp" is part of HOLDINGS_HEADERS
         if "Timestamp" not in HOLDINGS_HEADERS:
             HOLDINGS_HEADERS.append("Timestamp")
 
         # Convert parsed_holdings into a list of dictionaries and filter out duplicates
         new_holdings = []
         for holding in parsed_holdings:
-            holding_dict = dict(
-                zip(HOLDINGS_HEADERS, holding)
-            )  # Convert list to dictionary
+            # Map the parsed holding to a dictionary based on the headers
+            holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
@@ -229,44 +228,40 @@ def save_holdings_to_csv(parsed_holdings):
                 holding_dict["Stock"],
             )
 
-            # Ensure that 'Quantity', 'Price', and other numeric fields are valid floats
+            # Ensure numeric fields are valid
             try:
                 holding_dict["Quantity"] = float(holding_dict["Quantity"])
-                holding_dict["Price"] = float(
-                    holding_dict["Price"]
-                )  # Assuming you have a Price field to validate
-                holding_dict["Position Value"] = float(
-                    holding_dict["Position Value"]
-                )  # Assuming this field as well
+                holding_dict["Price"] = float(holding_dict["Price"])
+                holding_dict["Position Value"] = holding_dict["Quantity"] * holding_dict["Price"]  # Recalculate Position Value
+                holding_dict["Account Total"] = float(holding_dict.get("Account Total", 0))  # Optional field
             except (ValueError, KeyError):
                 logging.warning(f"Invalid numeric value in holding: {holding_dict}")
-                continue  # Skip this entry if the values are not valid floats
+                continue  # Skip invalid entries
 
-            # Add timestamp to each new holding
+            # Add timestamp
             holding_dict["Timestamp"] = timestamp
 
-            if (
-                holding_key not in existing_keys
-            ):  # Check if this combination already exists
-                new_holdings.append(holding_dict)  # If not, add it to new holdings
-                existing_keys.add(holding_key)  # Add the key to avoid future duplicates
+            # Check if this holding is a duplicate
+            if holding_key not in existing_keys:
+                new_holdings.append(holding_dict)
+                existing_keys.add(holding_key)
 
-                # Save to database
-                insert_order_history(
-                    account_id=holding_dict["Account Number"],
+                # Save to the database
+                update_holdings_live(
+                    broker=holding_dict["Broker Name"],
+                    broker_number=holding_dict["Broker Number"],
+                    account_number=holding_dict["Account Number"],
                     ticker=holding_dict["Stock"],
                     quantity=holding_dict["Quantity"],
-                    average_price=holding_dict["Price"]
+                    price=holding_dict["Price"]
                 )
 
-        # Write updated holdings list back to the CSV
-        if new_holdings:  # Proceed only if there are new holdings to add
+        # Write the updated holdings to the CSV
+        if new_holdings:
             with open(HOLDINGS_LOG_CSV, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
-                writer.writeheader()  # Ensure headers are written
-                writer.writerows(
-                    existing_holdings + new_holdings
-                )  # Write the combined list
+                writer.writeheader()
+                writer.writerows(existing_holdings + new_holdings)  # Append new entries to existing ones
 
             logging.info(f"Holdings saved, with {len(new_holdings)} new entries added.")
         else:
