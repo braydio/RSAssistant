@@ -1,9 +1,11 @@
 import logging
-import sys
 import os
+import sys
 import time
 from logging.handlers import RotatingFileHandler
+
 from colorama import Fore, Style
+
 
 class ReplaceInvalidCharactersFilter(logging.Filter):
     """

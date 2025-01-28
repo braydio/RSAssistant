@@ -1,60 +1,50 @@
-import csv
 import asyncio
+import csv
 import json
 import logging
 import os
-import sys
-import signal
 import shutil
+import signal
+import sys
 import time
 from datetime import datetime, timedelta
 
 # Third-party imports
-import discord 
+import discord
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
-from utils.config_utils import (load_config, 
-    DISCORD_TOKEN, EXCEL_FILE_MAIN, ACCOUNT_MAPPING, WATCH_FILE,
-    DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL,
-    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, SQL_DATABASE_DB_V1, VERSION
-)
-# Webdriver imports
-from utils.Webdriver_FindFilings import fetch_results
-from utils.Webdriver_Scraper import StockSplitScraper
-
-from utils.history_query import show_sql_holdings_history 
-from utils.excel_utils import (clear_account_mappings, add_account_mappings, index_account_details,
+from utils.config_utils import (ACCOUNT_MAPPING, BOT_TOKEN,
+                                DISCORD_PRIMARY_CHANNEL,
+                                DISCORD_SECONDARY_CHANNEL, EXCEL_FILE_MAIN,
+                                HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
+                                SQL_DATABASE_DB_V1, VERSION, WATCH_FILE,
+                                load_config)
+from utils.csv_utils import (clear_holdings_log, sell_all_position,
+                             send_top_holdings_embed)
+from utils.excel_utils import (add_account_mappings, clear_account_mappings,
+                               index_account_details,
                                map_accounts_in_excel_log)
-from utils.parsing_utils import (parse_embed_message, alert_channel_message,
+from utils.history_query import show_sql_holdings_history
+from utils.order_exec import process_sell_list, schedule_and_execute
+from utils.parsing_utils import (alert_channel_message, parse_embed_message,
                                  parse_order_message)
-from utils.sql_utils import get_db_connection, init_db, bot_query_database
-from utils.csv_utils import clear_holdings_log, send_top_holdings_embed, sell_all_position
+from utils.sql_utils import bot_query_database, get_db_connection, init_db
 from utils.utility_utils import (all_account_nicknames, all_brokers,
                                  generate_broker_summary_embed,
-                                 print_to_discord, track_ticker_summary,
-                                 update_file_version, get_file_version, get_last_stock_price)
-from utils.watch_utils import (watch_list_manager, periodic_check, send_reminder_message_embed)
-from utils.order_exec import send_sell_command, schedule_and_execute
+                                 print_to_discord, track_ticker_summary)
+from utils.watch_utils import (periodic_check, send_reminder_message_embed,
+                               watch_list_manager)
+# Webdriver imports - - see utils / web utils for implementation
+# from utils.Webdriver_FindFilings import fetch_results
+# from utils.Webdriver_Scraper import StockSplitScraper
 
 bot_info = (f'RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
 
 init_db()
-config = load_config()
-
-CONFIG_TOKEN = "ERROR : Cannot locate critical environment variable  : BOT_TOKEN" # config["discord"]["token"]
-CONFIG_CHANNEL_PRIMARY = "ERROR : Cannot locate critical environment variable  : DISCORD PRIMARY CHANNEL" # config["discord"]['channel_id']
-CONFIG_CHANNEL_SECONDARY = "ERROR : Cannot locate critical environment variable  : DISCORD SECONDARY CHANNEL" # config["discord"]['channel_id2']
-# Chapt Environment variables
-
-TARGET_CHANNEL_ID = DISCORD_PRIMARY_CHANNEL
-ALERTS_CHANNEL_ID = DISCORD_SECONDARY_CHANNEL
-BOT_TOKEN = DISCORD_TOKEN
-
-logging.info(f"Environment Variables loaded from dotenv : BOT_TOKEN {BOT_TOKEN}, PRIMARY CHANNEL ID {DISCORD_PRIMARY_CHANNEL}, SECONDARY CHANNEL ID {DISCORD_SECONDARY_CHANNEL}")
 
 logging.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
 logging.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
@@ -69,6 +59,97 @@ intents.members = True
 bot = commands.Bot(
     command_prefix="..", case_insensitive=True, intents=intents
 )
+
+periodic_task = None
+reminder_scheduler = None
+
+@bot.event
+async def on_ready():
+    """Triggered when the bot is ready."""
+    global periodic_task
+    now = datetime.now()
+
+    logging.info(f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant")
+    logging.info(f"Version {VERSION} | Runtime Environment: Production")
+
+    # Fetch the primary channel
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    
+    # Prepare account setup message
+    account_setup_message = (
+        f"**(╯°□°）╯**\n\n"
+        f"Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n"
+        f"`{EXCEL_FILE_MAIN}`\n\n"
+        f"Then run: `..loadmap` and `..loadlog`."
+    )
+
+    try:
+        ready_message = (
+            account_setup_message
+            if not ACCOUNT_MAPPING
+            else "...watching for order activity...\n(✪‿✪)"
+        )
+    except (FileNotFoundError, json.JSONDecodeError):
+        ready_message = account_setup_message
+
+    # Send ready message to the primary channel
+    if channel:
+        await channel.send(f"{ready_message}\nThe date-time is {now.strftime('%m-%d %H:%M')}")
+    else:
+        logging.warning(f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup.")
+
+    logging.info(f"Initializing Application in Production environment.")
+    logging.info(f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}")
+    
+    # Check if the periodic task is already running, and start it if not
+    if 'periodic_task' not in globals() or periodic_task is None:
+        periodic_task = asyncio.create_task(periodic_check(bot))
+        logging.info("Periodic check task started.")
+    else:
+        logging.info("Periodic check task is already running.")
+
+    # Schedule reminder task using APScheduler
+    global reminder_scheduler
+    if reminder_scheduler is None:
+        reminder_scheduler = BackgroundScheduler()
+        reminder_scheduler.add_job(
+            lambda: bot.loop.create_task(send_reminder_message_embed(bot)), CronTrigger(hour=8, minute=45)
+        )
+        reminder_scheduler.add_job(
+            lambda: bot.loop.create_task(send_reminder_message_embed(bot)), CronTrigger(hour=15, minute=30)
+        )
+        reminder_scheduler.start()
+        logging.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
+    else:
+        logging.info("Reminder scheduler already running.")
+
+async def process_sell_list(bot):
+    """Checks the sell list and executes due sell orders."""
+    try:
+        now = datetime.now()
+        sell_list = watch_list_manager.sell_list
+
+        # Iterate over sell list items
+        for ticker, details in list(sell_list.items()):  # Use list() to safely modify during iteration
+            scheduled_time = datetime.strptime(details["scheduled_time"], "%Y-%m-%d %H:%M:%S")
+
+            if now >= scheduled_time:  # Check if the order's time has come
+                # Construct the sell command
+                command = f"!rsa sell {details['quantity']} {ticker} {details['broker']} false"
+                
+                # Send the sell command
+                channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+                if channel:
+                    await channel.send(command)
+                    logging.info(f"Executed sell order for {ticker} via {details['broker']}")
+
+                # Remove the executed order from the sell list
+                del sell_list[ticker]
+                watch_list_manager.save_sell_list()
+                logging.info(f"Removed {ticker} from sell list after execution.")
+
+    except Exception as e:
+        logging.error(f"Error processing sell list: {e}")
 
 @bot.command(name="order", help="Schedule a buy or sell order. Usage: `..order <buy/sell> <ticker> [quantity] <broker> <dry_mode> <time>`")
 async def process_order(ctx, action: str, quantity: float = 1, ticker: str = None, broker: str = "all", dry_mode: str = "false", time: str = None):
@@ -129,66 +210,17 @@ async def process_order(ctx, action: str, quantity: float = 1, ticker: str = Non
             execution_time = now  # Execute immediately if no time is specified
 
         # Schedule the order using logic in `order_exec.py`
+        await ctx.send(f"Schedule: {action} {ticker} in {broker} for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}.")
         await schedule_and_execute(ctx, action, ticker, quantity, broker, dry_mode, execution_time)
 
         await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker} {'dry' if dry_mode == 'true' else 'false'}")
-        await ctx.send(f"for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}.")
+
 
         logging.info(f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, dry_mode: {dry_mode}, time: {execution_time}.")
 
     except Exception as e:
         logging.error(f"Error scheduling {action} order: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
-
-global periodic_task, reminder_scheduler
-
-@bot.event
-async def on_ready():
-    """Triggered when the bot is ready."""
-    
-    await asyncio.sleep(2)
-    logging.info(f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant")
-    logging.info(f"Version {VERSION} | Runtime Environment: Production")
-    await asyncio.sleep(3)
-    channel = bot.get_channel(TARGET_CHANNEL_ID)
-    
-    account_setup_message = f"\n\n**(╯°□°）╯**\n\n Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n`{EXCEL_FILE_MAIN}`\n\nThen run: `..loadmap` and `..loadlog`."
-    
-    try:
-        ready_mapped = ACCOUNT_MAPPING
-        ready_message = (
-            account_setup_message
-            if not ready_mapped
-            else "...watching for order activity...\n(✪‿✪)"
-        )
-    except (FileNotFoundError, json.JSONDecodeError):
-        ready_message = account_setup_message
-        
-    if channel:
-        await channel.send(ready_message)
-    else:
-        logging.warning(f"Target Channel not found - ID: {TARGET_CHANNEL_ID} on startup.")
-
-    logging.info(f"Initializing Application in Production environment.")
-    logging.info(f"{bot.user} has connected to Discord!")
-
-    # Start periodic check task if not already running
-    if 'periodic_task' not in globals() or periodic_task is None:
-        periodic_task = asyncio.create_task(periodic_check(bot))
-        logging.info("Periodic task started.")
-    else:
-        logging.info("Periodic task already running.")
-
-    # Schedule reminder task using APScheduler
-    if 'reminder_scheduler' not in globals() or reminder_scheduler is None:
-        reminder_scheduler = BackgroundScheduler()
-        reminder_scheduler.add_job(lambda: bot.loop.create_task(send_reminder_message_embed(bot)), CronTrigger(hour=8, minute=45))
-        reminder_scheduler.add_job(lambda: bot.loop.create_task(send_reminder_message_embed(bot)), CronTrigger(hour=15, minute=30))
-        reminder_scheduler.start()
-        logging.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
-    else:
-        logging.info("Reminder scheduler already running.")
-    category = "Startup and Shutdown"
 
 @bot.command(name="liquidate", help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [test_mode=false]`")
 async def liquidate(ctx, broker: str, test_mode: str = "false"):
@@ -232,7 +264,7 @@ async def on_message(message):
         return  # Prevents the bot from responding to itself
 
     # Check if the message was sent in the target channel
-    if message.channel.id == TARGET_CHANNEL_ID:
+    if message.channel.id == DISCORD_PRIMARY_CHANNEL:
 
         if message.content.lower().startswith("manual"):
             logging.warning(f"Manual order detected: {message.content}")
@@ -242,11 +274,12 @@ async def on_message(message):
         else:
             parse_order_message(message.content)
     
-    if message.channel.id == ALERTS_CHANNEL_ID:
+    if message.channel.id == DISCORD_SECONDARY_CHANNEL:
         if message.content:
             logging.info(f"Received message: {message.content}")
             
-            channel = bot.get_channel(TARGET_CHANNEL_ID)
+            channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
+            logging.info(f"Secondary Channel: {channel}")
             content = message.content
 
             match = alert_channel_message(content)
@@ -491,89 +524,6 @@ async def clear_holdings(ctx):
 
 
 @bot.command(
-    name="websearch",
-    help=(
-        "Surfin' the Web!\n\n"
-        "**Arguments:**\n"
-        "`mode` (required): The mode of operation. Choose from:\n"
-        "  - `search <ticker>`: Search for splits for a specific ticker.\n"
-        "  - `report`: Generate a weekly report of stock splits.\n"
-        "  - `custom <start_date> <end_date>`: Fetch splits for a custom date range (YYYY-MM-DD).\n"
-        "`args` (optional): Additional arguments depending on the mode."
-    ),
-    brief="Search stock splits",
-    category="Web Search"
-)
-async def websearch(ctx, mode: str, *args):
-    """
-    Handles web search commands for stock splits.
-
-    Args:
-        ctx (commands.Context): The context of the command.
-        mode (str): The mode of operation ('search', 'report', 'custom').
-        args (tuple): Additional arguments for the selected mode.
-    """
-    scraper = StockSplitScraper()
-
-    if mode == "search" and args:
-        ticker = args[0]
-        await scraper.run(ctx, mode="search_ticker", ticker=ticker)
-    elif mode == "report":
-        await scraper.run(ctx, mode="weekly_report")
-    elif mode == "custom" and len(args) == 2:
-        start_date, end_date = args
-        await scraper.run(ctx, mode="custom_report", custom_dates=(start_date, end_date))
-    await ctx.send(
-        "Invalid usage. Try one of the following:\n"
-        "`..websearch search <ticker>`\n"
-        "`..websearch report`\n"
-        "`..websearch custom <start_date> <end_date>`"
-    )
-
-
-@bot.command(
-    name="rsasearch",
-    help=(
-        "Fetch recent filings related to reverse stock splits.\n\n"
-        "**Optional Arguments:**\n"
-        "- `excerpt`: Include excerpts from filings that match the search terms.\n"
-        "- `summary`: Provide a summary of the results instead of a detailed list."
-    )
-)
-async def rs_roundup(ctx, *args):
-    include_excerpt = "excerpt" in args
-    summary = "summary" in args
-
-    await ctx.send("Fetching filings, please wait...")
-    results = fetch_results(include_excerpt=include_excerpt)
-
-    if isinstance(results, str):  # Check for error message
-        await ctx.send(results)
-    elif results:
-        if summary:
-            message = (
-                f"**Summary**:\n"
-                f"Total Results: {len(results)}\n"
-                f"Forms: {', '.join(set(r['form_type'] for r in results))}\n"
-                f"Companies: {', '.join(set(r['company_name'] for r in results))}\n"
-            )
-            await ctx.send(message)
-        else:
-            for result in results:
-                message = (
-                    f"**Company**: {result['company_name']}\n"
-                    f"**Form Type**: {result['form_type']}\n"
-                    f"**Description**: {result['description']}\n"
-                    f"**File Date**: {result['file_date']}\n"
-                )
-                if include_excerpt:
-                    message += f"**Excerpt**: {result['excerpt']}\n"
-                await ctx.send(message)
-    else:
-        await ctx.send("No relevant filings found.")
-
-
-@bot.command(
     name="sql",
     help=(
         "Query a table from the database.\n\n"
@@ -645,7 +595,7 @@ async def send_negative_holdings(quantity, stock, alert_type, broker_name, broke
             await channel.send(embed=embed)
             logging.info(f"Negative holdings alert sent for stock {stock}.")
         else:
-            logging.error(f"Target channel with ID {TARGET_CHANNEL_ID} not found.")
+            logging.error(f"Target channel with ID {DISCORD_SECONDARY_CHANNEL} not found.")
 
     except Exception as e:
         logging.error(f"Error sending negative holdings alert: {e}")

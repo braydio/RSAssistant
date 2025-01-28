@@ -9,12 +9,10 @@ from datetime import datetime, timedelta
 import discord
 import pandas as pd
 
-from utils.config_utils import (
-    load_account_mappings, load_config,
-    WATCH_FILE, SELLING_FILE, DISCORD_SECONDARY_CHANNEL
-)
-from utils.utility_utils import send_large_message_chunks, get_last_stock_price
+from utils.config_utils import (DISCORD_SECONDARY_CHANNEL, SELLING_FILE,
+                                WATCH_FILE, load_account_mappings, load_config)
 from utils.excel_utils import add_stock_to_excel_log
+from utils.utility_utils import get_last_stock_price, send_large_message_chunks
 
 # Load configuration and paths from settings
 config = load_config()
@@ -74,9 +72,16 @@ class WatchListManager:
         else:
             logging.info("No sell list file found, starting fresh.")
 
-    def add_to_sell_list(self, ticker):
-        """Add a ticker to the sell list."""
-        self.sell_list[ticker.upper()] = {"added_on": datetime.now().strftime("%Y-%m-%d")}
+    def add_to_sell_list(self, ticker, broker, quantity, scheduled_time):
+        """
+        Add a ticker with details to the sell list.
+        """
+        self.sell_list[ticker.upper()] = {
+            "broker": broker,
+            "quantity": quantity,
+            "scheduled_time": scheduled_time,
+            "added_on": datetime.now().strftime("%Y-%m-%d"),
+        }
         self.save_sell_list()
 
     def remove_from_sell_list(self, ticker):
@@ -197,6 +202,9 @@ class WatchListManager:
 watch_list_manager = WatchListManager(WATCH_FILE, SELLING_FILE)
 
 # Main functions
+
+
+
 async def send_reminder_message_embed(ctx):
     """Sends a reminder message with upcoming split dates in an embed."""
     # Create the embed message

@@ -1,20 +1,18 @@
+import asyncio
 import csv
 import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
-import asyncio
 
-import yfinance as yf
 import discord
+import yfinance as yf
 from discord import Embed
 
+from utils.config_utils import (HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, csv_toggle,
+                                load_config)
 from utils.excel_utils import update_excel_log
-from utils.sql_utils import update_holdings_live, insert_order_history
-from utils.config_utils import (
-    csv_toggle, load_config, 
-    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV
-)
+from utils.sql_utils import insert_order_history, update_holdings_live
 
 # Load configuration and mappings
 config = load_config()

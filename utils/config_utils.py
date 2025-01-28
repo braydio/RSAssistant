@@ -1,9 +1,11 @@
-import os
-import logging
-import yaml
 import json
+import logging
+import os
 from pathlib import Path
+
 import dotenv
+import yaml
+
 from utils.logging_setup import setup_logging
 
 # Paths
@@ -102,7 +104,7 @@ _config_cache = None
 
 # Resolved Paths
 DISCORD_PRIMARY_CHANNEL = None
-DISCORD_PRIMARY_CHANNEL = None
+DISCORD_SECONDARY_CHANNEL = None
 ACCOUNT_MAPPING_FILE = None
 EXCEL_FILE_MAIN = None
 HOLDINGS_LOG_CSV = None
@@ -114,8 +116,8 @@ VERSION = None
 
 
 # Logging the environment variable loading
-DISCORD_TOKEN = os.getenv("BOT_TOKEN")
-logging.info(f"Loaded BOT_TOKEN: {DISCORD_TOKEN}")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+logging.info(f"Loaded BOT_TOKEN: {BOT_TOKEN}")
 
 # Pre-resolve paths for shared use
 logging.debug("Loading configuration and resolving paths...")

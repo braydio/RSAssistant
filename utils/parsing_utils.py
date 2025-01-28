@@ -2,20 +2,17 @@ import csv
 import json
 import logging
 import re
-from typing import Optional, Tuple, Match
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from typing import Match, Optional, Tuple
 
 from discord import embeds
 
+from utils.config_utils import (ACCOUNT_MAPPING, DISCORD_PRIMARY_CHANNEL,
+                                get_account_nickname)
+from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
 # from RSAssistant import send_discord_alert
 from utils.utility_utils import get_last_stock_price
-from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
-from utils.config_utils import (
-    get_account_nickname,
-    ACCOUNT_MAPPING,
-    DISCORD_PRIMARY_CHANNEL
-)
 
 account_mapping = ACCOUNT_MAPPING
 
@@ -26,7 +23,7 @@ order_patterns = {
     "complete": {
         "BBAE": r"(BBAE)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Fennel": r"(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)",
-        "Public": r"(Public)\s(\d+):\s(selling|buying)\s(\d+\.?\d*)\sof\s(\w+)|sell\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
+        "Public": r"(Public)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Robinhood" : r"(Robinhood)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "WELLSFARGO": r"(WELLSFARGO)\s(\d+)\s\*\*\*(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
         "Fidelity": r"(Fidelity)\s(\d+)\saccount\s(?:xxxxx)?(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
@@ -751,32 +748,21 @@ def alert_channel_message(content):
         str: A formatted alert message or None if no match is found.
     """
     # Updated regex to handle extra spaces or blank lines
-    alert_pattern = r"📰 \| (.+?) \((\w+)\)\s*(https?://[^\s]+)"
-    match = re.search(alert_pattern, content)
+    url_pattern = r"http[s]?://[^\s]+"
+    url_match = re.search(url_pattern, content)
+    url = url_match.group(0) if url_match else None
 
-    if match:
-        return match
-    else:
-        return None
-'''
-        title = match.group(1)  # Extract the full title
-        ticker = match.group(2)  # Extract the stock ticker
-        url = match.group(3)  # Extract the URL
+    # Regex pattern to extract the ticker inside parentheses
+    ticker_pattern = r"\(([A-Z]+)\)"
+    ticker_match = re.search(ticker_pattern, content)
+    ticker = ticker_match.group(1) if ticker_match else None
 
-        # Detect "Reverse Stock Split" in the title
-        if "Reverse Stock Split" in title:
-            action = "Reverse Stock Split"
-        else:
-            action = "Corporate Action"
+    # Check if "Reverse Stock Split" is mentioned in the message
+    reverse_split_detected = "Reverse Stock Split" in content
 
-        # Format the alert message
-        alert_message = (
-            f"🚨 Nasdaq Corporate Actions Alert:\n"
-            f"**{ticker} {action}**\n"
-            f"[Details Here]({url})"
-        )
-        return alert_message
-
-    logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
-    return None  # Return None if no match is found
-'''
+    # Return the parsed information
+    return {
+        "ticker": ticker,
+        "url": url,
+        "reverse_split_detected": reverse_split_detected
+    }

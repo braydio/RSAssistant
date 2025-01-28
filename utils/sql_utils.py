@@ -1,9 +1,9 @@
+import asyncio
 import logging
 import os
 import sqlite3
 import uuid
 from datetime import datetime
-import asyncio
 
 from utils.config_utils import SQL_DATABASE_DB_V1, load_config, setup_logging
 

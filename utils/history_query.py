@@ -1,10 +1,12 @@
-import pandas as pd
-import matplotlib.pyplot as plt
 import io
-from utils.sql_utils import get_db_connection
-from utils.config_utils import ACCOUNT_MAPPING_FILE
-import discord
 import json
+
+import discord
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from utils.config_utils import ACCOUNT_MAPPING_FILE
+from utils.sql_utils import get_db_connection
 
 # Load account mappings for translating account IDs to nicknames
 with open(ACCOUNT_MAPPING_FILE, "r") as f:

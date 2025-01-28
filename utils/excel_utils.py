@@ -10,10 +10,11 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 # Import configuration and functions from init.py
-from utils.config_utils import (HOLDINGS_LOG_CSV, ACCOUNT_MAPPING_FILE,
-                        ERROR_LOG_FILE, EXCEL_FILE_MAIN, ACCOUNT_MAPPING,
-                        get_account_nickname, load_account_mappings,
-                        load_config, setup_logging)
+from utils.config_utils import (ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE,
+                                ERROR_LOG_FILE, EXCEL_FILE_MAIN,
+                                HOLDINGS_LOG_CSV, get_account_nickname,
+                                load_account_mappings, load_config,
+                                setup_logging)
 
 EXCEL_FILE_DIRECTORY = './volumes/excel/'
 EXCEL_FILE_NAME = 'ReverseSplitLog'

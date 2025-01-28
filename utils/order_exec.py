@@ -1,6 +1,8 @@
-import logging
 import asyncio
+import logging
 from datetime import datetime, timedelta
+
+from utils.watch_utils import watch_list_manager
 
 # Task queue for handling messages
 task_queue = asyncio.Queue()
@@ -51,11 +53,32 @@ async def send_sell_command(ctx, command: str, loop=None):
     try:
         # Send the command using the helperAPI
         logging.info(f"Preparing to send command: {command}")
-        printAndDiscord(command, loop=loop)
+        await ctx.send(command)
         logging.info(f"Sent command: {command} to channel {ctx.channel.id}")
     except Exception as e:
         logging.error(f"Error sending sell command: {e}")
         await ctx.send(command)
+
+
+async def process_sell_list():
+    while True:
+        try:
+            now = datetime.now()
+            for ticker, details in list(watch_list_manager.sell_list.items()):
+                scheduled_time = datetime.strptime(details["scheduled_time"], "%Y-%m-%d %H:%M:%S")
+                if now >= scheduled_time:
+                    # Execute the sell command
+                    command = f"!rsa sell {details['quantity']} {ticker} {details['broker']} false"
+                    await send_sell_command(None, command)
+
+                    # Remove the executed order from the sell list
+                    del watch_list_manager.sell_list[ticker]
+                    watch_list_manager.save_sell_list()
+                    logging.info(f"Executed and removed {ticker} from sell list.")
+            await asyncio.sleep(60)  # Check every minute
+        except Exception as e:
+            logging.error(f"Error processing sell list: {e}")
+
 
 
 async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, broker: str, dry_mode: str, execution_time: datetime):
@@ -72,42 +95,27 @@ async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, b
         execution_time (datetime): The time to execute the sell order.
     """
     try:
-        # Delay until the specified execution time
+        # Add order to the sell list
+        watch_list_manager.add_to_sell_list(
+            ticker=ticker,
+            broker=broker,
+            quantity=quantity,
+            scheduled_time=execution_time.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+        # Calculate delay until execution
         now = datetime.now()
         delay = (execution_time - now).total_seconds()
 
         if delay > 0:
-            logging.info(f"Waiting {delay} seconds to execute sell command.")
+            logging.info(f"Waiting {delay} seconds to execute {action} command.")
             await asyncio.sleep(delay)
 
-        # Construct the sell command
+        # Construct the command
         command = f"!rsa {action} {quantity} {ticker.upper()} {broker} {dry_mode.lower()}"
 
-        # Send the command
+        # Execute the command
         await send_sell_command(ctx, command, loop=asyncio.get_event_loop())
 
     except Exception as e:
-        logging.error(f"Error in scheduled sell order execution: {e}")
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    # Example parameters for testing purposes
-    class MockContext:
-        """Mock context for testing purposes."""
-        async def send(self, message):
-            print(f"Mock send: {message}")
-        
-        @property
-        def channel(self):
-            return type("MockChannel", (object,), {"id": 12345})()
-
-    ctx = MockContext()
-    ticker = "AAPL"
-    quantity = 10
-    broker = "chase"
-    dry_mode = "false"
-    execution_time = datetime.now() + timedelta(seconds=30)  # 30 seconds from now
-
-    # Running the test with a mock context
-    asyncio.run(schedule_and_execute(ctx, ticker, quantity, broker, dry_mode, execution_time))
+        logging.error(f"Error in scheduled {action} order execution: {e}")

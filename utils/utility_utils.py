@@ -4,17 +4,17 @@ import json
 import logging
 import os
 import warnings
-import yaml
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import discord
+import yaml
 import yfinance as yf
 
-from utils.config_utils import (
-    load_config, get_account_nickname, load_account_mappings,
-    HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE
-)
+from utils.config_utils import (ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE,
+                                HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
+                                get_account_nickname, load_account_mappings,
+                                load_config)
 
 # Load configuration and holdings data
 config = load_config()
