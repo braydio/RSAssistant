@@ -68,7 +68,7 @@ async def process_sell_list():
                 scheduled_time = datetime.strptime(details["scheduled_time"], "%Y-%m-%d %H:%M:%S")
                 if now >= scheduled_time:
                     # Execute the sell command
-                    command = f"!rsa sell {details['quantity']} {ticker} {details['broker']} false"
+                    command = f"test command {details['quantity']} {ticker} {details['broker']} false"
                     await send_sell_command(None, command)
 
                     # Remove the executed order from the sell list
@@ -81,7 +81,7 @@ async def process_sell_list():
 
 
 
-async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, broker: str, dry_mode: str, execution_time: datetime):
+async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, broker: str, execution_time: datetime):
     """
     Schedules and executes a sell order by sending a command to the target bot using helperAPI.
 
@@ -91,7 +91,6 @@ async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, b
         ticker (str): The stock ticker symbol.
         quantity (float): Quantity of stock to sell.
         broker (str): Broker to execute the sell order. Use 'all' for all brokers.
-        dry_mode (str): "true" for simulation, "false" for live.
         execution_time (datetime): The time to execute the sell order.
     """
     try:
@@ -112,7 +111,7 @@ async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, b
             await asyncio.sleep(delay)
 
         # Construct the command
-        command = f"!rsa {action} {quantity} {ticker.upper()} {broker} {dry_mode.lower()}"
+        command = f"!rsa {action} {quantity} {ticker.upper()} {broker} false"
 
         # Execute the command
         await send_sell_command(ctx, command, loop=asyncio.get_event_loop())

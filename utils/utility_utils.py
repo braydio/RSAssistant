@@ -32,6 +32,20 @@ def check_holdings_timestamp(filename):
     except FileNotFoundError:
         return "CSV file not found"
 
+## -- Print raw order data to term for debugging
+def debug_insert_order_history(order_data):
+    """Debug function to log and return the order data instead of saving it."""
+    try:
+        # Return the raw data being passed for inspection
+        return order_data
+    except Exception as e:
+        logging.error(f"Error processing order data for debug: {e}")
+        return None
+
+def debug_order_data(order_data):
+    debug_data = debug_insert_order_history(order_data)
+    print(f"Order data being passed to SQL: {debug_data}")
+
 
 HOLDINGS_TIMESTAMP = check_holdings_timestamp(HOLDINGS_LOG_CSV)
 

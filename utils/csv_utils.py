@@ -4,6 +4,7 @@ import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
+import uuid
 
 import discord
 import yfinance as yf
@@ -11,8 +12,7 @@ from discord import Embed
 
 from utils.config_utils import (HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, csv_toggle,
                                 load_config)
-from utils.excel_utils import update_excel_log
-from utils.sql_utils import insert_order_history, update_holdings_live
+from utils.sql_utils import update_holdings_live
 
 # Load configuration and mappings
 config = load_config()
@@ -135,13 +135,15 @@ def alert_negative_quantity(order_data):
     except ValueError:
         logging.error(f"Invalid Quantity value in order: {order_data.get('Quantity')}, unable to check for negativity.")
 
+
 def save_order_to_csv(order_data):
     # Saves order, deletes duplicates and stale entries
     try:
+        logging.info(f"Processing order data: {order_data}")
+
         ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
         logging.info("Processing new order in csv_utils, checking for duplicates and stale entries.")
 
-        # Add a current timestamp to the order data if not already set
         if "Timestamp" not in order_data or not order_data["Timestamp"]:
             order_data["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -152,27 +154,17 @@ def save_order_to_csv(order_data):
         alert_negative_quantity(order_data)
 
         # Archive stale orders
-        cutoff_date = datetime.now() - timedelta(days=30)
-        non_stale_orders = archive_stale_orders(
-            existing_orders, cutoff_date, ORDERS_LOG_CSV
-        )
+        # cutoff_date = datetime.now() - timedelta(days=30)
+        # non_stale_orders = archive_stale_orders(
+        #    existing_orders, cutoff_date, ORDERS_LOG_CSV
+        # )
 
         # Identify the latest orders to handle duplicates
-        updated_orders = identify_latest_orders(non_stale_orders, order_data)
+        updated_orders = identify_latest_orders(existing_orders, order_data)
 
-        # Write updated orders back to the CSV (if enabled)
+        # Write updated orders back to the CSV
         write_orders_to_csv(updated_orders, ORDERS_LOG_CSV)
         logging.info(f"Order saved to csv: {order_data}")
-
-        # Save to database
-        insert_order_history(order_data)
-        logging.info("Saved orders to sql database.")
-
-        excel_log_updated = update_excel_log(order_data)
-        if excel_log_updated:
-            logging.info("Excel log updated successfully.")
-        else:
-            logging.warning("Order not saved to excel log, returning from csv_utils.")
 
     except Exception as e:
         logging.error(f"Error saving order to CSV: {e}")

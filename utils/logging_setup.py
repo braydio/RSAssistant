@@ -149,3 +149,83 @@ def setup_logging(config=None, verbose=False):
     console_handler.setFormatter(ColorFormatter("%(asctime)s - %(levelname)s - %(message)s"))
 
     logging.info("Logging setup complete.")
+
+
+def setup_logging_no_dedup(config=None, verbose=False):
+    """
+    Similar to setup_logging, but logs to a separate file
+    WITHOUT the deduplication filter.
+    """
+    log_level = (
+        "DEBUG" if verbose
+        else (config.get("logging", {}).get("level", "INFO").upper() if config else "INFO")
+    )
+    # Use a different file path so it doesn't conflict with the main log
+    log_file = (
+        config.get("logging", {}).get("file_no_dedup", "logs/app_no_dedup.log")
+        if config
+        else "volumes/logs/app_no_dedup.log"
+    )
+    max_size = int(config.get("logging", {}).get("max_size", 10485760)) if config else 10485760
+    backup_count = config.get("logging", {}).get("backup_count", 2) if config else 2
+
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+    # Create a fresh logger for this function so it doesn't conflict with the main logger
+    logger_no_dedup = logging.getLogger("no_dedup_logger")
+    logger_no_dedup.setLevel(getattr(logging, log_level, logging.INFO))
+    logger_no_dedup.handlers.clear()  # ensure no duplication
+
+    # File handler
+    handler = RotatingFileHandler(log_file, maxBytes=max_size, backupCount=backup_count)
+    handler.setLevel(getattr(logging, log_level, logging.INFO))
+
+    # Console handler if you still want console output with color
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(getattr(logging, log_level, logging.INFO))
+
+    # Try forcing UTF-8 in console
+    try:
+        if hasattr(console_handler.stream, "reconfigure"):
+            console_handler.stream.reconfigure(encoding="utf-8")
+        else:
+            console_handler.stream = open(1, "w", encoding="utf-8", closefd=False)
+    except Exception as e:
+        print(f"Failed to set UTF-8 encoding for console: {e}")
+
+    # Add a filter to replace invalid chars if desired
+    filter_invalid_chars = ReplaceInvalidCharactersFilter()
+    handler.addFilter(filter_invalid_chars)
+    console_handler.addFilter(filter_invalid_chars)
+
+    # *** Notice: We do NOT add the TimeLengthListDuplicateFilter here. ***
+
+    # Set up color formatter for console if desired
+    class ColorFormatter(logging.Formatter):
+        COLORS = {
+            logging.DEBUG: Fore.BLUE,
+            logging.INFO: Fore.GREEN,
+            logging.WARNING: Fore.YELLOW,
+            logging.ERROR: Fore.RED,
+            logging.CRITICAL: Fore.RED + Style.BRIGHT,
+        }
+
+        def format(self, record):
+            log_color = self.COLORS.get(record.levelno, "")
+            record.levelname = f"{log_color}{record.levelname}{Style.RESET_ALL}"
+            return super().format(record)
+
+    console_handler.setFormatter(ColorFormatter("%(asctime)s - %(levelname)s - %(message)s"))
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+
+    # Add handlers
+    logger_no_dedup.addHandler(handler)
+    logger_no_dedup.addHandler(console_handler)
+
+    # Example: if you want less chatty logs from third parties
+    logging.getLogger("yfinance").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("discord").setLevel(logging.WARNING)
+
+    logger_no_dedup.info("No-dedup logging setup complete.")
+    return logger_no_dedup

@@ -12,40 +12,43 @@ from utils.config_utils import (ACCOUNT_MAPPING, DISCORD_PRIMARY_CHANNEL,
                                 get_account_nickname)
 from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
 # from RSAssistant import send_discord_alert
-from utils.utility_utils import get_last_stock_price
+from utils.utility_utils import get_last_stock_price, debug_order_data
+from utils.excel_utils import update_excel_log
+from utils.sql_utils import insert_order_history
 
 account_mapping = ACCOUNT_MAPPING
 
 # Store incomplete orders
 incomplete_orders = {}
 
+# RIP 
+# "Tradier": r"(Tradier)\s(\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s([A-Z]+)",
+# "Firstrade": r"(Firstrade)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
+# "Firstrade": r"(Firstrade)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
 order_patterns = {
     "complete": {
         "BBAE": r"(BBAE)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Fennel": r"(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)",
-        "Public": r"(Public)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Robinhood" : r"(Robinhood)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "WELLSFARGO": r"(WELLSFARGO)\s(\d+)\s\*\*\*(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
         "Fidelity": r"(Fidelity)\s(\d+)\saccount\s(?:xxxxx)?(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
         "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)",
         "DSPAC": r"(DSPAC)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Plynk": r"(Plynk)\s(\d+)\sAccount\s(?P<account_number>\d{4})\s(?P<action>buy|sell)\s(?P<stock>\w+)",
+        "Public": r"Public\s(Public)\s(\d+):\s(selling|buying)\s(\d+\.?\d*)\sof\s(\w+)"
     },
     "incomplete": {
         "Schwab": r"(Schwab)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
-        "Firstrade": r"(Firstrade)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
         "Vanguard": r"(Vanguard)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
         "Chase": r"(Chase)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)",
-        "Tradier": r"(Tradier)\s(\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s([A-Z]+)",
+        "Public": r"(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)"
     },
     "verification": {
         "Schwab": r"(Schwab)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
-        "Firstrade": r"(Firstrade)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
         "Vanguard": r"(Vanguard)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
         "Chase": r"(Chase)\s(\d+)\saccount\s(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
-        "Tradier": r"Tradier account xxxx(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+):\s(ok|failed)",
-        "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)",
-    },
+        "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)"
+    }            
 }
 
 # Chapt Complete Orders Main
@@ -94,7 +97,7 @@ def parse_broker_data(
         "complete": {
             "BBAE": (6, 3, 4, 5),
             "Fennel": (6, 3, 4, 5),
-            "Public": (6, 3, 4, 5),
+            "Public": (None, 1, 2, 3),
             "Robinhood": (6, 3, 4, 5),
             "WELLSFARGO": (3, 4, 5, 6),
             "Fidelity": (3, 4, 5, 6),
@@ -108,6 +111,7 @@ def parse_broker_data(
             "Vanguard": (None, 3, 4, 5),
             "Chase": (None, 3, 4, 5),
             "Tradier": (None, 3, 4, 5),
+            "Public": (2, 3, 4, 5)
         },
         "verification": {
             "Schwab": (3, None, None, None),
@@ -143,6 +147,10 @@ def parse_broker_data(
         quantity = float(match.group(positions[2])) if positions[2] else None
         stock = match.group(positions[3]) if positions[3] else None
 
+        # Normalize Public broker group
+        if broker_name.lower() == "public" and account_number:
+            account_number = account_number.strip()  # Ensure it's clean
+
         return account_number, action, quantity, stock
     except IndexError as e:
         logging.error(
@@ -157,6 +165,11 @@ def handle_complete_order(match, broker_name, broker_number):
         account_number, action, quantity, stock = parse_broker_data(
             broker_name, match, "complete"
         )
+        logging.debug(f"Act No. {account_number}")
+        logging.debug(f"Quant: {quantity}")
+        logging.debug(f"B|S {action}") 
+        logging.debug(f"TKCR {stock}")
+
         if not account_number or not action or not stock:
             logging.error(
                 f"Failed to parse broker data for {broker_name}. Skipping order."
@@ -266,44 +279,53 @@ def normalize_order_data(
     return broker_name, broker_number, action, quantity, stock, account_number
 
 # Chapt Incomplete, Failed, and Manual Orders
+
+
 def handle_incomplete_order(match, broker_name, broker_number):
-    """Sets up temporary entries for verification of incomplete orders."""
-    try:
-        action = match.group(3)
-        quantity = match.group(4)
-        stock = match.group(5)
+    temporary_orders = {}
+    broker_group = match.group(2)
+    action = match.group(3)
+    quantity = match.group(4)
+    ticker = match.group(5)
+    
+    # Store temporary order
+    temporary_orders[broker_group] = {
+        "broker_name": broker_name,
+        "broker_group": broker_group,
+        "action": action,
+        "quantity": quantity,
+        "ticker": ticker,
+    }
+    logging.info(f"Temporary order created: {temporary_orders[broker_group]}")
 
         # Normalize data
-        broker_name, broker_number, action, quantity, stock, _ = normalize_order_data(
-            broker_name, broker_number, action, quantity, stock, None
+    broker_name, broker_number, action, quantity, ticker, _ = normalize_order_data(
+            broker_name, broker_number, action, quantity, ticker, None
         )
 
-        logging.info(
-            f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {stock}"
+    logging.info(
+            f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {ticker}"
         )
 
-        broker_accounts = account_mapping.get(broker_name, {}).get(str(broker_number))
-        if broker_accounts:
-            for account, nickname in broker_accounts.items():
-                incomplete_orders[(stock, account)] = {
-                    "broker_name": broker_name,
-                    "broker_number": broker_number,
-                    "account_number": account,
-                    "nickname": nickname,
-                    "action": action,
-                    "quantity": quantity,
-                    "stock": stock,
-                }
-                logging.info(
-                    f"Temporary order created for {nickname} - Account ending {account}"
-                )
-        else:
+    broker_accounts = account_mapping.get(broker_name, {}).get(str(broker_number))
+    if broker_accounts:
+        for account, nickname in broker_accounts.items():
+            incomplete_orders[(ticker, account)] = {
+                "broker_name": broker_name,
+                "broker_number": broker_number,
+                "account_number": account,
+                "nickname": nickname,
+                "action": action,
+                "quantity": quantity,
+                "stock": ticker,
+            }
+            logging.info(
+                f"Temporary order created for {nickname} - Account ending {account}"
+            )
+    else:
             logging.error(
                 f"No accounts found for broker {broker_name} number {broker_number}"
             )
-
-    except Exception as e:
-        logging.error(f"Error in handle_incomplete_order: {e}")
 
 def handle_verification(match, broker_name, broker_number):
     quantity = 1  # Set a default value to avoid "referenced before assignment" error
@@ -436,11 +458,34 @@ def handle_failed_order(match, broker_name, broker_number):
     except Exception as e:
         logging.error(f"Error handling failed order: {e}")
 
+
 def handoff_order_data(order_data, broker_name, broker_number, account_number):
-    logging.info(f"Processed order data, passing to logs and database.")
-    # Save the order data to CSV
-    save_order_to_csv(order_data)
-    logging.info(f"Order successfully saved to CSV for stock {order_data['Stock']}")
+    logging.info(
+        f"Processing order for {broker_name} {broker_number} {account_number}. "
+        "Passing to CSV, DB, and Excel log..."
+    )
+
+    order_debug = debug_order_data(order_data)
+
+    if order_debug: 
+        logging.info(f"I think passed the order debug.")
+
+    # Each key is a descriptive label; each value is the call that returns True/False.
+    steps = {
+        "CSV": save_order_to_csv(order_data),
+        "SQL DB": insert_order_history(order_data),
+        "Excel log": update_excel_log(order_data),
+    }
+
+    # Log successes/warnings in a loop
+    for step_label, result in steps.items():
+        if result:
+            logging.info(f"{step_label} updated with order data.")
+        else:
+            logging.warning(f"Order data not saved to {step_label}.")
+
+    logging.info("Handoff of order data complete.")
+
 
 # Chapt Parse Holdings
 def parse_embed_message(embed):
@@ -736,33 +781,33 @@ async def send_negative_holdings(DISCORD_SECONDARY_CHANNEL, quantity, stock, bro
 
     except Exception as e:
         logging.error(f"Error sending Discord alert for stock {stock}, account {account_number}: {e}")
-
-def alert_channel_message(content):
-    """
-    Parses alert content and returns a formatted alert message if a match is found.
-    
-    Args:
-        content (str): The content of the message to parse.
         
-    Returns:
-        str: A formatted alert message or None if no match is found.
-    """
-    # Updated regex to handle extra spaces or blank lines
+def alert_channel_message(content):
+    """Extracts ticker, URL, and confirms if a reverse split alert is present."""
+
+    # Regex pattern to extract the URL
     url_pattern = r"http[s]?://[^\s]+"
     url_match = re.search(url_pattern, content)
     url = url_match.group(0) if url_match else None
 
+    if url:
+        logging.info(f"URL detected in alert message: {url}")
+
     # Regex pattern to extract the ticker inside parentheses
-    ticker_pattern = r"\(([A-Z]+)\)"
+    ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
     ticker_match = re.search(ticker_pattern, content)
     ticker = ticker_match.group(1) if ticker_match else None
 
-    # Check if "Reverse Stock Split" is mentioned in the message
-    reverse_split_detected = "Reverse Stock Split" in content
+    if ticker:
+        logging.info(f"Ticker detected in alert message: {ticker}")
+
+    # Case-insensitive check if "Reverse Stock Split" appears anywhere in the message
+    reverse_split_confirm = re.search(r"reverse stock split", content, re.IGNORECASE) is not None
+    logging.info(f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}")
 
     # Return the parsed information
     return {
         "ticker": ticker,
         "url": url,
-        "reverse_split_detected": reverse_split_detected
+        "reverse_split_confirmed": reverse_split_confirm
     }

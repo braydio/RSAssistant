@@ -151,8 +151,8 @@ async def process_sell_list(bot):
     except Exception as e:
         logging.error(f"Error processing sell list: {e}")
 
-@bot.command(name="order", help="Schedule a buy or sell order. Usage: `..order <buy/sell> <ticker> [quantity] <broker> <dry_mode> <time>`")
-async def process_order(ctx, action: str, quantity: float = 1, ticker: str = None, broker: str = "all", dry_mode: str = "false", time: str = None):
+@bot.command(name="ord", help="Schedule a buy or sell order. Usage: `..ord <buy/sell> <ticker> <broker> [quantity] <time>`")
+async def process_order(ctx, action: str, ticker: str = None, broker: str = "all", quantity: float = 1, time: str = None):
     """
     Processes and schedules a buy or sell order. Defaults:
     - Action: 'buy' or 'sell'
@@ -176,13 +176,8 @@ async def process_order(ctx, action: str, quantity: float = 1, ticker: str = Non
             await ctx.send("Quantity must be greater than 0.")
             return
 
-        # Validate dry_mode
-        if dry_mode.lower() not in ["true", "false"]:
-            await ctx.send("Invalid dry mode. Use 'true' or 'false'.")
-            return
-
         now = datetime.now()
-        execution_time = None
+        execution_time = now
 
         # Validate and parse time
         if time:
@@ -192,7 +187,7 @@ async def process_order(ctx, action: str, quantity: float = 1, ticker: str = Non
                         date_part, time_part = time.split(" ")
                         month, day = map(int, date_part.split("/"))
                         hour, minute = map(int, time_part.split(":"))
-                        await ctx.send(f"Scheduled {action} order: {quantity} {ticker.upper()} via {broker} in {'dry run' if dry_mode == 'true' else 'live'} mode ")
+                        await ctx.send(f"Scheduled {action} order: {quantity} {ticker.upper()} in {broker}")
                         execution_time = now.replace(month=month, day=day, hour=hour, minute=minute, second=0, microsecond=0)
                     else:  # mm/dd only
                         month, day = map(int, time.split("/"))
@@ -207,16 +202,18 @@ async def process_order(ctx, action: str, quantity: float = 1, ticker: str = Non
                 await ctx.send("Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd.")
                 return
         else:
-            execution_time = now  # Execute immediately if no time is specified
+            execution_time = now
+            await ctx.send(f"Executing {action} order now {now}")
+            # await schedule_and_execute(ctx, action, ticker, quantity, broker, execution_time=now)  # Execute immediately if no time is specified
 
         # Schedule the order using logic in `order_exec.py`
         await ctx.send(f"Schedule: {action} {ticker} in {broker} for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}.")
-        await schedule_and_execute(ctx, action, ticker, quantity, broker, dry_mode, execution_time)
+        await schedule_and_execute(ctx, action, ticker, quantity, broker, execution_time)
 
-        await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker} {'dry' if dry_mode == 'true' else 'false'}")
+        # await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker}")
 
 
-        logging.info(f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, dry_mode: {dry_mode}, time: {execution_time}.")
+        logging.info(f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, time: {execution_time}.")
 
     except Exception as e:
         logging.error(f"Error scheduling {action} order: {e}")
@@ -260,8 +257,8 @@ async def restart(ctx):
 @bot.event
 async def on_message(message):
     """Triggered when a message is received in the target channel."""
-    if message.author == bot.user:
-        return  # Prevents the bot from responding to itself
+    #if message.author == bot.user:
+    #    return  # Prevents the bot from responding to itself
 
     # Check if the message was sent in the target channel
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
@@ -277,40 +274,29 @@ async def on_message(message):
     if message.channel.id == DISCORD_SECONDARY_CHANNEL:
         if message.content:
             logging.info(f"Received message: {message.content}")
-            
+
             channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
             logging.info(f"Secondary Channel: {channel}")
+
             content = message.content
+            result = alert_channel_message(content)
 
-            match = alert_channel_message(content)
+            if result and result.get("reverse-split-confirm"):
+                alert_ticker = result.get("ticker")
+                alert_url = result.get("url")
 
-            if match:
-                title = match.group(1)  # Extract the full title
-                ticker = match.group(2)  # Extract the stock ticker
-                url = match.group(3)  # Extract the URL
+                logging.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
+                
+                main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+                if main_channel:
+                    await main_channel.send(f"Reverse Split Alert for {alert_ticker} - {alert_url}")
+                    logging.info("Alert Message Sent to Primary Channel")
+            else:
+                logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
 
-                logging.info(f"Nasdaq Feed: {title} {ticker} {url}")
-
-                # Detect "Reverse Stock Split" in the title
-                if "Reverse Stock Split" in title:
-                    action = "Reverse Stock Split"
-                else:
-                    action = "Corporate Action"
-
-                # Format the alert message
-                alert_message = (
-                    f"🚨 Nasdaq Corporate Actions Alert:\n"
-                    f"**{ticker} {action}**\n"
-                    f"[Details Here]({url})"
-                )
-                logging.info("Alert Message")
-                channel.send(alert_message)
-
-            # Pass the message to the command processing so bot commands work
+    # Always process bot commands
     await bot.process_commands(message)
-
-    logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
-    return None  # Return None if no match is found
+    
 
 @bot.command(name="reminder", help="Shows daily reminder")
 async def show_reminder(ctx):
@@ -332,7 +318,6 @@ async def add_to_sell(ctx, ticker: str):
     watch_list_manager.add_to_sell_list(ticker)
     await ctx.send(f"Added {ticker} to the sell list.")
 
-
 @bot.command(name="nosell", help="Remove a ticker from the sell list. Usage: `..removesell <ticker>`")
 async def remove_sell(ctx, ticker: str):
     """Remove a ticker from the sell list."""
@@ -341,7 +326,6 @@ async def remove_sell(ctx, ticker: str):
         await ctx.send(f"Removed {ticker} from the sell list.")
     else:
         await ctx.send(f"{ticker} was not in the sell list.")
-
 
 @bot.command(name="selling", help="View the current sell list.")
 async def view_sell_list(ctx):
@@ -435,7 +419,6 @@ async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = Non
 
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
 
-
 @bot.command(name="addratio",
     help="Adds or updates the split ratio for an existing ticker in the watchlist.",
 )
@@ -446,7 +429,6 @@ async def add_ratio(ctx, ticker: str, split_ratio: str):
         return
 
     await watch_list_manager.watch_ratio(ctx, ticker, split_ratio)
-
 
 @bot.command(name="watchlist",
     help="Lists all tickers currently being watched.")
