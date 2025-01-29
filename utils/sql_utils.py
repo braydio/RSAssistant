@@ -193,10 +193,11 @@ def validate_order_data(order_data):
         if field not in order_data:
             raise ValueError(f"Missing required field in order_data: {field}")
 
-import uuid
-import sqlite3
 import logging
+import sqlite3
 import time
+import uuid
+
 
 def insert_order_history(order_data):
     """

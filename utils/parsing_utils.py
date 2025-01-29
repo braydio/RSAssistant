@@ -11,10 +11,10 @@ from discord import embeds
 from utils.config_utils import (ACCOUNT_MAPPING, DISCORD_PRIMARY_CHANNEL,
                                 get_account_nickname)
 from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
-# from RSAssistant import send_discord_alert
-from utils.utility_utils import get_last_stock_price, debug_order_data
 from utils.excel_utils import update_excel_log
 from utils.sql_utils import insert_order_history
+# from RSAssistant import send_discord_alert
+from utils.utility_utils import debug_order_data, get_last_stock_price
 
 account_mapping = ACCOUNT_MAPPING
 

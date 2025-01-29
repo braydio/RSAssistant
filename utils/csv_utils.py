@@ -2,9 +2,9 @@ import asyncio
 import csv
 import logging
 import os
+import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
-import uuid
 
 import discord
 import yfinance as yf
