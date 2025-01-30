@@ -2,7 +2,6 @@ APScheduler==3.11.0
 beautifulsoup4==4.12.3
 colorama==0.4.6
 discord.py==2.4.0
-matplotlib==3.10.0
 openpyxl==3.1.5
 pandas==2.2.3
 python-dotenv==1.0.1
