@@ -11,7 +11,7 @@ import discord
 import yaml
 import yfinance as yf
 
-from utils.config_utils import (ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE,
+from utils.config_utils import (ACCOUNT_MAPPING, ACCOUNT_MAPPING,
                                 HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
                                 get_account_nickname, load_account_mappings,
                                 load_config)
@@ -55,7 +55,7 @@ async def track_ticker_summary(
     show_details=False,
     specific_broker=None,
     holding_logs_file=HOLDINGS_LOG_CSV,
-    account_mapping_file=ACCOUNT_MAPPING_FILE,
+    account_mapping_file=ACCOUNT_MAPPING,
 ):
     """
     Track accounts that hold the specified ticker, aggregating at the broker level.

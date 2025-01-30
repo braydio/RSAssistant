@@ -10,7 +10,7 @@ import discord
 import yfinance as yf
 from discord import Embed
 
-from utils.config_utils import (HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, csv_toggle,
+from utils.config_utils import (HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
                                 load_config)
 from utils.sql_utils import update_holdings_live
 

@@ -33,9 +33,7 @@ def setup_logging(config=None, verbose=False):
         if config
         else "volumes/logs/app.log"
     )
-    max_size = (
-        int(config.get("logging", {}).get("max_size", 10485760)) if config else 10485760
-    )
+    max_size = 10485760
     backup_count = config.get("logging", {}).get("backup_count", 2) if config else 2
 
     # Ensure the logs directory exists

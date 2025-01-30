@@ -5,13 +5,13 @@ import sqlite3
 import uuid
 from datetime import datetime
 
-from utils.config_utils import SQL_DATABASE_DB_V1, load_config, setup_logging
+from utils.config_utils import SQL_DATABASE, load_config, setup_logging
 
 # Config and setup
 config = load_config()
 setup_logging()
 
-PRIMARY_DB_FILE = SQL_DATABASE_DB_V1  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
+PRIMARY_DB_FILE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 
 # Database connection helper
 def get_db_connection():

@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 # Import configuration and functions from init.py
-from utils.config_utils import (ACCOUNT_MAPPING, ACCOUNT_MAPPING_FILE,
+from utils.config_utils import (ACCOUNT_MAPPING,
                                 ERROR_LOG_FILE, EXCEL_FILE_MAIN,
                                 HOLDINGS_LOG_CSV, get_account_nickname,
                                 load_account_mappings, load_config,
@@ -132,7 +132,7 @@ EXCEL_FILE_LIVE = load_excel_workbook(EXCEL_FILE_PATH)
 # -- Update Account Mappings
 
 async def index_account_details(
-    ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING_FILE
+    ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING
 ):
     """Index account details from an Excel file, update account mappings in JSON, and notify about changes."""
 
@@ -170,7 +170,7 @@ async def index_account_details(
                     broker_name,
                     group_number,
                     account_number,
-                    mapping_file=ACCOUNT_MAPPING_FILE,
+                    mapping_file=ACCOUNT_MAPPING,
                 )
             if (
                 not broker_name
@@ -233,7 +233,7 @@ async def index_account_details(
 
 
 async def map_accounts_in_excel_log(
-    ctx, filename=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING_FILE
+    ctx, filename=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING
 ):
     """Update the Reverse Split Log sheet by inserting new rows, copying data and formatting, and deleting original rows."""
 
@@ -348,7 +348,7 @@ async def map_accounts_in_excel_log(
         await ctx.send(f"Error saving Excel file: {e}")
 
 
-async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING_FILE):
+async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
     """Clear the account mappings JSON file and notify the user."""
 
     try:
@@ -365,7 +365,7 @@ async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING_FILE):
 async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
     try:
         # Load the account mappings
-        account_mappings_file = ACCOUNT_MAPPING_FILE  # Path to account mappings file
+        account_mappings_file = ACCOUNT_MAPPING  # Path to account mappings file
         with open(account_mappings_file, "r") as f:
             account_mappings = json.load(f)
 
@@ -427,7 +427,7 @@ def generate_account_nickname(
 
     # Load current account mappings from JSON file
     try:
-        with open(ACCOUNT_MAPPING_FILE, "r") as f:
+        with open(ACCOUNT_MAPPING, "r") as f:
             account_mappings = json.load(f)
     except FileNotFoundError:
         logging.info(f"")
