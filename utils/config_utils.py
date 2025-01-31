@@ -9,13 +9,15 @@ import yaml
 from utils.logging_setup import setup_logging
 
 # Base directories
-BASE_DIR = Path(__file__).resolve().parent.parent  # Move up one directory from utils
+BASE_DIR = Path(__file__).resolve().parent  # Move up one directory from utils
 CONFIG_DIR = BASE_DIR / "config"
+print(f"Config dir at {CONFIG_DIR}")
 VOLUMES_DIR = BASE_DIR / "volumes"
 
-# Paths
 ENV_PATH = CONFIG_DIR / ".env"
 CONFIG_FILE = CONFIG_DIR / "settings.yaml"
+print(f"Config dir at {CONFIG_DIR} File at {CONFIG_FILE} ENV AT {ENV_PATH}")
+# Paths
 ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
 WATCH_FILE = CONFIG_DIR / "watch_list.json"
 SELL_FILE = CONFIG_DIR / "sell_list.json"
@@ -49,11 +51,6 @@ def load_config():
 
     if _config_cache is not None:
         return _config_cache
-
-    if not CONFIG_FILE.exists():
-        logging.error(f"Config file is missing: {CONFIG_FILE}")
-        raise FileNotFoundError(f"Config file is missing: {CONFIG_FILE}")
-
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             _config_cache = yaml.safe_load(f)

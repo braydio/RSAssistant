@@ -1,6 +1,7 @@
 FROM python:3.10-slim
 
 WORKDIR /app
+COPY config/.env /app/config/.env
 
 COPY requirements.txt /app/
 
