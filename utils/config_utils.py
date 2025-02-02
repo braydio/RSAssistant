@@ -9,7 +9,8 @@ import yaml
 from utils.logging_setup import setup_logging
 
 # Base directories
-BASE_DIR = Path(__file__).resolve().parent  # Move up one directory from utils
+UTILS_DIR = Path(__file__).resolve().parent  # Move up one directory from utils
+BASE_DIR = Path(UTILS_DIR).resolve().parent
 CONFIG_DIR = BASE_DIR / "config"
 print(f"Config dir at {CONFIG_DIR}")
 VOLUMES_DIR = BASE_DIR / "volumes"
@@ -24,7 +25,8 @@ SELL_FILE = CONFIG_DIR / "sell_list.json"
 EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
 HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
 ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
-SQL_DATABASE = VOLUMES_DIR / "db" / "reverse_splits.db"
+SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
+print(f"SQL DB at {SQL_DATABASE}")
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
 
 

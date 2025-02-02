@@ -173,7 +173,7 @@ def save_order_to_csv(order_data):
 
 # ! --- Holdings Management ---
 
-ALL_HOLDINGS_CURRENT = load_csv_log(HOLDINGS_LOG_CSV)
+CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
 
 def save_holdings_to_csv(parsed_holdings):
     """Saves holdings data to CSV, ensuring no duplicates are saved, quantities are valid floats, and a timestamp is added."""
@@ -245,6 +245,7 @@ def save_holdings_to_csv(parsed_holdings):
                     quantity=holding_dict["Quantity"],
                     price=holding_dict["Price"]
                 )
+
 
         # Write the updated holdings to the CSV
         if new_holdings:
@@ -369,7 +370,7 @@ def get_top_holdings(range=3):
     try:
         # Filter holdings where Quantity <= 1 and group by broker
         filtered_holdings = []
-        for holding in ALL_HOLDINGS_CURRENT:
+        for holding in CURRENT_HOLDINGS:
             try:
                 quantity = float(holding.get("Quantity", 0))
                 if quantity <= 1:

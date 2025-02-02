@@ -3,7 +3,7 @@ import logging
 import os
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from utils.config_utils import SQL_DATABASE, load_config, setup_logging
 
@@ -11,14 +11,14 @@ from utils.config_utils import SQL_DATABASE, load_config, setup_logging
 config = load_config()
 setup_logging()
 
-PRIMARY_DB_FILE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
+SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 
 # Database connection helper
 def get_db_connection():
     """Helper function to get a database connection."""
     logging.debug("Attempting to establish a database connection.")
     try:
-        conn = sqlite3.connect(PRIMARY_DB_FILE, timeout=30)  # Extend timeout to avoid lock errors
+        conn = sqlite3.connect(SQL_DATABASE, timeout=30)  # Extend timeout to avoid lock errors
         conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode for better concurrency
         logging.debug("Database connection established successfully.")
         return conn
@@ -142,21 +142,6 @@ def update_holdings_live(broker, broker_number, account_number, ticker, quantity
                 (account_id, ticker, quantity, price),
             )
 
-            # Keep only the latest two entries per day
-            cursor.execute(
-                """
-                DELETE FROM HoldingsLive
-                WHERE rowid NOT IN (
-                    SELECT rowid
-                    FROM HoldingsLive
-                    WHERE account_id = ? AND ticker = ? AND DATE(timestamp) = DATE('now')
-                    ORDER BY timestamp DESC
-                    LIMIT 2
-                )
-                """,
-                (account_id, ticker),
-            )
-            conn.commit()
             logging.info(f"Holdings updated successfully for ticker {ticker}, account {account_id}.")
         except sqlite3.Error as e:
             logging.error(f"Error updating holdings: {e}")
@@ -165,24 +150,33 @@ def update_holdings_live(broker, broker_number, account_number, ticker, quantity
 def update_historical_holdings():
     """Updates HistoricalHoldings by averaging daily data from HoldingsLive."""
     logging.info("Updating historical holdings based on live data.")
+    # Calculate yesterday's date as a string in 'YYYY-MM-DD' format.
+    yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
+            
+            # Insert aggregated holdings for yesterday.
             cursor.execute(
                 """
                 INSERT INTO HistoricalHoldings (account_id, ticker, date, quantity, average_price)
-                SELECT account_id, ticker, DATE(timestamp), AVG(quantity), AVG(average_price)
+                SELECT account_id,
+                       ticker,
+                       DATE(timestamp) AS date,
+                       AVG(quantity) AS avg_quantity,
+                       AVG(average_price) AS avg_price
                 FROM HoldingsLive
-                WHERE DATE(timestamp) = DATE('now', '-1 day')
+                WHERE DATE(timestamp) = ?
                 GROUP BY account_id, ticker, DATE(timestamp)
-                """
+                """,
+                (yesterday_date,)
             )
             conn.commit()
             logging.info("Historical holdings updated successfully.")
         except sqlite3.Error as e:
             logging.error(f"Error updating historical holdings: {e}")
             raise
-
 
 def validate_order_data(order_data):
     required_fields = [
@@ -192,12 +186,6 @@ def validate_order_data(order_data):
     for field in required_fields:
         if field not in order_data:
             raise ValueError(f"Missing required field in order_data: {field}")
-
-import logging
-import sqlite3
-import time
-import uuid
-
 
 def insert_order_history(order_data):
     """

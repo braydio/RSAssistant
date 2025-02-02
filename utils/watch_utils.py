@@ -13,6 +13,7 @@ from utils.config_utils import (DISCORD_SECONDARY_CHANNEL, SELL_FILE,
                                 WATCH_FILE, load_account_mappings, load_config)
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import get_last_stock_price, send_large_message_chunks
+from utils.sql_utils import update_historical_holdings
 
 # Load configuration and paths from settings
 config = load_config()
@@ -202,18 +203,20 @@ class WatchListManager:
 watch_list_manager = WatchListManager(WATCH_FILE, SELL_FILE)
 
 # Main functions
-
-
-
 async def send_reminder_message_embed(ctx):
     """Sends a reminder message with upcoming split dates in an embed."""
     # Create the embed message
+    logging.info(f"Sending reminder message at {datetime.now()}")
+    update_historical_holdings()
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
         color=discord.Color.blue(),
     )
 
+    logging.info(f"Reminder message called for {datetime.now()}")
+    update_historical_holdings()
+    
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
 
@@ -301,6 +304,9 @@ async def send_reminder_message(bot):
         description=" ",
         color=discord.Color.blue(),
     )
+
+    logging.info(f"Automated reminder message for {datetime.now()}")
+    update_historical_holdings()
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
