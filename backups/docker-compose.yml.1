@@ -12,7 +12,7 @@ services:
       - /home/braydenchaffee/mnt/windows-share/Docker/Volumes/excel:/app/volumes/excel # Persist Excel
       - /home/braydenchaffee/mnt/windows-share/Docker/Volumes/config:/app/config       # Shared config files
       - /home/braydenchaffee/Projects/RSAssistant/RSViewer/logs:/app/volumes/logs      # Locally saved logs (for RSView.py)
-      - /home/braydenchaffee/Projects/RSAssistant/RSViewer/config:/app/config  # Locally saved config (for RSView.py)
+      - /home/braydenchaffee/Projects/RSAssistant/RSViewer/config:/app/volumes/config  # Locally saved config (for RSView.py)
     environment:
       ENVIRONMENT: production
       TZ: America/New_York
