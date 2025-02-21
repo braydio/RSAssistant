@@ -56,7 +56,7 @@ intents.members = True
 
 # Initialize bot
 bot = commands.Bot(
-    command_prefix="..", case_insensitive=True, intents=intents
+    command_prefix="~", case_insensitive=True, intents=intents
 )
 
 periodic_task = None
@@ -252,6 +252,23 @@ async def restart(ctx):
     except Exception as e:
         logging.error(f"Error during restart: {e}")
         await ctx.send("An error occurred while attempting to restart the bot.")
+
+
+@bot.command(name="clear", help="Batch clears excess messages.")
+@commands.has_permissions(manage_messages=True)
+async def batchclear(ctx, limit: int):
+    if limit > 10000:
+        await ctx.send("That's too many brother man.")
+
+    messages_deleted = 0
+    while limit > 0:
+        batch_size = min(limit, 100)
+        deleted = await ctx.channel.purge(limit=batch_size)
+        messages_deleted += len(deleted)
+        limit -= batch_size
+        await asyncio.sleep(0.1)
+
+    await ctx.send(f"Deleted {limit} messages", delete_after=5)
 
 @bot.event
 async def on_message(message):
