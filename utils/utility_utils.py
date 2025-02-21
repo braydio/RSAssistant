@@ -11,7 +11,7 @@ import discord
 import yaml
 import yfinance as yf
 
-from utils.config_utils import (ACCOUNT_MAPPING, ACCOUNT_MAPPING,
+from utils.config_utils import (ACCOUNT_MAPPING, 
                                 HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
                                 get_account_nickname, load_account_mappings,
                                 load_config)
@@ -64,8 +64,8 @@ async def track_ticker_summary(
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
 
-    # Load account mappings
-    mapped_accounts = ACCOUNT_MAPPING
+    # Load account mappings 
+    mapped_accounts = load_account_mappings()
 
     try:
         # Read holdings log
