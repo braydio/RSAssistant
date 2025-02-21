@@ -34,4 +34,6 @@ tests/*
 *.yaml
 !example-settings.yaml
 
+*.archlinux
+RSViewer/*
 RSAssistant-backup
