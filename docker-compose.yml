@@ -7,10 +7,10 @@ services:
     env_file:
       - ./config/.env  # config/ is in the root directory
     volumes:
-      - F:/Shared/Docker/Volumes/logs:/app/volumes/logs   # Persist logs
-      - F:/Shared/Docker/Volumes/db:/app/volumes/db       # Persist database
-      - F:/Shared/Docker/Volumes/excel:/app/volumes/excel # Persist Excel
-      - F:/Shared/Docker/Volumes/config:/app/config       # Shared config files
+      - /Volumes/logs:/app/volumes/logs   # Persist logs
+      - /Volumes/db:/app/volumes/db       # Persist database
+      - /Volumes/excel:/app/volumes/excel # Persist Excel
+      - /Volumes/config:/app/config       # Shared config files
     environment:
       ENVIRONMENT: production
     deploy:
