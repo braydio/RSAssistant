@@ -8,11 +8,15 @@ from typing import Match, Optional, Tuple
 
 from discord import embeds
 
-from utils.config_utils import (ACCOUNT_MAPPING, DISCORD_PRIMARY_CHANNEL,
-                                get_account_nickname)
+from utils.config_utils import (
+    ACCOUNT_MAPPING,
+    DISCORD_PRIMARY_CHANNEL,
+    get_account_nickname,
+)
 from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
 from utils.excel_utils import update_excel_log
 from utils.sql_utils import insert_order_history
+
 # from RSAssistant import send_discord_alert
 from utils.utility_utils import debug_order_data, get_last_stock_price
 
@@ -21,7 +25,7 @@ account_mapping = ACCOUNT_MAPPING
 # Store incomplete orders
 incomplete_orders = {}
 
-# RIP 
+# RIP
 # "Tradier": r"(Tradier)\s(\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s([A-Z]+)",
 # "Firstrade": r"(Firstrade)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
 # "Firstrade": r"(Firstrade)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
@@ -29,27 +33,28 @@ order_patterns = {
     "complete": {
         "BBAE": r"(BBAE)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Fennel": r"(Fennel)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\sAccount\s(\d+):\s(Success|Failed)",
-        "Robinhood" : r"(Robinhood)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
+        "Robinhood": r"(Robinhood)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "WELLSFARGO": r"(WELLSFARGO)\s(\d+)\s\*\*\*(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
         "Fidelity": r"(Fidelity)\s(\d+)\saccount\s(?:xxxxx)?(\d{4}):\s(buy|sell)\s(\d+\.?\d*)\sshares\sof\s(\w+)",
         "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)",
         "DSPAC": r"(DSPAC)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
         "Plynk": r"(Plynk)\s(\d+)\sAccount\s(?P<account_number>\d{4})\s(?P<action>buy|sell)\s(?P<stock>\w+)",
-        "Public": r"Public\s(Public)\s(\d+):\s(selling|buying)\s(\d+\.?\d*)\sof\s(\w+)"
+        "Public": r"Public\s(Public)\s(\d+):\s(selling|buying)\s(\d+\.?\d*)\sof\s(\w+)",
     },
     "incomplete": {
         "Schwab": r"(Schwab)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
         "Vanguard": r"(Vanguard)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
         "Chase": r"(Chase)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)",
-        "Public": r"(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)"
+        "Public": r"(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
     },
     "verification": {
         "Schwab": r"(Schwab)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
         "Vanguard": r"(Vanguard)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
         "Chase": r"(Chase)\s(\d+)\saccount\s(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
-        "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)"
-    }            
+        "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)",
+    },
 }
+
 
 # Chapt Complete Orders Main
 def parse_order_message(content):
@@ -71,6 +76,7 @@ def parse_order_message(content):
                 return  # Exit once a match is found
 
     logging.error(f"No match found for message: {content}")
+
 
 def parse_broker_data(
     broker_name: str, match: Optional[Match], order_type: str
@@ -111,7 +117,7 @@ def parse_broker_data(
             "Vanguard": (None, 3, 4, 5),
             "Chase": (None, 3, 4, 5),
             "Tradier": (None, 3, 4, 5),
-            "Public": (2, 3, 4, 5)
+            "Public": (2, 3, 4, 5),
         },
         "verification": {
             "Schwab": (3, None, None, None),
@@ -125,9 +131,9 @@ def parse_broker_data(
 
     # Ensure broker name is normalized for lookup
     broker_key = broker_name
-    if broker_name in (['BBAE'], ['DSPAC']):
+    if broker_name in (["BBAE"], ["DSPAC"]):
         broker_key = broker_name.upper()
-        
+
     positions = field_positions.get(order_type, {}).get(broker_key)
 
     if not positions:
@@ -137,7 +143,9 @@ def parse_broker_data(
         return None, None, None, None
 
     if not match:
-        logging.error(f"Regex match object is None for broker: {broker_name}, order_type: {order_type}")
+        logging.error(
+            f"Regex match object is None for broker: {broker_name}, order_type: {order_type}"
+        )
         return None, None, None, None
 
     # Extract fields using positions
@@ -158,6 +166,7 @@ def parse_broker_data(
         )
         return None, None, None, None
 
+
 def handle_complete_order(match, broker_name, broker_number):
     """Processes complete buy/sell orders after normalization and saves to CSV and database."""
     try:
@@ -167,7 +176,7 @@ def handle_complete_order(match, broker_name, broker_number):
         )
         logging.debug(f"Act No. {account_number}")
         logging.debug(f"Quant: {quantity}")
-        logging.debug(f"B|S {action}") 
+        logging.debug(f"B|S {action}")
         logging.debug(f"TKCR {stock}")
 
         if not account_number or not action or not stock:
@@ -179,11 +188,13 @@ def handle_complete_order(match, broker_name, broker_number):
         # Normalize data
         broker_name, broker_number, action, quantity, stock, account_number = (
             normalize_order_data(
-                broker_name, broker_number, action, quantity, stock, account_number))
+                broker_name, broker_number, action, quantity, stock, account_number
+            )
+        )
 
         price = get_last_stock_price(stock)
         date = datetime.now().strftime("%Y-%m-%d")
-                # Prepare order data
+        # Prepare order data
         order_data = {
             "Broker Name": broker_name,
             "Broker Number": broker_number,
@@ -192,11 +203,15 @@ def handle_complete_order(match, broker_name, broker_number):
             "Stock": stock,
             "Quantity": quantity,
             "Price": price,
-            "Date": date,  
+            "Date": date,
         }
-        logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV")
+        logging.info(
+            f"Processing complete order for {broker_name} {broker_number} to CSV"
+        )
 
-        logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV and database")
+        logging.info(
+            f"Processing complete order for {broker_name} {broker_number} to CSV and database"
+        )
         # Save the order data to CSV
         handoff_order_data(order_data, broker_name, broker_number, account_number)
 
@@ -210,12 +225,13 @@ def handle_complete_order(match, broker_name, broker_number):
             exc_info=True,
         )
 
+
 def normalize_order_data(
     broker_name, broker_number, action, quantity, stock, account_number
 ):
     """
     Normalize order data for consistent formatting and apply broker-specific adjustments.
-    
+
     Args:
         broker_name (str): Name of the broker.
         broker_number (int or str): Broker identifier number.
@@ -223,10 +239,10 @@ def normalize_order_data(
         quantity (float): Quantity of stock involved in the transaction.
         stock (str): Stock symbol (e.g., 'AAPL').
         account_number (str or int): Account identifier.
-    
+
     Returns:
         tuple: Normalized (broker_name, broker_number, action, quantity, stock, account_number).
-    
+
     Notes:
         - Broker names are capitalized unless listed in exceptions ('BBAE', 'DSPAC').
         - Actions are standardized to 'buy' or 'sell'.
@@ -248,7 +264,11 @@ def normalize_order_data(
             action = "sell"
 
     # Webull-specific adjustment for sell lots of 99.0 or 999.0
-    if broker_name.lower() == "webull" and action == "sell" and quantity in {99.0, 999.0}:
+    if (
+        broker_name.lower() == "webull"
+        and action == "sell"
+        and quantity in {99.0, 999.0}
+    ):
         action = "buy"
         quantity = 1.0
         logging.info(
@@ -256,27 +276,32 @@ def normalize_order_data(
         )
 
     # Ensure account number is a string, zero-padded to 4 digits
-    account_number = str(account_number).zfill(4) if account_number is not None else "0000"
+    account_number = (
+        str(account_number).zfill(4) if account_number is not None else "0000"
+    )
 
     # Ensure broker number is a string
     broker_number = str(broker_number)
 
     # Validate and normalize quantity to a float
-    
+
     quantity = float(quantity)
     if quantity <= 0:
         logging.warning(f"Negative holdings detected: {quantity} for stock {stock}.")
         # Trigger the Discord alert asynchronously
 
-        send_negative_holdings(quantity, stock, broker_name, broker_number, account_number)
+        send_negative_holdings(
+            quantity, stock, broker_name, broker_number, account_number
+        )
     elif quantity == 0.0:
         quantity = 0.0
 
     logging.info(
         f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
-        )
-    
+    )
+
     return broker_name, broker_number, action, quantity, stock, account_number
+
 
 # Chapt Incomplete, Failed, and Manual Orders
 
@@ -287,7 +312,7 @@ def handle_incomplete_order(match, broker_name, broker_number):
     action = match.group(3)
     quantity = match.group(4)
     ticker = match.group(5)
-    
+
     # Store temporary order
     temporary_orders[broker_group] = {
         "broker_name": broker_name,
@@ -298,14 +323,14 @@ def handle_incomplete_order(match, broker_name, broker_number):
     }
     logging.info(f"Temporary order created: {temporary_orders[broker_group]}")
 
-        # Normalize data
+    # Normalize data
     broker_name, broker_number, action, quantity, ticker, _ = normalize_order_data(
-            broker_name, broker_number, action, quantity, ticker, None
-        )
+        broker_name, broker_number, action, quantity, ticker, None
+    )
 
     logging.info(
-            f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {ticker}"
-        )
+        f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {ticker}"
+    )
 
     broker_accounts = account_mapping.get(broker_name, {}).get(str(broker_number))
     if broker_accounts:
@@ -323,9 +348,10 @@ def handle_incomplete_order(match, broker_name, broker_number):
                 f"Temporary order created for {nickname} - Account ending {account}"
             )
     else:
-            logging.error(
-                f"No accounts found for broker {broker_name} number {broker_number}"
-            )
+        logging.error(
+            f"No accounts found for broker {broker_name} number {broker_number}"
+        )
+
 
 def handle_verification(match, broker_name, broker_number):
     quantity = 1  # Set a default value to avoid "referenced before assignment" error
@@ -350,7 +376,9 @@ def handle_verification(match, broker_name, broker_number):
 
         # Ensure account_number is valid
         if not account_number:
-            raise ValueError(f"Missing account number in verification for {broker_name}")
+            raise ValueError(
+                f"Missing account number in verification for {broker_name}"
+            )
 
         # Normalize data
         broker_name, broker_number, action, _, _, account_number = normalize_order_data(
@@ -377,9 +405,15 @@ def handle_verification(match, broker_name, broker_number):
             ):
                 # Merge details from incomplete order
                 order["action"] = order.get("action") or action
-                order["quantity"] = order.get("quantity") or 1  # Default to 1 if missing
-                process_verified_orders(broker_name, broker_number, account_number, order)
-                order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
+                order["quantity"] = (
+                    order.get("quantity") or 1
+                )  # Default to 1 if missing
+                process_verified_orders(
+                    broker_name, broker_number, account_number, order
+                )
+                order["quantity"] = order.get(
+                    "quantity", 1
+                )  # Default quantity if missing
                 del incomplete_orders[key]
                 logging.info(
                     f"Verified and removed temporary order for Account {account_number}"
@@ -400,6 +434,7 @@ def handle_verification(match, broker_name, broker_number):
         )
     except Exception as e:
         logging.error(f"Unexpected error in handle_verification: {e}")
+
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
     order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
@@ -424,7 +459,7 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
     # Get price and current date
     price = get_last_stock_price(stock)
     date = datetime.now().strftime("%Y-%m-%d")
-    
+
     # Prepare order data
     order_data = {
         "Broker Name": broker_name,
@@ -437,9 +472,12 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
         "Date": date,
     }
 
-    logging.info(f"Processing complete order for {broker_name} {broker_number} to CSV and database.")
+    logging.info(
+        f"Processing complete order for {broker_name} {broker_number} to CSV and database."
+    )
     # Save the order data to CSV
     handoff_order_data(order_data, broker_name, broker_number, account_number)
+
 
 def handle_failed_order(match, broker_name, broker_number):
     """Handles failed orders by removing incomplete entries."""
@@ -467,7 +505,7 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
 
     order_debug = debug_order_data(order_data)
 
-    if order_debug: 
+    if order_debug:
         logging.info(f"I think passed the order debug.")
 
     # Each key is a descriptive label; each value is the call that returns True/False.
@@ -499,12 +537,17 @@ def parse_embed_message(embed):
 
     logging.info("Holdings have been successfully parsed and saved.")
 
+
 def main_embed_message(embed):
     """
     Parses an embed message based on the broker name.
     Dispatches to specific handler functions or general handler based on broker.
     Returns parsed holdings data.
     """
+    if not embed.fields or len(embed.fields) == 0:
+        logging.warning("Received embed with no fields. Skipping.")
+        return []  # or return None if that's your pattern
+
     broker_name = embed.fields[0].name.split(" ")[0]
 
     if broker_name.lower() == "webull":
@@ -513,6 +556,7 @@ def main_embed_message(embed):
         return parse_fennel_embed_message(embed)
     else:
         return parse_general_embed_message(embed)
+
 
 def parse_general_embed_message(embed):
     """
@@ -588,6 +632,7 @@ def parse_general_embed_message(embed):
 
     return parsed_holdings
 
+
 def parse_webull_embed_message(embed):
     """
     Parses an embed message and returns parsed holdings data for Webull accounts.
@@ -652,6 +697,7 @@ def parse_webull_embed_message(embed):
         parsed_holdings.extend(new_holdings)
 
     return parsed_holdings
+
 
 def parse_fennel_embed_message(embed):
     """
@@ -729,6 +775,7 @@ def parse_fennel_embed_message(embed):
         logging.error(f"Error parsing Fennel embed message: {e}")
         return []
 
+
 def get_account_nickname_or_default(broker_name, group_number, account_number):
     """
     Returns the account nickname if found, otherwise returns 'AccountNotMapped'.
@@ -736,15 +783,25 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
     try:
         # Assuming get_account_nickname is the existing function to retrieve the account nickname
         account_details = f"{broker_name} {group_number} {account_number}"
-        logging.info(f"Getting account nickname for {broker_name} {group_number} {account_number}")
+        logging.info(
+            f"Getting account nickname for {broker_name} {group_number} {account_number}"
+        )
         return get_account_nickname(broker_name, group_number, account_number)
     except KeyError:
         # If the account is not found, return 'AccountNotMapped'
         logging.info(f"Nickname not found for {account_details}")
         return account_details
 
+
 # Chapt Alerts Message Logic
-async def send_negative_holdings(DISCORD_SECONDARY_CHANNEL, quantity, stock, broker_name, broker_number, account_number):
+async def send_negative_holdings(
+    DISCORD_SECONDARY_CHANNEL,
+    quantity,
+    stock,
+    broker_name,
+    broker_number,
+    account_number,
+):
     """
     Sends a negative holdings alert to a Discord channel.
 
@@ -758,9 +815,11 @@ async def send_negative_holdings(DISCORD_SECONDARY_CHANNEL, quantity, stock, bro
     """
     try:
         # Fetch the target channel
-        channel = (DISCORD_SECONDARY_CHANNEL)
+        channel = DISCORD_SECONDARY_CHANNEL
         if not channel:
-            logging.error(f"Channel ID {DISCORD_SECONDARY_CHANNEL} not found. Cannot send alert.")
+            logging.error(
+                f"Channel ID {DISCORD_SECONDARY_CHANNEL} not found. Cannot send alert."
+            )
             return
 
         # Create the alert embed
@@ -777,11 +836,16 @@ async def send_negative_holdings(DISCORD_SECONDARY_CHANNEL, quantity, stock, bro
 
         # Send the alert to the channel
         await channel.send(embed=embed)
-        logging.info(f"Negative holdings alert sent for stock {stock}, account {account_number}.")
+        logging.info(
+            f"Negative holdings alert sent for stock {stock}, account {account_number}."
+        )
 
     except Exception as e:
-        logging.error(f"Error sending Discord alert for stock {stock}, account {account_number}: {e}")
-        
+        logging.error(
+            f"Error sending Discord alert for stock {stock}, account {account_number}: {e}"
+        )
+
+
 def alert_channel_message(content):
     """Extracts ticker, URL, and confirms if a reverse split alert is present."""
 
@@ -802,12 +866,16 @@ def alert_channel_message(content):
         logging.info(f"Ticker detected in alert message: {ticker}")
 
     # Case-insensitive check if "Reverse Stock Split" appears anywhere in the message
-    reverse_split_confirm = re.search(r"reverse stock split", content, re.IGNORECASE) is not None
-    logging.info(f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}")
+    reverse_split_confirm = (
+        re.search(r"reverse stock split", content, re.IGNORECASE) is not None
+    )
+    logging.info(
+        f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}"
+    )
 
     # Return the parsed information
     return {
         "ticker": ticker,
         "url": url,
-        "reverse_split_confirmed": reverse_split_confirm
+        "reverse_split_confirmed": reverse_split_confirm,
     }
