@@ -13,24 +13,34 @@ setup_logging()
 
 SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 
+
 # Database connection helper
 def get_db_connection():
     """Helper function to get a database connection."""
     logging.debug("Attempting to establish a database connection.")
     try:
-        conn = sqlite3.connect(SQL_DATABASE, timeout=30)  # Extend timeout to avoid lock errors
-        conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode for better concurrency
+        conn = sqlite3.connect(
+            SQL_DATABASE, timeout=30
+        )  # Extend timeout to avoid lock errors
+        conn.execute(
+            "PRAGMA journal_mode=WAL;"
+        )  # Enable WAL mode for better concurrency
         logging.debug("Database connection established successfully.")
         return conn
     except sqlite3.Error as e:
         logging.error(f"Error establishing database connection: {e}")
         raise
 
-def get_or_create_account_id(broker, broker_number, account_number, account_nickname="AccountNotMapped"):
+
+def get_or_create_account_id(
+    broker, broker_number, account_number, account_nickname="AccountNotMapped"
+):
     """
     Retrieves the account_id for a given broker and account number. If it doesn't exist, it creates a new entry.
     """
-    logging.info(f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}.")
+    logging.info(
+        f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}."
+    )
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -64,6 +74,7 @@ def get_or_create_account_id(broker, broker_number, account_number, account_nick
         except sqlite3.Error as e:
             logging.error(f"Error retrieving or creating account_id: {e}")
             raise
+
 
 def init_db():
     """Initializes the database tables with improvements."""
@@ -125,9 +136,14 @@ def init_db():
             logging.error(f"Error initializing database tables: {e}")
             raise
 
-def update_holdings_live(broker, broker_number, account_number, ticker, quantity, price):
+
+def update_holdings_live(
+    broker, broker_number, account_number, ticker, quantity, price
+):
     """Updates or inserts a holding into HoldingsLive."""
-    logging.info(f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}.")
+    logging.info(
+        f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}."
+    )
     account_id = get_or_create_account_id(broker, broker_number, account_number)
 
     with get_db_connection() as conn:
@@ -142,21 +158,23 @@ def update_holdings_live(broker, broker_number, account_number, ticker, quantity
                 (account_id, ticker, quantity, price),
             )
 
-            logging.info(f"Holdings updated successfully for ticker {ticker}, account {account_id}.")
+            logging.info(
+                f"Holdings updated successfully for ticker {ticker}, account {account_id}."
+            )
         except sqlite3.Error as e:
             logging.error(f"Error updating holdings: {e}")
             raise
+
 
 def update_historical_holdings():
     """Updates HistoricalHoldings by averaging daily data from HoldingsLive."""
     logging.info("Updating historical holdings based on live data.")
     # Calculate yesterday's date as a string in 'YYYY-MM-DD' format.
     yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            
             # Insert aggregated holdings for yesterday.
             cursor.execute(
                 """
@@ -170,7 +188,7 @@ def update_historical_holdings():
                 WHERE DATE(timestamp) = ?
                 GROUP BY account_id, ticker, DATE(timestamp)
                 """,
-                (yesterday_date,)
+                (yesterday_date,),
             )
             conn.commit()
             logging.info("Historical holdings updated successfully.")
@@ -178,14 +196,26 @@ def update_historical_holdings():
             logging.error(f"Error updating historical holdings: {e}")
             raise
 
+
 def validate_order_data(order_data):
     required_fields = [
-        "order_id", "account_id", "broker", "broker_name", "broker_number",
-        "account_number", "ticker", "date", "action", "quantity", "price", "total_value"
+        "order_id",
+        "account_id",
+        "broker",
+        "broker_name",
+        "broker_number",
+        "account_number",
+        "ticker",
+        "date",
+        "action",
+        "quantity",
+        "price",
+        "total_value",
     ]
     for field in required_fields:
         if field not in order_data:
             raise ValueError(f"Missing required field in order_data: {field}")
+
 
 def insert_order_history(order_data):
     """
@@ -201,7 +231,7 @@ def insert_order_history(order_data):
       - 'Price'
       - 'Date'
       - 'Timestamp'
-    
+
     This function:
       1. Maps these fields into the columns we use internally
       2. Generates order_id and account_id if missing
@@ -210,34 +240,19 @@ def insert_order_history(order_data):
     """
 
     logging.info("Attempting to insert order into OrderHistory.")
-
-    # ------------------------------------------------------
-    # 1) Map user-supplied fields to internal DB fields
-    # ------------------------------------------------------
-    # Convert your "Broker Name" etc. to the schema's expected keys
     mapped_order = {}
-    mapped_order["broker_name"]     = order_data.get("Broker Name", "")
-    mapped_order["broker_number"]   = order_data.get("Broker Number", "")
-    mapped_order["account_number"]  = order_data.get("Account Number", "")
-    mapped_order["action"]          = order_data.get("Order Type", "")   # e.g. buy/sell
-    mapped_order["ticker"]          = order_data.get("Stock", "")
-    mapped_order["quantity"]        = float(order_data.get("Quantity", 0))
-    mapped_order["price"]           = float(order_data.get("Price", 0.0))
-    mapped_order["date"]            = order_data.get("Date", "")
-    mapped_order["timestamp"]       = order_data.get("Timestamp", "")  # if you need it
-    # The database code references "broker" as well, so either set a default or combine:
-    mapped_order["broker"]          = mapped_order["broker_name"] or "Unknown Broker"
-
-    # If you'd like "total_value" in the DB, compute it automatically if not given:
+    mapped_order["broker_name"] = order_data.get("Broker Name", "")
+    mapped_order["broker_number"] = order_data.get("Broker Number", "")
+    mapped_order["account_number"] = order_data.get("Account Number", "")
+    mapped_order["action"] = order_data.get("Order Type", "")  # e.g. buy/sell
+    mapped_order["ticker"] = order_data.get("Stock", "")
+    mapped_order["quantity"] = float(order_data.get("Quantity", 0))
+    mapped_order["price"] = float(order_data.get("Price", 0.0))
+    mapped_order["date"] = order_data.get("Date", "")
+    mapped_order["timestamp"] = order_data.get("Timestamp", "")  # if you need it
+    mapped_order["broker"] = mapped_order["broker_name"] or "Unknown Broker"
     mapped_order["total_value"] = mapped_order["quantity"] * mapped_order["price"]
-
-    # ------------------------------------------------------
-    # 2) Generate or reuse order_id, account_id
-    # ------------------------------------------------------
-    # If we also are storing in the DB:
     mapped_order["order_id"] = order_data.get("order_id") or str(uuid.uuid4())
-
-    # get_or_create_account_id depends on your code. Provide defaults if missing:
     mapped_order["account_id"] = order_data.get("account_id")
     if not mapped_order["account_id"]:
         broker = mapped_order["broker"]
@@ -247,9 +262,6 @@ def insert_order_history(order_data):
             broker, broker_num, acct_num, "Account Not Mapped"
         )
 
-    # ------------------------------------------------------
-    # 3) Validate order data
-    # ------------------------------------------------------
     try:
         validate_order_data(mapped_order)
     except ValueError as ve:
@@ -304,6 +316,7 @@ def insert_order_history(order_data):
         logging.error(f"Error inserting order into OrderHistory: {e}")
         raise
 
+
 '''
 def insert_order_history(order_data):
     """Inserts a logged order into the OrderHistory table."""
@@ -353,9 +366,12 @@ def insert_order_history(order_data):
         raise
 '''
 
+
 def bot_query_database(table_name, filters=None, order_by=None, limit=10):
     """Modular query function that handles errors and provides helpful feedback."""
-    logging.info(f"Querying table {table_name} with filters: {filters}, order_by: {order_by}, limit: {limit}.")
+    logging.info(
+        f"Querying table {table_name} with filters: {filters}, order_by: {order_by}, limit: {limit}."
+    )
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -363,8 +379,12 @@ def bot_query_database(table_name, filters=None, order_by=None, limit=10):
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             valid_tables = [row[0] for row in cursor.fetchall()]
             if table_name not in valid_tables:
-                logging.error(f"Invalid table: {table_name}. Available tables: {valid_tables}")
-                return {"error": f"Invalid table name. Available tables: {valid_tables}"}
+                logging.error(
+                    f"Invalid table: {table_name}. Available tables: {valid_tables}"
+                )
+                return {
+                    "error": f"Invalid table name. Available tables: {valid_tables}"
+                }
 
             # Fetch column names
             cursor.execute(f"PRAGMA table_info({table_name})")
@@ -381,8 +401,12 @@ def bot_query_database(table_name, filters=None, order_by=None, limit=10):
                         conditions.append(f"{key} = ?")
                         params.append(value)
                     else:
-                        logging.warning(f"Invalid filter column: {key}. Available columns: {columns}")
-                        return {"error": f"Invalid filter column: {key}. Available columns: {columns}"}
+                        logging.warning(
+                            f"Invalid filter column: {key}. Available columns: {columns}"
+                        )
+                        return {
+                            "error": f"Invalid filter column: {key}. Available columns: {columns}"
+                        }
                 query += " WHERE " + " AND ".join(conditions)
 
             if order_by and order_by in columns:
