@@ -3,6 +3,8 @@ import requests
 import re
 import logging
 
+from utils.logging_setup import logger
+
 
 class SplitPolicyResolver:
     """
@@ -52,7 +54,7 @@ class SplitPolicyResolver:
                 "press_url": press_url,
             }
         except Exception as e:
-            logging.error(f"Error analyzing NASDAQ notice: {e}")
+            logger.error(f"Error analyzing NASDAQ notice: {e}")
             return None
 
     @staticmethod
@@ -66,7 +68,7 @@ class SplitPolicyResolver:
                 return match.group(1)
             return None
         except Exception as e:
-            logging.warning(f"Failed to retrieve SEC link from NASDAQ: {e}")
+            logger.warning(f"Failed to retrieve SEC link from NASDAQ: {e}")
             return None
 
     @staticmethod
@@ -88,7 +90,7 @@ class SplitPolicyResolver:
             sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url)
             return {"policy": policy, "nasdaq_url": nasdaq_url, "sec_url": sec_url}
         except Exception as e:
-            logging.error(f"Error analyzing NASDAQ notice: {e}")
+            logger.error(f"Error analyzing NASDAQ notice: {e}")
             return None
 
     @classmethod
@@ -101,7 +103,7 @@ class SplitPolicyResolver:
             policy = cls.detect_policy_from_text(text, cls.SEC_KEYWORDS)
             return {"policy": policy, "sec_url": sec_url}
         except Exception as e:
-            logging.warning(f"Failed to retrieve or analyze SEC filing: {e}")
+            logger.warning(f"Failed to retrieve or analyze SEC filing: {e}")
             return {"policy": "Unable to retrieve SEC filing.", "sec_url": sec_url}
 
     @classmethod
