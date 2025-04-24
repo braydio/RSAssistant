@@ -1,9 +1,8 @@
 FROM python:3.10-slim
 
 WORKDIR /app
-COPY config/.env /app/config/.env
 
-COPY requirements.txt /app/
+COPY . /app/.
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -19,7 +18,6 @@ RUN apt-get update && apt-get install -y \
 
 # Install dependencies
 
-COPY . /app/.
 
 
 # Start the application directly using CMD
