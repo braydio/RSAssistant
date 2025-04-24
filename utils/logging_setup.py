@@ -15,7 +15,7 @@ class ReplaceInvalidCharactersFilter(logging.Filter):
         return True
 
 
-def start_heartbeat_writer(path="/app/volumes/logs/heartbeat.txt", interval=60):
+def start_heartbeat_writer(path="./volumes/logs/heartbeat.txt", interval=60):
     def writer():
         while True:
             try:
