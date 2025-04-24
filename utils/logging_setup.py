@@ -140,10 +140,11 @@ def setup_logging(config=None, verbose=False):
         handlers=[handler, console_handler],
     )
 
-logger = logging.getLogger("RSAssistant")
-
     logging.getLogger("yfinance").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.info("Logging setup complete.")
     start_heartbeat_writer()
+
+
+logger = logging.getLogger("RSAssistant")
