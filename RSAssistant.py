@@ -45,6 +45,12 @@ from utils.parsing_utils import (
     parse_embed_message,
     parse_order_message,
 )
+from utils.order_queue_manager import (
+    add_to_order_queue,
+    get_order_queue,
+    remove_order,
+    list_order_queue,
+)
 from utils.sql_utils import bot_query_database, get_db_connection, init_db
 from utils.policy_resolver import SplitPolicyResolver
 from utils.utility_utils import (
@@ -196,6 +202,16 @@ async def process_sell_list(bot):
         logging.error(f"Error processing sell list: {e}")
 
 
+@bot.command(name="queue", help="View all scheduled orders.")
+async def show_order_queue(ctx):
+    queue = list_order_queue()
+    if not queue:
+        await ctx.send("There are no scheduled orders.")
+    else:
+        message = "**Scheduled Orders:**\n" + "\n".join(queue)
+        await ctx.send(message)
+
+
 @bot.command(
     name="ord",
     help="Schedule a buy or sell order. Usage: `..ord <buy/sell> <ticker> <broker> [quantity] <time>`",
@@ -276,6 +292,17 @@ async def process_order(
             except ValueError:
                 await ctx.send(
                     "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
+                )
+                order_id = f"{ticker}_{execution_time.strftime('%Y%m%d_%H%M')}"
+                add_to_order_queue(
+                    order_id,
+                    {
+                        "action": action,
+                        "ticker": ticker,
+                        "quantity": quantity,
+                        "broker": broker,
+                        "time": execution_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    },
                 )
                 return
         else:
