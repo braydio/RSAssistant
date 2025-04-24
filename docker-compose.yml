@@ -4,13 +4,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: RSAssistant
+    restart: unless-stopped
     env_file:
       - ./config/.env  # config/ is in the root directory
     volumes:
-      - /Volumes/logs:/app/volumes/logs   # Persist logs
-      - /Volumes/db:/app/volumes/db       # Persist database
-      - /Volumes/excel:/app/volumes/excel # Persist Excel
-      - /Volumes/config:/app/config       # Shared config files
+      - ./volumes/logs:/app/volumes/logs   # Persist logs
+      - ./volumes/db:/app/volumes/db       # Persist database
+      - ./volumes/excel:/app/volumes/excel # Persist Excel
+      - ./volumes/config:/app/config       # Shared config files
+      - ./utils:/app/utils
     environment:
       ENVIRONMENT: production
     deploy:
@@ -23,6 +25,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+       test: ["CMD", "cat", "/app/volumes/logs/heartbeat.txt"]
+       interval: 60s
+       timeout: 10s
+       retries: 3
+
 
   db:
     image: postgres:14
