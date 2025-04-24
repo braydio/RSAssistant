@@ -11,37 +11,60 @@ from datetime import datetime, timedelta
 
 # Third-party imports
 import discord
+import discord.gateway
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
-from utils.config_utils import (ACCOUNT_MAPPING, BOT_TOKEN,
-                                DISCORD_PRIMARY_CHANNEL,
-                                DISCORD_SECONDARY_CHANNEL, EXCEL_FILE_MAIN,
-                                HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, VERSION
-                                )
-from utils.csv_utils import (clear_holdings_log, sell_all_position,
-                             send_top_holdings_embed)
-from utils.excel_utils import (add_account_mappings, clear_account_mappings,
-                               index_account_details,
-                               map_accounts_in_excel_log)
+from utils.config_utils import (
+    ACCOUNT_MAPPING,
+    BOT_TOKEN,
+    DISCORD_PRIMARY_CHANNEL,
+    DISCORD_SECONDARY_CHANNEL,
+    EXCEL_FILE_MAIN,
+    HOLDINGS_LOG_CSV,
+    ORDERS_LOG_CSV,
+    VERSION,
+)
+from utils.csv_utils import (
+    clear_holdings_log,
+    sell_all_position,
+    send_top_holdings_embed,
+)
+from utils.excel_utils import (
+    add_account_mappings,
+    clear_account_mappings,
+    index_account_details,
+    map_accounts_in_excel_log,
+)
 from utils.order_exec import process_sell_list, schedule_and_execute
-from utils.parsing_utils import (alert_channel_message, parse_embed_message,
-                                 parse_order_message)
+from utils.parsing_utils import (
+    alert_channel_message,
+    parse_embed_message,
+    parse_order_message,
+)
 from utils.sql_utils import bot_query_database, get_db_connection, init_db
-from utils.utility_utils import (all_account_nicknames, all_brokers,
-                                 generate_broker_summary_embed,
-                                 print_to_discord, track_ticker_summary)
-from utils.watch_utils import (periodic_check, send_reminder_message_embed,
-                               watch_list_manager)
+from utils.policy_resolver import SplitPolicyResolver
+from utils.utility_utils import (
+    all_account_nicknames,
+    all_brokers,
+    generate_broker_summary_embed,
+    print_to_discord,
+    track_ticker_summary,
+)
+from utils.watch_utils import (
+    periodic_check,
+    send_reminder_message_embed,
+    watch_list_manager,
+)
 
 # Webdriver imports - - see utils / web utils for implementation
 # from utils.Webdriver_FindFilings import fetch_results
 # from utils.Webdriver_Scraper import StockSplitScraper
 
-bot_info = (f'RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n ')
+bot_info = f"RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
 
 init_db()
 
@@ -54,13 +77,18 @@ intents.message_content = True
 intents.guilds = True
 intents.members = True
 
+
+discord.gateway.DiscordWebSocket.resume_timeout = 60  # seconds
+discord.gateway.DiscordWebSocket.gateway_timeout = 60  # seconds
+
 # Initialize bot
 bot = commands.Bot(
-    command_prefix="~", case_insensitive=True, intents=intents
+    command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
 )
 
 periodic_task = None
 reminder_scheduler = None
+
 
 @bot.event
 async def on_ready():
@@ -68,12 +96,14 @@ async def on_ready():
     global periodic_task
     now = datetime.now()
 
-    logging.info(f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant")
+    logging.info(
+        f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
+    )
     logging.info(f"Version {VERSION} | Runtime Environment: Production")
 
     # Fetch the primary channel
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-    
+
     # Prepare account setup message
     account_setup_message = (
         f"**(╯°□°）╯**\n\n"
@@ -93,15 +123,21 @@ async def on_ready():
 
     # Send ready message to the primary channel
     if channel:
-        await channel.send(f"{ready_message}\nThe date-time is {now.strftime('%m-%d %H:%M')}")
+        await channel.send(
+            f"{ready_message}\nThe date-time is {now.strftime('%m-%d %H:%M')}"
+        )
     else:
-        logging.warning(f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup.")
+        logging.warning(
+            f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup."
+        )
 
     logging.info(f"Initializing Application in Production environment.")
-    logging.info(f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}")
-    
+    logging.info(
+        f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
+    )
+
     # Check if the periodic task is already running, and start it if not
-    if 'periodic_task' not in globals() or periodic_task is None:
+    if "periodic_task" not in globals() or periodic_task is None:
         periodic_task = asyncio.create_task(periodic_check(bot))
         logging.info("Periodic check task started.")
     else:
@@ -112,15 +148,18 @@ async def on_ready():
     if reminder_scheduler is None:
         reminder_scheduler = BackgroundScheduler()
         reminder_scheduler.add_job(
-            lambda: bot.loop.create_task(send_reminder_message_embed(bot)), CronTrigger(hour=8, minute=45)
+            lambda: bot.loop.create_task(send_reminder_message_embed(bot)),
+            CronTrigger(hour=8, minute=45),
         )
         reminder_scheduler.add_job(
-            lambda: bot.loop.create_task(send_reminder_message_embed(bot)), CronTrigger(hour=15, minute=30)
+            lambda: bot.loop.create_task(send_reminder_message_embed(bot)),
+            CronTrigger(hour=15, minute=30),
         )
         reminder_scheduler.start()
         logging.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     else:
         logging.info("Reminder scheduler already running.")
+
 
 async def process_sell_list(bot):
     """Checks the sell list and executes due sell orders."""
@@ -129,18 +168,24 @@ async def process_sell_list(bot):
         sell_list = watch_list_manager.sell_list
 
         # Iterate over sell list items
-        for ticker, details in list(sell_list.items()):  # Use list() to safely modify during iteration
-            scheduled_time = datetime.strptime(details["scheduled_time"], "%Y-%m-%d %H:%M:%S")
+        for ticker, details in list(
+            sell_list.items()
+        ):  # Use list() to safely modify during iteration
+            scheduled_time = datetime.strptime(
+                details["scheduled_time"], "%Y-%m-%d %H:%M:%S"
+            )
 
             if now >= scheduled_time:  # Check if the order's time has come
                 # Construct the sell command
                 command = f"!rsa sell {details['quantity']} {ticker} {details['broker']} false"
-                
+
                 # Send the sell command
                 channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                 if channel:
                     await channel.send(command)
-                    logging.info(f"Executed sell order for {ticker} via {details['broker']}")
+                    logging.info(
+                        f"Executed sell order for {ticker} via {details['broker']}"
+                    )
 
                 # Remove the executed order from the sell list
                 del sell_list[ticker]
@@ -150,8 +195,19 @@ async def process_sell_list(bot):
     except Exception as e:
         logging.error(f"Error processing sell list: {e}")
 
-@bot.command(name="ord", help="Schedule a buy or sell order. Usage: `..ord <buy/sell> <ticker> <broker> [quantity] <time>`")
-async def process_order(ctx, action: str, ticker: str = None, broker: str = "all", quantity: float = 1, time: str = None):
+
+@bot.command(
+    name="ord",
+    help="Schedule a buy or sell order. Usage: `..ord <buy/sell> <ticker> <broker> [quantity] <time>`",
+)
+async def process_order(
+    ctx,
+    action: str,
+    ticker: str = None,
+    broker: str = "all",
+    quantity: float = 1,
+    time: str = None,
+):
     """
     Processes and schedules a buy or sell order. Defaults:
     - Action: 'buy' or 'sell'
@@ -186,19 +242,41 @@ async def process_order(ctx, action: str, ticker: str = None, broker: str = "all
                         date_part, time_part = time.split(" ")
                         month, day = map(int, date_part.split("/"))
                         hour, minute = map(int, time_part.split(":"))
-                        await ctx.send(f"Scheduled {action} order: {quantity} {ticker.upper()} in {broker}")
-                        execution_time = now.replace(month=month, day=day, hour=hour, minute=minute, second=0, microsecond=0)
+                        await ctx.send(
+                            f"Scheduled {action} order: {quantity} {ticker.upper()} in {broker}"
+                        )
+                        execution_time = now.replace(
+                            month=month,
+                            day=day,
+                            hour=hour,
+                            minute=minute,
+                            second=0,
+                            microsecond=0,
+                        )
                     else:  # mm/dd only
                         month, day = map(int, time.split("/"))
-                        execution_time = now.replace(month=month, day=day, hour=0, minute=0, second=0, microsecond=0)
+                        execution_time = now.replace(
+                            month=month,
+                            day=day,
+                            hour=0,
+                            minute=0,
+                            second=0,
+                            microsecond=0,
+                        )
                 else:  # HH:MM time only
                     hour, minute = map(int, time.split(":"))
-                    execution_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    execution_time = now.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0
+                    )
 
                 if execution_time < now:
-                    execution_time += timedelta(days=1)  # Adjust for next day if time has passed
+                    execution_time += timedelta(
+                        days=1
+                    )  # Adjust for next day if time has passed
             except ValueError:
-                await ctx.send("Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd.")
+                await ctx.send(
+                    "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
+                )
                 return
         else:
             execution_time = now
@@ -206,26 +284,35 @@ async def process_order(ctx, action: str, ticker: str = None, broker: str = "all
             # await schedule_and_execute(ctx, action, ticker, quantity, broker, execution_time=now)  # Execute immediately if no time is specified
 
         # Schedule the order using logic in `order_exec.py`
-        await ctx.send(f"Schedule: {action} {ticker} in {broker} for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}.")
-        await schedule_and_execute(ctx, action, ticker, quantity, broker, execution_time)
+        await ctx.send(
+            f"Schedule: {action} {ticker} in {broker} for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
+        )
+        await schedule_and_execute(
+            ctx, action, ticker, quantity, broker, execution_time
+        )
 
         # await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker}")
 
-
-        logging.info(f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, time: {execution_time}.")
+        logging.info(
+            f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, time: {execution_time}."
+        )
 
     except Exception as e:
         logging.error(f"Error scheduling {action} order: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
 
-@bot.command(name="liquidate", help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [test_mode=false]`")
+
+@bot.command(
+    name="liquidate",
+    help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [test_mode=false]`",
+)
 async def liquidate(ctx, broker: str, test_mode: str = "false"):
     """
     Liquidates all holdings for a given brokerage.
     - Checks the holdings log for the brokerage.
     - Sells the maximum quantity for each stock.
     - Runs the sell command for each stock with a 30-second interval.
-    
+
     Args:
         broker (str): The name of the brokerage to liquidate.
         live_mode (str): Set to "true" for live mode or "false" for dry run mode. Defaults to "false".
@@ -236,13 +323,16 @@ async def liquidate(ctx, broker: str, test_mode: str = "false"):
 
     except Exception as e:
         logging.error(f"Error during liquidation: {e}")
-        await ctx.send(f"An error occurred: {str(e)}")    
+        await ctx.send(f"An error occurred: {str(e)}")
+
 
 @bot.command(name="restart")
 async def restart(ctx):
     """Restarts the bot."""
     await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
-    await ctx.send("AYO WISEGUY THIS COMMAND IS BROKEN AND WILL BE DISRUPTIVE TO THE DISCORD BOT! NICE WORK GENIUS!")
+    await ctx.send(
+        "AYO WISEGUY THIS COMMAND IS BROKEN AND WILL BE DISRUPTIVE TO THE DISCORD BOT! NICE WORK GENIUS!"
+    )
     logging.debug("The command now works as intended, but I like the message.")
     await asyncio.sleep(1)
     logging.info("Attempting to restart the bot...")
@@ -270,15 +360,15 @@ async def batchclear(ctx, limit: int):
 
     await ctx.send(f"Deleted {limit} messages", delete_after=5)
 
+
 @bot.event
 async def on_message(message):
     """Triggered when a message is received in the target channel."""
-    #if message.author == bot.user:
-    #    return  # Prevents the bot from responding to itself
+    # if message.author == bot.user:
+    #     return  # Prevents the bot from responding to itself
 
-    # Check if the message was sent in the target channel
+    # ✅ Primary channel message handling
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
-
         if message.content.lower().startswith("manual"):
             logging.warning(f"Manual order detected: {message.content}")
             # manual_order(message.content)
@@ -286,38 +376,64 @@ async def on_message(message):
             parse_embed_message(message.embeds[0])
         else:
             parse_order_message(message.content)
-    
-    if message.channel.id == DISCORD_SECONDARY_CHANNEL:
+
+    # ✅ Secondary channel reverse split detection
+    elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
         if message.content:
             logging.info(f"Received message: {message.content}")
-
             channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
             logging.info(f"Secondary Channel: {channel}")
 
             content = message.content
             result = alert_channel_message(content)
+            logging.info(f"Result returned, as result: {result}")
 
-            if result and result.get("reverse-split-confirm"):
+            if result and result.get("reverse_split_confirm"):
                 alert_ticker = result.get("ticker")
                 alert_url = result.get("url")
 
                 logging.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
-                
+
+                # Analyze policy using SplitPolicyResolver
+                try:
+                    policy_info = SplitPolicyResolver.full_analysis(alert_url)
+                    summary = (
+                        f"📉 **Reverse Split Alert** for `{alert_ticker}`\n"
+                        f"🔗 [NASDAQ Notice]({policy_info['nasdaq_url']})\n"
+                    )
+                    if "sec_url" in policy_info:
+                        summary += f"📄 [SEC Filing]({policy_info['sec_url']})\n"
+                    if "sec_policy" in policy_info:
+                        summary += f"🧾 **Fractional Share Policy:** {policy_info['sec_policy']}"
+                    else:
+                        summary += f"🧾 **Policy:** {policy_info['policy']}"
+                except Exception as e:
+                    logging.error(f"Error fetching policy: {e}")
+                    summary = (
+                        f"📉 Reverse Split Alert for `{alert_ticker}`\n"
+                        f"🔗 {alert_url}\n"
+                        f"⚠️ Could not determine fractional share policy."
+                    )
+
+                # Send message to primary channel
                 main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                 if main_channel:
-                    await main_channel.send(f"Reverse Split Alert for {alert_ticker} - {alert_url}")
-                    logging.info("Alert Message Sent to Primary Channel")
-            else:
-                logging.warning("No match found in content for alert message. Content may not follow the expected pattern.")
+                    await main_channel.send(summary)
+                    logging.info("Policy alert sent to primary channel.")
+                else:
+                    logging.warning(
+                        "No match found in content for alert message. Content may not follow the expected pattern."
+                    )
 
-    # Always process bot commands
+    # ✅ Always process bot commands
     await bot.process_commands(message)
-    
+
 
 @bot.command(name="reminder", help="Shows daily reminder")
 async def show_reminder(ctx):
     """Shows a daily reminder message."""
     await send_reminder_message_embed(ctx)
+
 
 async def send_scheduled_reminder():
     """Send scheduled reminders to the target channel."""
@@ -325,16 +441,25 @@ async def send_scheduled_reminder():
     if channel:
         await send_reminder_message_embed(channel)
     else:
-        logging.error(f"Could not find channel with ID: {DISCORD_PRIMARY_CHANNEL} to send reminder.")
+        logging.error(
+            f"Could not find channel with ID: {DISCORD_PRIMARY_CHANNEL} to send reminder."
+        )
 
-@bot.command(name="tosell", help="Usage: `..addsell <ticker>` Add a ticker to the sell list. ")
+
+@bot.command(
+    name="tosell", help="Usage: `..addsell <ticker>` Add a ticker to the sell list. "
+)
 async def add_to_sell(ctx, ticker: str):
     """Add a ticker to the sell list."""
     ticker = ticker.upper()
     watch_list_manager.add_to_sell_list(ticker)
     await ctx.send(f"Added {ticker} to the sell list.")
 
-@bot.command(name="nosell", help="Remove a ticker from the sell list. Usage: `..removesell <ticker>`")
+
+@bot.command(
+    name="nosell",
+    help="Remove a ticker from the sell list. Usage: `..removesell <ticker>`",
+)
 async def remove_sell(ctx, ticker: str):
     """Remove a ticker from the sell list."""
     ticker = ticker.upper()
@@ -342,6 +467,7 @@ async def remove_sell(ctx, ticker: str):
         await ctx.send(f"Removed {ticker} from the sell list.")
     else:
         await ctx.send(f"{ticker} was not in the sell list.")
+
 
 @bot.command(name="selling", help="View the current sell list.")
 async def view_sell_list(ctx):
@@ -373,7 +499,10 @@ async def brokerlist(ctx, broker: str = None):
         await ctx.send(f"An error occurred: {str(e)}")
 
 
-@bot.command(name="brokerwith", help="All brokers with specified tickers > brokerwith <ticker> (details)",)
+@bot.command(
+    name="brokerwith",
+    help="All brokers with specified tickers > brokerwith <ticker> (details)",
+)
 async def broker_has(ctx, ticker: str, *args):
     """Shows broker-level summary for a specific ticker."""
     specific_broker = args[0] if args else None
@@ -382,7 +511,9 @@ async def broker_has(ctx, ticker: str, *args):
     )
 
 
-@bot.command(name="grouplist", help="Summary by account owner. Optional: specify a broker.")
+@bot.command(
+    name="grouplist", help="Summary by account owner. Optional: specify a broker."
+)
 async def brokers_groups(ctx, broker: str = None):
     """
     Displays account owner summary for a specific broker or all brokers if no broker is specified.
@@ -396,8 +527,10 @@ async def brokers_groups(ctx, broker: str = None):
 
 
 # Discord bot command
-@bot.command(name="top",
-    help="Displays the top holdings by dollar value (Quantity <= 1) grouped by broker.")
+@bot.command(
+    name="top",
+    help="Displays the top holdings by dollar value (Quantity <= 1) grouped by broker.",
+)
 async def top_holdings_command(ctx, range: int = 3):
     """
     Discord bot command to show top holdings by broker level.
@@ -413,7 +546,9 @@ async def top_holdings_command(ctx, range: int = 3):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name="watch",
+
+@bot.command(
+    name="watch",
     help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'",
 )
 async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
@@ -435,19 +570,20 @@ async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = Non
 
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
 
-@bot.command(name="addratio",
+
+@bot.command(
+    name="addratio",
     help="Adds or updates the split ratio for an existing ticker in the watchlist.",
 )
 async def add_ratio(ctx, ticker: str, split_ratio: str):
-
     if not split_ratio:
         await ctx.send("Please include split ratio: * X-Y *")
         return
 
     await watch_list_manager.watch_ratio(ctx, ticker, split_ratio)
 
-@bot.command(name="watchlist",
-    help="Lists all tickers currently being watched.")
+
+@bot.command(name="watchlist", help="Lists all tickers currently being watched.")
 async def allwatching(ctx):
     """Lists all tickers being watched."""
     await watch_list_manager.list_watched_tickers(ctx)
@@ -467,18 +603,23 @@ async def print_by_line(ctx):
 
 @bot.command(
     name="addmap",
-    help="Usage: addmap <brokerage> <broker_no> <account (last 4)> <Account Nickname> | Adds mapping details for an account to the Account Mappings file."
+    help="Usage: addmap <brokerage> <broker_no> <account (last 4)> <Account Nickname> | Adds mapping details for an account to the Account Mappings file.",
 )
-async def add_account_mappings_command(ctx, brokerage: str, broker_no: str, account: str, nickname: str):
+async def add_account_mappings_command(
+    ctx, brokerage: str, broker_no: str, account: str, nickname: str
+):
     try:
         # Validate the inputs
         if not (brokerage and broker_no and account and nickname):
-            await ctx.send("All arguments are required: `<brokerage> <broker_no> <account> <nickname>`.")
+            await ctx.send(
+                "All arguments are required: `<brokerage> <broker_no> <account> <nickname>`."
+            )
             return
 
         await add_account_mappings(ctx, brokerage, broker_no, account, nickname)
     except Exception as e:
         logging.info(f"An error ocurred: {e}")
+
 
 @bot.command(name="loadmap", help="Maps accounts from Account Details excel sheet")
 async def load_account_mappings_command(ctx):
@@ -504,7 +645,10 @@ async def update_log_with_mappings(ctx):
         await ctx.send(f"An error occurred during update: {str(e)}")
 
 
-@bot.command(name="clearmap", help="Clears all account mappings from the account_mapping.json file",)
+@bot.command(
+    name="clearmap",
+    help="Clears all account mappings from the account_mapping.json file",
+)
 async def clear_mapping_command(ctx):
     """Clears all account mappings from the JSON file."""
     try:
@@ -513,6 +657,7 @@ async def clear_mapping_command(ctx):
         await ctx.send("Account mappings have been cleared.")
     except Exception as e:
         await ctx.send(f"An error occurred during the clearing process: {str(e)}")
+
 
 @bot.command(name="clearholdings", help="Clears entries in holdings_log.csv")
 async def clear_holdings(ctx):
@@ -533,31 +678,49 @@ async def clear_holdings(ctx):
 )
 async def query_table(ctx, table_name: str, *args):
     try:
-        results = bot_query_database(table_name, filters=None, order_by=None, limit=None)
+        results = bot_query_database(
+            table_name, filters=None, order_by=None, limit=None
+        )
         if not results:
-            await ctx.send(f"No results found for table `{table_name}` with the provided filters.")
+            await ctx.send(
+                f"No results found for table `{table_name}` with the provided filters."
+            )
             return
 
         # Send results as a message
         response = ""
         for row in results:
-            response += "\n".join([f"{key}: {value}" for key, value in row.items()]) + "\n\n"
-        
+            response += (
+                "\n".join([f"{key}: {value}" for key, value in row.items()]) + "\n\n"
+            )
+
         # Send response (Discord limits messages to 2000 characters)
-        for chunk in [response[i:i+2000] for i in range(0, len(response), 2000)]:
+        for chunk in [response[i : i + 2000] for i in range(0, len(response), 2000)]:
             await ctx.send(chunk)
     except Exception as e:
         await ctx.send(f"Error querying table `{table_name}`: {e}")
 
-@bot.command(name="history", help="Shows historical holdings over time from the database. Usage: `..history <account> <ticker> <start_date> <end_date>`")
-async def sql_historical_holdings(ctx, account: str = None, ticker: str = None, start_date: str = None, end_date: str = None):
+
+@bot.command(
+    name="history",
+    help="Shows historical holdings over time from the database. Usage: `..history <account> <ticker> <start_date> <end_date>`",
+)
+async def sql_historical_holdings(
+    ctx,
+    account: str = None,
+    ticker: str = None,
+    start_date: str = None,
+    end_date: str = None,
+):
     """
     Displays historical holdings over time from the SQL database.
     """
     await show_sql_holdings_history(ctx, account, ticker, start_date, end_date)
 
 
-async def send_negative_holdings(quantity, stock, alert_type, broker_name, broker_number, account_number):
+async def send_negative_holdings(
+    quantity, stock, alert_type, broker_name, broker_number, account_number
+):
     """
     Sends an alert message to the target Discord channel for negative holdings.
 
@@ -593,7 +756,9 @@ async def send_negative_holdings(quantity, stock, alert_type, broker_name, broke
             await channel.send(embed=embed)
             logging.info(f"Negative holdings alert sent for stock {stock}.")
         else:
-            logging.error(f"Target channel with ID {DISCORD_SECONDARY_CHANNEL} not found.")
+            logging.error(
+                f"Target channel with ID {DISCORD_SECONDARY_CHANNEL} not found."
+            )
 
     except Exception as e:
         logging.error(f"Error sending negative holdings alert: {e}")
@@ -603,12 +768,13 @@ async def send_negative_holdings(quantity, stock, alert_type, broker_name, broke
     name="shutdown",
     help="Gracefully shuts down the bot.",
     brief="Stop the bot",
-    category="Admin"
-    )
+    category="Admin",
+)
 async def shutdown(ctx):
     await ctx.send("no you")
     logging.info("Shutdown from main. Deactivating.")
     shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
+
 
 # Graceful shutdown handler
 def shutdown_handler(signal_received, frame):
@@ -620,11 +786,11 @@ def shutdown_handler(signal_received, frame):
         reminder_scheduler.shutdown()
     sys.exit(0)
 
+
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
 
 
-
 # Start the bot with the token from the .env
 if __name__ == "__main__":
-    bot.run(BOT_TOKEN)  
+    bot.run(BOT_TOKEN)
