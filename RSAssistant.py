@@ -402,7 +402,7 @@ async def on_message(message):
         else:
             parse_order_message(message.content)
 
-    #  Secondary channel reverse split detection
+    # Secondary channel reverse split detection
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
         if message.content:
             logger.info(f"Received message: {message.content}")
@@ -411,7 +411,7 @@ async def on_message(message):
 
             content = message.content
             result = alert_channel_message(content)
-            logger.info(f"Result returned, as result: {result}")
+            logger.info(f"Result returned: {result}")
 
             if result and result.get("reverse_split_confirm"):
                 alert_ticker = result.get("ticker")
@@ -419,102 +419,111 @@ async def on_message(message):
 
                 logger.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
 
-                try:
-                    logger.info(
-                        f"Calling SplitPolicyResolver.full_analysis for URL: {alert_url}"
-                    )
-                    policy_info = SplitPolicyResolver.full_analysis(alert_url)
-
-                    if policy_info:
+                if alert_url:
+                    try:
                         logger.info(
-                            f"SplitPolicyResolver returned successfully: {policy_info}"
+                            f"Calling SplitPolicyResolver.full_analysis() for URL: {alert_url}"
                         )
-                    else:
-                        logger.warning(
-                            f"SplitPolicyResolver returned no data for URL: {alert_url}"
-                        )
+                        policy_info = SplitPolicyResolver.full_analysis(alert_url)
 
-                    if policy_info and policy_info.get("policy"):
+                        if policy_info:
+                            logger.info(
+                                f"SplitPolicyResolver returned successfully: {policy_info}"
+                            )
+
+                            summary = (
+                                f"**Reverse Split Alert** for `{alert_ticker}`\n"
+                                f"[NASDAQ Notice]({policy_info.get('nasdaq_url', alert_url)})\n"
+                            )
+
+                            if "press_url" in policy_info:
+                                summary += (
+                                    f"[Press Release]({policy_info['press_url']})\n"
+                                )
+                            if "sec_url" in policy_info:
+                                summary += f"[SEC Filing]({policy_info['sec_url']})\n"
+
+                            policy_text = policy_info.get(
+                                "sec_policy"
+                            ) or policy_info.get("policy")
+                            summary += f"🧾 **Fractional Share Policy:** {policy_text}"
+
+                            # Check for positive fractional share policy (round-up)
+                            if "round" in policy_text.lower() and not any(
+                                bad in policy_text.lower()
+                                for bad in [
+                                    "no fractional",
+                                    "aggregated",
+                                    "sold",
+                                    "not issued",
+                                ]
+                            ):
+                                add_to_sell_list(alert_ticker)
+                                try:
+                                    await bot.get_channel(DISCORD_PRIMARY_CHANNEL).send(
+                                        f"Buying `{alert_ticker}` due to round-up policy."
+                                    )
+                                    logger.info(
+                                        f"Auto-buy message sent for {alert_ticker}"
+                                    )
+                                except Exception as send_err:
+                                    logger.error(
+                                        f"Failed to send buy confirmation: {send_err}"
+                                    )
+
+                                try:
+                                    await process_order(
+                                        ctx=message.channel,
+                                        action="buy",
+                                        ticker=alert_ticker,
+                                        quantity=1,
+                                        broker="all",
+                                        time=None,
+                                    )
+                                    logger.info(
+                                        f"Auto-buy triggered for {alert_ticker} at qty 1 (broker: all)"
+                                    )
+                                except Exception as order_err:
+                                    logger.error(
+                                        f"Failed to auto-buy {alert_ticker}: {order_err}"
+                                    )
+
+                        else:
+                            logger.warning(
+                                f"PolicyResolver returned no data for URL: {alert_url}"
+                            )
+                            summary = (
+                                f"**Reverse Split Alert** for `{alert_ticker}`\n"
+                                f"{alert_url}\n"
+                                f"Could not determine fractional share policy."
+                            )
+
+                    except Exception as e:
+                        logger.error(
+                            f"Error fetching or processing policy for {alert_ticker}: {e}"
+                        )
                         summary = (
-                            f" **Reverse Split Alert** for `{alert_ticker}`\n"
-                            f" [NASDAQ Notice]({policy_info.get('nasdaq_url', alert_url)})\n"
+                            f"**Reverse Split Alert** for `{alert_ticker}`\n"
+                            f"{alert_url}\n"
+                            f"Could not determine fractional share policy."
                         )
 
-                        if "press_url" in policy_info:
-                            summary += f" [Press Release]({policy_info['press_url']})\n"
-                        if "sec_url" in policy_info:
-                            summary += f" [SEC Filing]({policy_info['sec_url']})\n"
-
-                        policy_text = policy_info.get("sec_policy") or policy_info.get(
-                            "policy"
-                        )
-                        summary += f"🧾 **Fractional Share Policy:** {policy_text}"
-
-                        #  Check for positive policy (round-up), ignore disqualifying cases
-                        if "round" in policy_text.lower() and not any(
-                            bad in policy_text.lower()
-                            for bad in [
-                                "no fractional",
-                                "aggregated",
-                                "sold",
-                                "not issued",
-                            ]
-                        ):
-                            add_to_sell_list(alert_ticker)
-                            try:
-                                await bot.get_channel(DISCORD_PRIMARY_CHANNEL).send(
-                                    f" Buying `{alert_ticker}` due to round-up policy."
-                                )
-                            except Exception as send_err:
-                                logger.error(
-                                    f"Failed to send buy confirmation: {send_err}"
-                                )
-
-                            try:
-                                await process_order(
-                                    ctx=message.channel,
-                                    action="buy",
-                                    ticker=alert_ticker,
-                                    quantity=1,
-                                    broker="all",
-                                    time=None,
-                                )
-                                logger.info(
-                                    f"Auto-buy triggered for {alert_ticker} at qty 1 (broker: all)"
-                                )
-                            except Exception as order_err:
-                                logger.error(
-                                    f"Failed to auto-buy {alert_ticker}: {order_err}"
-                                )
-
-                    else:
-                        summary = (
-                            f" Reverse Split Alert for `{alert_ticker}`\n"
-                            f" {alert_url}\n"
-                            f" Could not determine fractional share policy."
+                    # Finally send the summary regardless
+                    try:
+                        main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+                        if main_channel:
+                            await main_channel.send(summary)
+                            logger.info(
+                                f"Policy summary alert sent to primary channel for {alert_ticker}."
+                            )
+                        else:
+                            logger.warning("Failed to resolve main channel.")
+                    except Exception as send_summary_err:
+                        logger.error(
+                            f"Failed to send summary alert for {alert_ticker}: {send_summary_err}"
                         )
 
-                except Exception as e:
-                    logger.error(f"Error fetching policy for {alert_ticker}: {e}")
-                    summary = (
-                        f" Reverse Split Alert for `{alert_ticker}`\n"
-                        f" {alert_url}\n"
-                        f" Could not determine fractional share policy."
-                    )
-
-                try:
-                    main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-                    if main_channel:
-                        await main_channel.send(summary)
-                        logger.info("Policy alert sent to primary channel.")
-                    else:
-                        logger.warning("Failed to resolve main channel.")
-                except Exception as send_summary_err:
-                    logger.error(
-                        f"Failed to send summary alert for {alert_ticker}: {send_summary_err}"
-                    )
-
-    #  Always process bot commands
+    # Always process bot commands
     await bot.process_commands(message)
 
 
