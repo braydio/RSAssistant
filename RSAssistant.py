@@ -1,7 +1,6 @@
 import asyncio
 import csv
 import json
-import logging
 import os
 import shutil
 import signal
@@ -18,11 +17,8 @@ from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
-
-from utils.logging_setup import setup_logging
-
-setup_logging()
-
+from utils.logging_setup import logger
+from utils.split_list import fetch_sec_filing_url
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     BOT_TOKEN,
@@ -79,8 +75,8 @@ bot_info = f"RSAssistant - v{VERSION} by @braydio \n    <https://github.com/bray
 
 init_db()
 
-logging.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
-logging.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
+logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
+logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -107,10 +103,10 @@ async def on_ready():
     global periodic_task
     now = datetime.now()
 
-    logging.info(
+    logger.info(
         f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
     )
-    logging.info(f"Version {VERSION} | Runtime Environment: Production")
+    logger.info(f"Version {VERSION} | Runtime Environment: Production")
 
     # Fetch the primary channel
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
@@ -138,21 +134,21 @@ async def on_ready():
             f"{ready_message}\nThe date-time is {now.strftime('%m-%d %H:%M')}"
         )
     else:
-        logging.warning(
+        logger.warning(
             f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup."
         )
 
-    logging.info(f"Initializing Application in Production environment.")
-    logging.info(
+    logger.info(f"Initializing Application in Production environment.")
+    logger.info(
         f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
     )
 
     # Check if the periodic task is already running, and start it if not
     if "periodic_task" not in globals() or periodic_task is None:
         periodic_task = asyncio.create_task(periodic_check(bot))
-        logging.info("Periodic check task started.")
+        logger.info("Periodic check task started.")
     else:
-        logging.info("Periodic check task is already running.")
+        logger.info("Periodic check task is already running.")
 
     # Schedule reminder task using APScheduler
     global reminder_scheduler
@@ -167,9 +163,9 @@ async def on_ready():
             CronTrigger(hour=15, minute=30),
         )
         reminder_scheduler.start()
-        logging.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
+        logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     else:
-        logging.info("Reminder scheduler already running.")
+        logger.info("Reminder scheduler already running.")
 
 
 async def process_sell_list(bot):
@@ -194,17 +190,17 @@ async def process_sell_list(bot):
                 channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                 if channel:
                     await channel.send(command)
-                    logging.info(
+                    logger.info(
                         f"Executed sell order for {ticker} via {details['broker']}"
                     )
 
                 # Remove the executed order from the sell list
                 del sell_list[ticker]
                 watch_list_manager.save_sell_list()
-                logging.info(f"Removed {ticker} from sell list after execution.")
+                logger.info(f"Removed {ticker} from sell list after execution.")
 
     except Exception as e:
-        logging.error(f"Error processing sell list: {e}")
+        logger.error(f"Error processing sell list: {e}")
 
 
 @bot.command(name="queue", help="View all scheduled orders.")
@@ -325,12 +321,12 @@ async def process_order(
 
         # await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker}")
 
-        logging.info(
+        logger.info(
             f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, time: {execution_time}."
         )
 
     except Exception as e:
-        logging.error(f"Error scheduling {action} order: {e}")
+        logger.error(f"Error scheduling {action} order: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
 
 
@@ -350,11 +346,11 @@ async def liquidate(ctx, broker: str, test_mode: str = "false"):
         live_mode (str): Set to "true" for live mode or "false" for dry run mode. Defaults to "false".
     """
     try:
-        logging.info(f"Liquidate position order logged for {broker}")
+        logger.info(f"Liquidate position order logged for {broker}")
         await sell_all_position(ctx, broker, test_mode)
 
     except Exception as e:
-        logging.error(f"Error during liquidation: {e}")
+        logger.error(f"Error during liquidation: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
 
 
@@ -365,14 +361,14 @@ async def restart(ctx):
     await ctx.send(
         "AYO WISEGUY THIS COMMAND IS BROKEN AND WILL BE DISRUPTIVE TO THE DISCORD BOT! NICE WORK GENIUS!"
     )
-    logging.debug("The command now works as intended, but I like the message.")
+    logger.debug("The command now works as intended, but I like the message.")
     await asyncio.sleep(1)
-    logging.info("Attempting to restart the bot...")
+    logger.info("Attempting to restart the bot...")
     try:
         python = sys.executable
         os.execv(python, [python] + sys.argv)
     except Exception as e:
-        logging.error(f"Error during restart: {e}")
+        logger.error(f"Error during restart: {e}")
         await ctx.send("An error occurred while attempting to restart the bot.")
 
 
@@ -400,7 +396,7 @@ async def on_message(message):
     #  Primary channel message handling
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
         if message.content.lower().startswith("manual"):
-            logging.warning(f"Manual order detected: {message.content}")
+            logger.warning(f"Manual order detected: {message.content}")
             # manual_order(message.content)
         elif message.embeds:
             parse_embed_message(message.embeds[0])
@@ -410,19 +406,19 @@ async def on_message(message):
     #  Secondary channel reverse split detection
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
         if message.content:
-            logging.info(f"Received message: {message.content}")
+            logger.info(f"Received message: {message.content}")
             channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
-            logging.info(f"Secondary Channel: {channel}")
+            logger.info(f"Secondary Channel: {channel}")
 
             content = message.content
             result = alert_channel_message(content)
-            logging.info(f"Result returned, as result: {result}")
+            logger.info(f"Result returned, as result: {result}")
 
             if result and result.get("reverse_split_confirm"):
                 alert_ticker = result.get("ticker")
                 alert_url = result.get("url")
 
-                logging.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
+                logger.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
 
                 try:
                     policy_info = SplitPolicyResolver.full_analysis(alert_url)
@@ -459,7 +455,7 @@ async def on_message(message):
                                     f" Buying `{alert_ticker}` due to round-up policy."
                                 )
                             except Exception as send_err:
-                                logging.error(
+                                logger.error(
                                     f"Failed to send buy confirmation: {send_err}"
                                 )
 
@@ -472,11 +468,11 @@ async def on_message(message):
                                     broker="all",
                                     time=None,
                                 )
-                                logging.info(
+                                logger.info(
                                     f"Auto-buy triggered for {alert_ticker} at qty 1 (broker: all)"
                                 )
                             except Exception as order_err:
-                                logging.error(
+                                logger.error(
                                     f"Failed to auto-buy {alert_ticker}: {order_err}"
                                 )
 
@@ -488,7 +484,7 @@ async def on_message(message):
                         )
 
                 except Exception as e:
-                    logging.error(f"Error fetching policy for {alert_ticker}: {e}")
+                    logger.error(f"Error fetching policy for {alert_ticker}: {e}")
                     summary = (
                         f" Reverse Split Alert for `{alert_ticker}`\n"
                         f" {alert_url}\n"
@@ -499,11 +495,11 @@ async def on_message(message):
                     main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                     if main_channel:
                         await main_channel.send(summary)
-                        logging.info("Policy alert sent to primary channel.")
+                        logger.info("Policy alert sent to primary channel.")
                     else:
-                        logging.warning("Failed to resolve main channel.")
+                        logger.warning("Failed to resolve main channel.")
                 except Exception as send_summary_err:
-                    logging.error(
+                    logger.error(
                         f"Failed to send summary alert for {alert_ticker}: {send_summary_err}"
                     )
 
@@ -523,7 +519,7 @@ async def send_scheduled_reminder():
     if channel:
         await send_reminder_message_embed(channel)
     else:
-        logging.error(
+        logger.error(
             f"Could not find channel with ID: {DISCORD_PRIMARY_CHANNEL} to send reminder."
         )
 
@@ -700,7 +696,7 @@ async def add_account_mappings_command(
 
         await add_account_mappings(ctx, brokerage, broker_no, account, nickname)
     except Exception as e:
-        logging.info(f"An error ocurred: {e}")
+        logger.info(f"An error ocurred: {e}")
 
 
 @bot.command(name="loadmap", help="Maps accounts from Account Details excel sheet")
@@ -836,14 +832,14 @@ async def send_negative_holdings(
 
             # Send the message
             await channel.send(embed=embed)
-            logging.info(f"Negative holdings alert sent for stock {stock}.")
+            logger.info(f"Negative holdings alert sent for stock {stock}.")
         else:
-            logging.error(
+            logger.error(
                 f"Target channel with ID {DISCORD_SECONDARY_CHANNEL} not found."
             )
 
     except Exception as e:
-        logging.error(f"Error sending negative holdings alert: {e}")
+        logger.error(f"Error sending negative holdings alert: {e}")
 
 
 @bot.command(
@@ -854,13 +850,13 @@ async def send_negative_holdings(
 )
 async def shutdown(ctx):
     await ctx.send("no you")
-    logging.info("Shutdown from main. Deactivating.")
+    logger.info("Shutdown from main. Deactivating.")
     shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
 
 
 # Graceful shutdown handler
 def shutdown_handler(signal_received, frame):
-    logging.info("RSAssistant - shutting down...")
+    logger.info("RSAssistant - shutting down...")
     global periodic_check, reminder_scheduler
     if periodic_check and not periodic_check.done():
         periodic_check.cancel()
