@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from utils.logging_setup import logger
 
 
 def fetch_sec_filing_url(nasdaq_trader_url: str) -> str:
@@ -21,7 +22,7 @@ def fetch_sec_filing_url(nasdaq_trader_url: str) -> str:
             return None
 
     except Exception as e:
-        print(f"Error fetching SEC filing link: {e}")
+        logger.debug(f"Error fetching SEC filing link: {e}")
         return None
 
 
@@ -43,7 +44,7 @@ def fetch_sec_filing_text(sec_filing_url: str) -> str:
         return text
 
     except Exception as e:
-        print(f"Error fetching SEC filing text: {e}")
+        logger.debug(f"Error fetching SEC filing text: {e}")
         return None
 
 
