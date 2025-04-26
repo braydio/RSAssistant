@@ -23,3 +23,44 @@ def fetch_sec_filing_url(nasdaq_trader_url: str) -> str:
     except Exception as e:
         print(f"Error fetching SEC filing link: {e}")
         return None
+
+
+def fetch_sec_filing_text(sec_filing_url: str) -> str:
+    try:
+        response = requests.get(sec_filing_url, timeout=10)
+        response.raise_for_status()
+
+        # Some filings are raw HTML, others plain text
+        if "html" in response.headers.get("Content-Type", ""):
+            soup = BeautifulSoup(response.text, "html.parser")
+            text = soup.get_text(separator=" ")
+        else:
+            text = response.text
+
+        # Reduce whitespace for cleaner searching
+        text = " ".join(text.split())
+
+        return text
+
+    except Exception as e:
+        print(f"Error fetching SEC filing text: {e}")
+        return None
+
+
+def analyze_fractional_share_policy(text: str) -> str:
+    if not text:
+        return "No text content available."
+
+    text_lower = text.lower()
+
+    if "fractional share" not in text_lower:
+        return "No mention of fractional shares."
+
+    if "cash" in text_lower:
+        return "Fractional shares will be paid out in cash."
+    elif "rounded up" in text_lower:
+        return "Fractional shares will be rounded up to a full share."
+    elif "rounded down" in text_lower:
+        return "Fractional shares will be rounded down (likely forfeited)."
+    else:
+        return "Fractional share handling mentioned, but unclear policy."
