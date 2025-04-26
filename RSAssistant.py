@@ -18,7 +18,6 @@ from discord.ext import commands
 
 # Local utility imports
 from utils.logging_setup import logger
-from utils.split_list import fetch_sec_filing_url
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     BOT_TOKEN,
@@ -421,7 +420,19 @@ async def on_message(message):
                 logger.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
 
                 try:
+                    logger.info(
+                        f"Calling SplitPolicyResolver.full_analysis for URL: {alert_url}"
+                    )
                     policy_info = SplitPolicyResolver.full_analysis(alert_url)
+
+                    if policy_info:
+                        logger.info(
+                            f"SplitPolicyResolver returned successfully: {policy_info}"
+                        )
+                    else:
+                        logger.warning(
+                            f"SplitPolicyResolver returned no data for URL: {alert_url}"
+                        )
 
                     if policy_info and policy_info.get("policy"):
                         summary = (
