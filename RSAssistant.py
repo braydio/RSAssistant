@@ -45,6 +45,7 @@ from utils.parsing_utils import (
     parse_embed_message,
     parse_order_message,
 )
+from utils.autobuy_utils import autobuy_ticker
 from utils.order_queue_manager import (
     add_to_order_queue,
     get_order_queue,
@@ -224,43 +225,44 @@ async def process_order(
     quantity: float = 1,
     time: str = None,
 ):
-    """
-    Processes and schedules a buy or sell order. Defaults:
-    - Action: 'buy' or 'sell'
-    - Quantity: 1
-    - Broker: all
-    - Dry mode: false
-    - Time: Executes immediately if not specified.
-    Supports scheduling:
-    - HH:MM time from now
-    - mm/dd date
-    - HH:MM time on mm/dd date
-    """
     try:
-        # Validate action
-        if action.lower() not in ["buy", "sell"]:
-            await ctx.send("Invalid action. Use 'buy' or 'sell'.")
-            return
-
-        # Validate quantity
-        if quantity <= 0:
-            await ctx.send("Quantity must be greater than 0.")
-            return
-
         now = datetime.now()
-        execution_time = now
+        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
 
-        # Validate and parse time
-        if time:
+        if time is None:
+            if market_open <= now <= market_close:
+                execution_time = now
+                await ctx.send(
+                    f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
+                )
+            else:
+                # Market closed, schedule next open
+                execution_time = now
+                if now >= market_close:
+                    execution_time = (now + timedelta(days=1)).replace(
+                        hour=9, minute=30, second=0, microsecond=0
+                    )
+                elif now < market_open:
+                    execution_time = now.replace(
+                        hour=9, minute=30, second=0, microsecond=0
+                    )
+
+                # ⏩ SKIP to Monday if Saturday or Sunday
+                while execution_time.weekday() >= 5:
+                    execution_time += timedelta(days=1)
+
+                await ctx.send(
+                    f"Market closed. Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}."
+                )
+        else:
+            # Custom time provided
             try:
-                if "/" in time:  # Check if a date is included
-                    if " " in time:  # HH:MM on mm/dd
+                if "/" in time:
+                    if " " in time:
                         date_part, time_part = time.split(" ")
                         month, day = map(int, date_part.split("/"))
                         hour, minute = map(int, time_part.split(":"))
-                        await ctx.send(
-                            f"Scheduled {action} order: {quantity} {ticker.upper()} in {broker}"
-                        )
                         execution_time = now.replace(
                             month=month,
                             day=day,
@@ -269,64 +271,51 @@ async def process_order(
                             second=0,
                             microsecond=0,
                         )
-                    else:  # mm/dd only
+                    else:
                         month, day = map(int, time.split("/"))
                         execution_time = now.replace(
                             month=month,
                             day=day,
-                            hour=0,
-                            minute=0,
+                            hour=9,
+                            minute=30,
                             second=0,
                             microsecond=0,
                         )
-                else:  # HH:MM time only
+                else:
                     hour, minute = map(int, time.split(":"))
                     execution_time = now.replace(
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
 
                 if execution_time < now:
-                    execution_time += timedelta(
-                        days=1
-                    )  # Adjust for next day if time has passed
+                    execution_time += timedelta(days=1)
+
+                # ⏩ Also skip weekends if custom-scheduled
+                while execution_time.weekday() >= 5:
+                    execution_time += timedelta(days=1)
+
             except ValueError:
                 await ctx.send(
                     "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
                 )
-                order_id = f"{ticker}_{execution_time.strftime('%Y%m%d_%H%M')}"
-                add_to_order_queue(
-                    order_id,
-                    {
-                        "action": action,
-                        "ticker": ticker,
-                        "quantity": quantity,
-                        "broker": broker,
-                        "time": execution_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    },
-                )
                 return
-        else:
-            execution_time = now
-            await ctx.send(f"Executing {action} order now {now}")
-            # await schedule_and_execute(ctx, action, ticker, quantity, broker, execution_time=now)  # Execute immediately if no time is specified
 
-        # Schedule the order using logic in `order_exec.py`
-        await ctx.send(
-            f"Schedule: {action} {ticker} in {broker} for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
-        )
+        # Now actually schedule the order
         await schedule_and_execute(
-            ctx, action, ticker, quantity, broker, execution_time
+            ctx,
+            action=action,
+            ticker=ticker,
+            quantity=quantity,
+            broker=broker,
+            execution_time=execution_time,
         )
-
-        # await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker}")
-
         logger.info(
-            f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, time: {execution_time}."
+            f"Order scheduled: {action.upper()} {ticker.upper()} {quantity} {broker} at {execution_time}."
         )
 
     except Exception as e:
         logger.error(f"Error scheduling {action} order: {e}")
-        await ctx.send(f"An error occurred: {str(e)}")
+        await ctx.send(f"An error occurred: {e}")
 
 
 @bot.command(
@@ -451,19 +440,11 @@ async def on_message(message):
                             # Check for positive fractional share policy (round-up)
                             if policy_info.get("round_up_confirmed"):
                                 try:
-                                    await bot.get_channel(DISCORD_PRIMARY_CHANNEL).send(
-                                        f"Auto-buying `{alert_ticker}` due to confirmed round-up policy."
-                                    )
-                                    await process_order(
-                                        ctx=message.channel,
-                                        action="buy",
-                                        ticker=alert_ticker,
-                                        quantity=1,
-                                        broker="all",
-                                        time=None,
-                                    )
                                     logger.info(
-                                        f"Auto-buy triggered for {alert_ticker} at qty 1 (broker: all)"
+                                        f"Confirmed round-up for {alert_ticker}, triggering autobuy_ticker()."
+                                    )
+                                    await autobuy_ticker(
+                                        bot, message, alert_ticker, quantity=1
                                     )
                                 except Exception as auto_order_err:
                                     logger.error(
