@@ -1,13 +1,14 @@
 Directory Tree Mapping
 [33m/home/braydenchaffee/Projects/RSAssistant[0m
 ├── config
+│   ├── account_mapping.json
 │   ├── example.env
 │   ├── example.settings.yaml
 │   └── settings.yaml
+├── DirMap.txt
 ├── docker-compose.yml
 ├── Dockerfile
 ├── entrypoint.sh
-├── fastcat.txt
 ├── LICENSE
 ├── __pycache__
 │   └── RSAssistant.cpython-313.pyc
@@ -26,7 +27,33 @@ Directory Tree Mapping
 │   └── Volumes
 │       └── config
 │           └── settings.yaml
+├── tempvolumes
+│   ├── config
+│   │   ├── example.env
+│   │   ├── example.settings.yaml
+│   │   ├── sell_list.json
+│   │   ├── settings.yaml
+│   │   └── watch_list.json
+│   ├── db
+│   │   ├── example.db
+│   │   └── rsa_database.db
+│   ├── excel
+│   │   ├── archive
+│   │   │   ├── Backup_ReverseSplitLog.04-23.xlsx
+│   │   │   ├── Backup_ReverseSplitLog.04-24.xlsx
+│   │   │   └── Backup_ReverseSplitLog.04-25.xlsx
+│   │   ├── example.ReverseSplitLog.xlsx
+│   │   └── ReverseSplitLog.xlsx
+│   └── logs
+│       ├── app.log
+│       ├── heartbeat.txt
+│       ├── holdings_log.csv
+│       ├── orders_log.csv
+│       └── rsassistant.log
+├── test_end.py
+├── test_policy_resolver.py
 ├── utils
+│   ├── autobuy_utils.py
 │   ├── backups
 │   │   └── logging_setup.py.1
 │   ├── config
@@ -39,6 +66,7 @@ Directory Tree Mapping
 │   ├── history_query.py
 │   ├── logging_setup.py
 │   ├── order_exec.py
+│   ├── order_queue_manager.py
 │   ├── parsing_utils.py
 │   ├── policy_resolver.py
 │   ├── __pycache__
@@ -52,6 +80,8 @@ Directory Tree Mapping
 │   │   ├── sql_utils.cpython-310.pyc
 │   │   ├── utility_utils.cpython-310.pyc
 │   │   └── watch_utils.cpython-310.pyc
+│   ├── sec_policy_fetcher.py
+│   ├── split_handling_checker.py
 │   ├── sql_utils.py
 │   ├── utility_utils.py
 │   ├── watch_utils.py
@@ -59,23 +89,56 @@ Directory Tree Mapping
 │   └── Webdriver_Scraper.py
 └── volumes
     ├── config
+    │   ├── account_mapping.json
     │   ├── example.env
     │   ├── example.settings.yaml
+    │   ├── oldwatch.json
     │   ├── sell_list.json
     │   ├── settings.yaml
     │   └── watch_list.json
     ├── db
-    │   ├── example.db
+    │   ├── 0411_rsa.db
+    │   ├── Accounts.csv
+    │   ├── create_csv.py
+    │   ├── HistoricalHoldings.csv
+    │   ├── HoldingsLive.csv
+    │   ├── OrderHistory.csv
+    │   ├── reverse_splits.csv
+    │   ├── reverse_splits.db
+    │   ├── ReverseSplits_Historical.csv
+    │   ├── reverse_splits_secondary.db
     │   └── rsa_database.db
     ├── excel
     │   ├── archive
-    │   │   ├── Backup_ReverseSplitLog.04-23.xlsx
-    │   │   └── Backup_ReverseSplitLog.04-24.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-15.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-16.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-17.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-21.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-22.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-24.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-25.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-26.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-27.xlsx
+    │   │   ├── Backup_ReverseSplitLog.04-28.xlsx
+    │   │   ├── Backup_ReverseSplitLog.12-26.xlsx
+    │   │   ├── Backup_ReverseSplitLog.12-27.xlsx
+    │   │   ├── Backup_ReverseSplitLog.12-28.xlsx
+    │   │   ├── Backup_ReverseSplitLog.12-29.xlsx
+    │   │   ├── Backup_ReverseSplitLog.12-31.xlsx
+    │   │   └── ReverseSplitLog2.12-29.xlsx
     │   ├── example.ReverseSplitLog.xlsx
+    │   ├── ReverseSplitLogBackup.xlsx
+    │   ├── ReverseSplitLog - Copy (2).xlsx
     │   └── ReverseSplitLog.xlsx
     └── logs
+        ├── 1222-0122.log
+        ├── app - Copy.log
         ├── app.log
+        ├── app.log.1
+        ├── error_log.txt
         ├── heartbeat.txt
         ├── holdings_log.csv
+        ├── Orders0122-0122.csv
         ├── orders_log.csv
-        └── rsassistant.log
+        ├── rsassistant.log
+        └── tempholdingslog.csv
