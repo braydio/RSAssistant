@@ -169,10 +169,6 @@ async def on_ready():
     else:
         logger.info("Reminder scheduler already running.")
 
-    logger.info("✅ SplitPolicyResolver module loaded and ready.")
-    logger.info("✅ order_exec module loaded and ready.")
-    logger.info("✅ autobuy_ticker function ready for auto-order execution.")
-
 
 async def process_sell_list(bot):
     """Checks the sell list and executes due sell orders."""
