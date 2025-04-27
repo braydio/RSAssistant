@@ -167,6 +167,10 @@ async def on_ready():
     else:
         logger.info("Reminder scheduler already running.")
 
+    logger.info("✅ SplitPolicyResolver module loaded and ready.")
+    logger.info("✅ order_exec module loaded and ready.")
+    logger.info("✅ autobuy_ticker function ready for auto-order execution.")
+
 
 async def process_sell_list(bot):
     """Checks the sell list and executes due sell orders."""
@@ -381,25 +385,20 @@ async def batchclear(ctx, limit: int):
 async def on_message(message):
     """Triggered when a message is received in the target channel."""
 
-    #  Primary channel message handling
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
         if message.content.lower().startswith("manual"):
             logger.warning(f"Manual order detected: {message.content}")
-            # manual_order(message.content)
         elif message.embeds:
             parse_embed_message(message.embeds[0])
         else:
             parse_order_message(message.content)
 
-    # Secondary channel reverse split detection
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
         if message.content:
             logger.info(f"Received message: {message.content}")
             channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
-            logger.info(f"Secondary Channel: {channel}")
 
-            content = message.content
-            result = alert_channel_message(content)
+            result = alert_channel_message(message.content)
             logger.info(f"Result returned: {result}")
 
             if result and result.get("reverse_split_confirmed"):
@@ -437,23 +436,17 @@ async def on_message(message):
                             ) or policy_info.get("policy")
                             summary += f"🧾 **Fractional Share Policy:** {policy_text}"
 
-                            # Check for positive fractional share policy (round-up)
                             if policy_info.get("round_up_confirmed"):
-                                try:
-                                    logger.info(
-                                        f"Confirmed round-up for {alert_ticker}, triggering autobuy_ticker()."
-                                    )
-                                    await autobuy_ticker(
-                                        bot, message, alert_ticker, quantity=1
-                                    )
-                                except Exception as auto_order_err:
-                                    logger.error(
-                                        f"Failed to auto-submit buy order: {auto_order_err}"
-                                    )
+                                logger.info(
+                                    f"✅ Confirmed round-up for {alert_ticker} - initiating autobuy."
+                                )
+                                await autobuy_ticker(
+                                    bot, message.channel, alert_ticker, quantity=1
+                                )
 
                         else:
                             logger.warning(
-                                f"PolicyResolver returned no data for URL: {alert_url}"
+                                f"No data returned from SplitPolicyResolver for {alert_ticker}."
                             )
                             summary = (
                                 f"**Reverse Split Alert** for `{alert_ticker}`\n"
@@ -463,7 +456,7 @@ async def on_message(message):
 
                     except Exception as e:
                         logger.error(
-                            f"Error fetching or processing policy for {alert_ticker}: {e}"
+                            f"Error during full_analysis for {alert_ticker}: {e}"
                         )
                         summary = (
                             f"**Reverse Split Alert** for `{alert_ticker}`\n"
@@ -471,7 +464,7 @@ async def on_message(message):
                             f"Could not determine fractional share policy."
                         )
 
-                    # Finally send the summary regardless
+                    # Always send the policy summary
                     try:
                         main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                         if main_channel:
@@ -483,10 +476,9 @@ async def on_message(message):
                             logger.warning("Failed to resolve main channel.")
                     except Exception as send_summary_err:
                         logger.error(
-                            f"Failed to send summary alert for {alert_ticker}: {send_summary_err}"
+                            f"Failed to send policy summary: {send_summary_err}"
                         )
 
-    # Always process bot commands
     await bot.process_commands(message)
 
 
