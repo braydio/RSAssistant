@@ -4,6 +4,7 @@ Directory Tree Mapping
 │   ├── account_mapping.json
 │   ├── example.env
 │   ├── example.settings.yaml
+│   ├── sell_list.json
 │   └── settings.yaml
 ├── DirMap.txt
 ├── docker-compose.yml
@@ -22,7 +23,8 @@ Directory Tree Mapping
 │   ├── RSViewer.py
 │   ├── RSWatch.py
 │   └── Volumes
-│       └── config
+│       ├── config
+│       └── logs
 ├── RSViewer
 │   └── Volumes
 │       └── config
@@ -50,12 +52,11 @@ Directory Tree Mapping
 │       ├── holdings_log.csv
 │       ├── orders_log.csv
 │       └── rsassistant.log
-├── test_end.py
-├── test_policy_resolver.py
 ├── utils
 │   ├── autobuy_utils.py
 │   ├── backups
-│   │   └── logging_setup.py.1
+│   │   ├── logging_setup.py.1
+│   │   └── on_message_utils.py.1
 │   ├── config
 │   │   └── settings.yaml
 │   ├── config_utils.py
@@ -65,23 +66,29 @@ Directory Tree Mapping
 │   ├── helper_api.py
 │   ├── history_query.py
 │   ├── logging_setup.py
+│   ├── on_message_utils.py
 │   ├── order_exec.py
 │   ├── order_queue_manager.py
 │   ├── parsing_utils.py
 │   ├── policy_resolver.py
 │   ├── __pycache__
+│   │   ├── autobuy_utils.cpython-310.pyc
 │   │   ├── config_utils.cpython-310.pyc
 │   │   ├── csv_utils.cpython-310.pyc
 │   │   ├── excel_utils.cpython-310.pyc
 │   │   ├── logging_setup.cpython-310.pyc
+│   │   ├── on_message_utils.cpython-310.pyc
 │   │   ├── order_exec.cpython-310.pyc
+│   │   ├── order_queue_manager.cpython-310.pyc
 │   │   ├── parsing_utils.cpython-310.pyc
 │   │   ├── policy_resolver.cpython-310.pyc
+│   │   ├── sec_policy_fetcher.cpython-310.pyc
 │   │   ├── sql_utils.cpython-310.pyc
 │   │   ├── utility_utils.cpython-310.pyc
 │   │   └── watch_utils.cpython-310.pyc
 │   ├── sec_policy_fetcher.py
 │   ├── split_handling_checker.py
+│   ├── split_watch_utils.py
 │   ├── sql_utils.py
 │   ├── utility_utils.py
 │   ├── watch_utils.py
@@ -107,7 +114,9 @@ Directory Tree Mapping
     │   ├── reverse_splits.db
     │   ├── ReverseSplits_Historical.csv
     │   ├── reverse_splits_secondary.db
-    │   └── rsa_database.db
+    │   ├── rsa_database.db
+    │   ├── rsa_database.db-shm
+    │   └── rsa_database.db-wal
     ├── excel
     │   ├── archive
     │   │   ├── Backup_ReverseSplitLog.04-15.xlsx
