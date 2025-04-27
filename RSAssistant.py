@@ -413,7 +413,7 @@ async def on_message(message):
             result = alert_channel_message(content)
             logger.info(f"Result returned: {result}")
 
-            if result and result.get("reverse_split_confirm"):
+            if result and result.get("reverse_split_confirmed"):
                 alert_ticker = result.get("ticker")
                 alert_url = result.get("url")
 
@@ -449,29 +449,11 @@ async def on_message(message):
                             summary += f"🧾 **Fractional Share Policy:** {policy_text}"
 
                             # Check for positive fractional share policy (round-up)
-                            if "round" in policy_text.lower() and not any(
-                                bad in policy_text.lower()
-                                for bad in [
-                                    "no fractional",
-                                    "aggregated",
-                                    "sold",
-                                    "not issued",
-                                ]
-                            ):
-                                add_to_sell_list(alert_ticker)
+                            if policy_info.get("round_up_confirmed"):
                                 try:
                                     await bot.get_channel(DISCORD_PRIMARY_CHANNEL).send(
-                                        f"Buying `{alert_ticker}` due to round-up policy."
+                                        f"Auto-buying `{alert_ticker}` due to confirmed round-up policy."
                                     )
-                                    logger.info(
-                                        f"Auto-buy message sent for {alert_ticker}"
-                                    )
-                                except Exception as send_err:
-                                    logger.error(
-                                        f"Failed to send buy confirmation: {send_err}"
-                                    )
-
-                                try:
                                     await process_order(
                                         ctx=message.channel,
                                         action="buy",
@@ -483,9 +465,9 @@ async def on_message(message):
                                     logger.info(
                                         f"Auto-buy triggered for {alert_ticker} at qty 1 (broker: all)"
                                     )
-                                except Exception as order_err:
+                                except Exception as auto_order_err:
                                     logger.error(
-                                        f"Failed to auto-buy {alert_ticker}: {order_err}"
+                                        f"Failed to auto-submit buy order: {auto_order_err}"
                                     )
 
                         else:
