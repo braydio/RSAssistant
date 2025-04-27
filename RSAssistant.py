@@ -61,6 +61,7 @@ from utils.utility_utils import (
     print_to_discord,
     track_ticker_summary,
 )
+from utils.on_message_utils import handle_on_message, set_channels
 from utils.watch_utils import (
     periodic_check,
     send_reminder_message_embed,
@@ -142,6 +143,7 @@ async def on_ready():
     logger.info(
         f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
     )
+    set_channels(DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL)
 
     # Check if the periodic task is already running, and start it if not
     if "periodic_task" not in globals() or periodic_task is None:
@@ -383,102 +385,10 @@ async def batchclear(ctx, limit: int):
 
 @bot.event
 async def on_message(message):
-    """Triggered when a message is received in the target channel."""
-
-    if message.channel.id == DISCORD_PRIMARY_CHANNEL:
-        if message.content.lower().startswith("manual"):
-            logger.warning(f"Manual order detected: {message.content}")
-        elif message.embeds:
-            parse_embed_message(message.embeds[0])
-        else:
-            parse_order_message(message.content)
-
-    elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
-        if message.content:
-            logger.info(f"Received message: {message.content}")
-            channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
-
-            result = alert_channel_message(message.content)
-            logger.info(f"Result returned: {result}")
-
-            if result and result.get("reverse_split_confirmed"):
-                alert_ticker = result.get("ticker")
-                alert_url = result.get("url")
-
-                logger.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
-
-                if alert_url:
-                    try:
-                        logger.info(
-                            f"Calling SplitPolicyResolver.full_analysis() for URL: {alert_url}"
-                        )
-                        policy_info = SplitPolicyResolver.full_analysis(alert_url)
-
-                        if policy_info:
-                            logger.info(
-                                f"SplitPolicyResolver returned successfully: {policy_info}"
-                            )
-
-                            summary = (
-                                f"**Reverse Split Alert** for `{alert_ticker}`\n"
-                                f"[NASDAQ Notice]({policy_info.get('nasdaq_url', alert_url)})\n"
-                            )
-
-                            if "press_url" in policy_info:
-                                summary += (
-                                    f"[Press Release]({policy_info['press_url']})\n"
-                                )
-                            if "sec_url" in policy_info:
-                                summary += f"[SEC Filing]({policy_info['sec_url']})\n"
-
-                            policy_text = policy_info.get(
-                                "sec_policy"
-                            ) or policy_info.get("policy")
-                            summary += f"🧾 **Fractional Share Policy:** {policy_text}"
-
-                            if policy_info.get("round_up_confirmed"):
-                                logger.info(
-                                    f"✅ Confirmed round-up for {alert_ticker} - initiating autobuy."
-                                )
-                                await autobuy_ticker(
-                                    bot, message.channel, alert_ticker, quantity=1
-                                )
-
-                        else:
-                            logger.warning(
-                                f"No data returned from SplitPolicyResolver for {alert_ticker}."
-                            )
-                            summary = (
-                                f"**Reverse Split Alert** for `{alert_ticker}`\n"
-                                f"{alert_url}\n"
-                                f"Could not determine fractional share policy."
-                            )
-
-                    except Exception as e:
-                        logger.error(
-                            f"Error during full_analysis for {alert_ticker}: {e}"
-                        )
-                        summary = (
-                            f"**Reverse Split Alert** for `{alert_ticker}`\n"
-                            f"{alert_url}\n"
-                            f"Could not determine fractional share policy."
-                        )
-
-                    # Always send the policy summary
-                    try:
-                        main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-                        if main_channel:
-                            await main_channel.send(summary)
-                            logger.info(
-                                f"Policy summary alert sent to primary channel for {alert_ticker}."
-                            )
-                        else:
-                            logger.warning("Failed to resolve main channel.")
-                    except Exception as send_summary_err:
-                        logger.error(
-                            f"Failed to send policy summary: {send_summary_err}"
-                        )
-
+    try:
+        await handle_on_message(bot, message)
+    except Exception as e:
+        logger.error(f"Error in on_message handler: {e}")
     await bot.process_commands(message)
 
 
