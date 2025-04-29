@@ -60,8 +60,8 @@ discord:
 
 # Account Owners List - Customizable account ownership - set in Account Nicknames as per your Excel log > Account Details
 account_owners : 
-  1 : Name     # Example: Fidelity 1 xxxx1234 will map to Braydio in summary view
-  2 : Second Name         # Example: Fidelity 2 xxxx5678 will map to Dre in summary view
+  1 : Name     # Example: Fidelity 1 xxxx1234 will map to Name in summary view
+  2 : Second Name         # Example: Fidelity 2 xxxx5678 will map to Second Name in summary view
   3 : Third Name and so forth..        # Example: Fidelity 3 xxxx9012 will map to Third Name in summary view
 
 # Brokers / Accounts to exclude from summary views - Adjust as needed
