@@ -49,19 +49,6 @@ logging:
 environment:
   mode: production
 
-# -------------------------------------------------------------------
-# END COPY BLOCK
-# -------------------------------------------------------------------
-
-# USER SPECIFIC SETTINGS -- DO NOT OVERWRITE ONCE SET UP:
-
-# Discord ID settings
-discord_ids:  # THESE ARE NOW SET IN .env FILE 
-  channel_id:
-  channel_id2: 
-  target_bot: 
-  my_id: 
-
 # Discord bot settings
 discord:
   token:
@@ -73,9 +60,9 @@ discord:
 
 # Account Owners List - Customizable account ownership - set in Account Nicknames as per your Excel log > Account Details
 account_owners : 
-  1 : Braydio     # Example: Fidelity 1 xxxx1234 will map to Braydio in summary view
-  2 : Dre         # Example: Fidelity 2 xxxx5678 will map to Dre in summary view
-  3 : Lem         # Example: Fidelity 3 xxxx9012 will map to Lem in summary view
+  1 : Name     # Example: Fidelity 1 xxxx1234 will map to Braydio in summary view
+  2 : Second Name         # Example: Fidelity 2 xxxx5678 will map to Dre in summary view
+  3 : Third Name and so forth..        # Example: Fidelity 3 xxxx9012 will map to Third Name in summary view
 
 # Brokers / Accounts to exclude from summary views - Adjust as needed
 excluded_brokers:
