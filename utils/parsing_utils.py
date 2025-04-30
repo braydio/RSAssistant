@@ -16,9 +16,9 @@ from utils.config_utils import (
 from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
 from utils.excel_utils import update_excel_log
 from utils.sql_utils import insert_order_history
-
-# from RSAssistant import send_discord_alert
 from utils.utility_utils import debug_order_data, get_last_stock_price
+
+from utils import split_watch_utils
 
 account_mapping = ACCOUNT_MAPPING
 
@@ -56,7 +56,7 @@ order_patterns = {
 }
 
 
-# Chapt Complete Orders Main
+# Complete Orders Main
 def parse_order_message(content):
     """Parses incoming messages and routes them to the correct handler based on type."""
     for order_type, patterns in order_patterns.items():
@@ -69,6 +69,14 @@ def parse_order_message(content):
                 # Route to the correct handler based on the type
                 if order_type == "complete":
                     handle_complete_order(match, broker_name, broker_number)
+                    if (
+                        action == "sell"
+                        and ticker
+                        and split_watch_utils.is_on_watchlist(ticker)
+                    ):
+                        split_watch_utils.mark_account_sold(ticker, account_name)
+                        logger.info(f"Marked {account_name} as having sold {ticker}.")
+
                 elif order_type == "incomplete":
                     handle_incomplete_order(match, broker_name, broker_number)
                 elif order_type == "verification":
@@ -291,7 +299,12 @@ def normalize_order_data(
         # Trigger the Discord alert asynchronously
 
         send_negative_holdings(
-            quantity, stock, broker_name, broker_number, account_number
+            DISCORD_PRIMARY_CHANNEL,
+            quantity,
+            stock,
+            broker_name,
+            broker_number,
+            account_number,
         )
     elif quantity == 0.0:
         quantity = 0.0
@@ -303,7 +316,7 @@ def normalize_order_data(
     return broker_name, broker_number, action, quantity, stock, account_number
 
 
-# Chapt Incomplete, Failed, and Manual Orders
+# Incomplete, Failed, and Manual Orders
 
 
 def handle_incomplete_order(match, broker_name, broker_number):
@@ -505,6 +518,20 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
 
     order_debug = debug_order_data(order_data)
 
+    try:
+        if order_data.get("Order Type", "").lower() == "sell":
+            ticker = order_data.get("Stock")
+            account_name = (
+                f"{order_data.get('Broker Name')} {order_data.get('Account Number')}"
+            )
+            if ticker and split_watch_utils.is_on_watchlist(ticker):
+                split_watch_utils.mark_account_sold(ticker, account_name)
+                logging.info(
+                    f"[Split Watch] Marked {account_name} as having sold {ticker}."
+                )
+    except Exception as e:
+        logging.error(f"Error marking sell order for split watch: {e}")
+
     if order_debug:
         logging.info(f"I think passed the order debug.")
 
@@ -525,7 +552,7 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
     logging.info("Handoff of order data complete.")
 
 
-# Chapt Parse Holdings
+# Parse Holdings
 def parse_embed_message(embed):
     """
     Handles a new holdings message by parsing it and saving the holdings to CSV.
@@ -628,6 +655,12 @@ def parse_general_embed_message(embed):
                 holding.append(account_total)
 
         parsed_holdings.extend(new_holdings)
+        for holding in parsed_holdings:
+            ticker = holding.get("ticker")
+            account_name = holding.get("account_name")
+            if ticker and split_watch_utils.is_on_watchlist(ticker):
+                split_watch_utils.mark_account_bought(ticker, account_name)
+
         logging.info(parsed_holdings)
 
     return parsed_holdings
@@ -793,7 +826,7 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
         return account_details
 
 
-# Chapt Alerts Message Logic
+# Alerts Message Logic
 async def send_negative_holdings(
     DISCORD_SECONDARY_CHANNEL,
     quantity,
