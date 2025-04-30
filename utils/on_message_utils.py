@@ -66,18 +66,21 @@ async def handle_on_message(bot, message):
 async def handle_primary_channel(bot, message):
     if message.content.lower().startswith("manual"):
         logger.warning(f"Manual order detected: {message.content}")
+
     elif message.embeds:
         logger.info("Embed message detected.")
         try:
-            if isinstance(message.embeds[0], Embed):
-                embed_data = message.embeds[0].to_dict()
-                parse_embed_message(embed_data)
-            else:
-                logger.warning(
-                    "Unexpected embed format; expected discord.Embed instance."
+            embeds = message.embeds
+            # Inject Key into each holding inside embed
+            parsed_holdings = parse_embed_message(embeds)
+            for holding in parsed_holdings:
+                holding["Key"] = (
+                    f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
                 )
+            save_holdings_to_csv(parsed_holdings)
         except Exception as e:
             logger.error(f"Error parsing embed: {e}")
+
     else:
         logger.info("Parsing regular order message.")
         parse_order_message(message.content)
