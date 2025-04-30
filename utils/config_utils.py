@@ -19,7 +19,6 @@ ENV_PATH = CONFIG_DIR / ".env"
 CONFIG_FILE = CONFIG_DIR / "settings.yaml"
 print(f"Config dir at {CONFIG_DIR} File at {CONFIG_FILE} ENV AT {ENV_PATH}")
 # Paths
-ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
 WATCH_FILE = CONFIG_DIR / "watch_list.json"
 SELL_FILE = CONFIG_DIR / "sell_list.json"
 EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
@@ -29,6 +28,15 @@ SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
 print(f"SQL DB at {SQL_DATABASE}")
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
 
+ACCOUNT_MAPPING_PATH = Path("config/account_mapping.json")
+try:
+    with open(ACCOUNT_MAPPING_PATH, "r", encoding="utf-8") as f:
+        ACCOUNT_MAPPING = json.load(f)
+except Exception as e:
+    logging.error(f"Failed to load ACCOUNT_MAPPING from {ACCOUNT_MAPPING_PATH}: {e}")
+    ACCOUNT_MAPPING = {}
+
+account_mapping = ACCOUNT_MAPPING
 
 # Cache for loaded configuration
 _config_cache = None
@@ -54,13 +62,14 @@ def load_config():
     if _config_cache is not None:
         return _config_cache
     try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             _config_cache = yaml.safe_load(f)
             logging.info(f"Configuration loaded from {CONFIG_FILE}")
             return _config_cache
     except yaml.YAMLError as e:
         logging.error(f"Error parsing YAML config: {e}")
         raise
+
 
 load_env()
 config = load_config()
@@ -93,7 +102,9 @@ def load_account_mappings():
             data = json.load(f)
             logging.debug(f"Account mapping data loaded successfully.")
             if not isinstance(data, dict):
-                logging.error(f"Invalid account mapping structure in {ACCOUNT_MAPPING}. Expected a dictionary.")
+                logging.error(
+                    f"Invalid account mapping structure in {ACCOUNT_MAPPING}. Expected a dictionary."
+                )
                 return {}
             return data
     except json.JSONDecodeError as e:
@@ -107,6 +118,7 @@ def save_account_mappings(mappings):
     with open(ACCOUNT_MAPPING, "w", encoding="utf-8") as f:
         json.dump(mappings, f, indent=4)
     logging.info(f"Account mappings saved to {ACCOUNT_MAPPING}")
+
 
 def get_broker_name(broker_number):
     """Retrieve the broker name based on broker number."""
@@ -132,7 +144,12 @@ def get_account_number(broker_name, broker_number):
 def get_account_nickname(broker_name, broker_number, account_number):
     """Retrieve the nickname associated with a given broker, broker number, and account number."""
     mappings = load_account_mappings()
-    return mappings.get(broker_name, {}).get(str(broker_number), {}).get(account_number, None)
+    return (
+        mappings.get(broker_name, {})
+        .get(str(broker_number), {})
+        .get(account_number, None)
+    )
+
 
 # Logging setup
 setup_logging(config=config)
