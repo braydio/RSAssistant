@@ -13,7 +13,9 @@ from utils.parsing_utils import (
 )
 from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
+from utils.sec_policy_fetcher import SECPolicyFetcher
 
+from bs4 import BeautifulSoup
 from discord import Embed
 
 DISCORD_PRIMARY_CHANNEL = None
@@ -30,6 +32,27 @@ def set_channels(primary_id, secondary_id):
     )
 
 
+def get_account_nickname_or_default(broker_name, group_number, account_number):
+    try:
+        broker_accounts = account_mapping.get(broker_name, {})
+        group_accounts = broker_accounts.get(str(group_number), {})
+
+        if not isinstance(group_accounts, dict):
+            logger.error(
+                f"Expected dict for group {group_number} in {broker_name}, got {type(group_accounts)}"
+            )
+            return f"{broker_name} {group_number} {account_number}"
+
+        return group_accounts.get(
+            str(account_number), f"{broker_name} {group_number} {account_number}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Error retrieving nickname for {broker_name} {group_number} {account_number}: {e}"
+        )
+        return f"{broker_name} {group_number} {account_number}"
+
+
 async def handle_on_message(bot, message):
     """Main on_message event handler."""
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
@@ -41,13 +64,20 @@ async def handle_on_message(bot, message):
 
 
 async def handle_primary_channel(bot, message):
-    """Handles messages in the primary channel."""
     if message.content.lower().startswith("manual"):
         logger.warning(f"Manual order detected: {message.content}")
-        # manual_order(message.content)  # Future expansion
     elif message.embeds:
         logger.info("Embed message detected.")
-        parse_embed_message(message.embeds[0])
+        try:
+            if isinstance(message.embeds[0], Embed):
+                embed_data = message.embeds[0].to_dict()
+                parse_embed_message(embed_data)
+            else:
+                logger.warning(
+                    "Unexpected embed format; expected discord.Embed instance."
+                )
+        except Exception as e:
+            logger.error(f"Error parsing embed: {e}")
     else:
         logger.info("Parsing regular order message.")
         parse_order_message(message.content)
@@ -59,8 +89,12 @@ async def handle_secondary_channel(bot, message):
     result = alert_channel_message(message.content)
     logger.info(f"Alert parser result: {result}")
 
-    if not result or not result.get("reverse_split_confirmed"):
-        logger.warning("Message does not confirm reverse split.")
+    if (
+        not result
+        or not isinstance(result, dict)
+        or not result.get("reverse_split_confirmed")
+    ):
+        logger.warning("Message does not confirm reverse split or result malformed.")
         return
 
     alert_ticker = result.get("ticker")
@@ -82,18 +116,16 @@ async def handle_secondary_channel(bot, message):
         await post_policy_summary(bot, alert_ticker, summary)
 
         if policy_info.get("round_up_confirmed"):
-            logger.info(
-                f"✅ Round-up confirmed for {alert_ticker}. Scheduling autobuy..."
-            )
+            logger.info(f"Round-up confirmed for {alert_ticker}. Scheduling autobuy...")
             await attempt_autobuy(bot, message.channel, alert_ticker, quantity=1)
-            split_date = datetime.date.today().isoformat()  # We want to parse the split date from the actual confirm source eventually
+            split_date = datetime.date.today().isoformat()
             ticker = result.get("ticker")
             if ticker:
                 split_watch_utils.add_split_watch(ticker, split_date)
                 logger.info(f"Added {ticker} to split watch with date {split_date}.")
         else:
             logger.info(
-                f"⛔ No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
+                f"No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
             )
 
     except Exception as e:
@@ -136,7 +168,6 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
 
 
 def build_policy_summary(ticker, policy_info, fallback_url):
-    """Builds the policy summary message for Discord posting."""
     summary = f"**Reverse Split Alert** for `{ticker}`\n"
     summary += f"[NASDAQ Notice]({policy_info.get('nasdaq_url', fallback_url)})\n"
 
@@ -146,13 +177,12 @@ def build_policy_summary(ticker, policy_info, fallback_url):
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
     policy_text = policy_info.get("sec_policy") or policy_info.get("policy")
-    summary += f"🧾 **Fractional Share Policy:** {policy_text}"
+    summary += f" **Fractional Share Policy:** {policy_text}"
 
     return summary
 
 
 async def post_policy_summary(bot, ticker, summary):
-    """Posts the policy summary to the primary channel."""
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await channel.send(summary)
@@ -164,13 +194,6 @@ async def post_policy_summary(bot, ticker, summary):
 # -------------------------
 # OnMessagePolicyResolver
 # -------------------------
-
-
-import re
-import requests
-from bs4 import BeautifulSoup
-from utils.logging_setup import logger
-from utils.sec_policy_fetcher import SECPolicyFetcher
 
 
 class OnMessagePolicyResolver:
@@ -390,29 +413,6 @@ class OnMessagePolicyResolver:
             return None
 
     @staticmethod
-    def analyze_fractional_share_policy(text):
-        if not text:
-            return "No text content available."
-
-        text_lower = text.lower()
-
-        if "fractional share" not in text_lower:
-            return "No mention of fractional shares."
-
-        if "cash in lieu" in text_lower or "paid in cash" in text_lower:
-            return "Fractional shares will be paid out in cash."
-
-        if "rounded up" in text_lower and not (
-            "cash" in text_lower or "cash in lieu" in text_lower
-        ):
-            return "Fractional shares will be rounded up to a full share."
-
-        if "rounded down" in text_lower:
-            return "Fractional shares will be rounded down (likely forfeited)."
-
-        return "Fractional share handling mentioned, but unclear policy."
-
-    @staticmethod
     def detect_policy_from_text(text, keywords):
         for keyword in keywords:
             if keyword in text:
@@ -422,18 +422,43 @@ class OnMessagePolicyResolver:
         return "Policy not clearly stated."
 
     @staticmethod
+    def analyze_fractional_share_policy(text):
+        if not text:
+            return "No text content available."
+
+        text_lower = text.lower()
+
+        if "fractional share" not in text_lower:
+            return "No mention of fractional shares."
+
+        cash_indicators = ["cash in lieu", "paid in cash", "payment for fractional"]
+
+        if any(term in text_lower for term in cash_indicators):
+            return "Fractional shares will be paid out in cash."
+
+        if "rounded up" in text_lower and not any(
+            term in text_lower for term in cash_indicators
+        ):
+            return "Fractional shares will be rounded up to a full share."
+
+        if "rounded down" in text_lower:
+            return "Fractional shares will be rounded down (likely forfeited)."
+
+        return "Fractional share handling mentioned, but unclear policy."
+
+    @staticmethod
     def is_round_up_policy(text):
+        """
+        Determines if text confirms a round-up policy without disqualifying phrases.
+        """
         if not text:
             return False
 
         text = text.lower()
-        return ("round up" in text or "rounded up" in text) and not any(
-            bad in text
-            for bad in [
-                "sold",
-                "aggregated",
-                "not issued",
-                "round down",
-                "no fractional",
-            ]
+        cash_indicators = ["cash in lieu", "paid in cash", "payment for fractional"]
+
+        return (
+            "rounded up" in text
+            and all(term not in text for term in cash_indicators)
+            and "fractional share" in text
         )
