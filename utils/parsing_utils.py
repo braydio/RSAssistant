@@ -565,31 +565,27 @@ def parse_embed_message(embed):
     logging.info("Holdings have been successfully parsed and saved.")
 
 
-def main_embed_message(embed):
+def main_embed_message(embed_list):
     """
-    Parses an embed message based on the broker name.
-    Dispatches to specific handler functions or general handler based on broker.
-    Returns parsed holdings data.
+    Parses a list of embed messages.
+    Returns parsed holdings data for general broker embeds.
     """
-    # Handle if embed is passed as a list
-    if isinstance(embed, list):
-        if not embed:
-            logging.warning("Received empty embed list. Skipping.")
-            return []
-        embed = embed[0]
+    all_holdings = []
+    for embed in embed_list:
+        if not hasattr(embed, "fields") or len(embed.fields) == 0:
+            logging.warning("Received embed with no fields. Skipping.")
+            continue
 
-    if not hasattr(embed, "fields") or not embed.fields:
-        logging.warning("Received embed with no fields. Skipping.")
-        return []
+        broker_name = embed.fields[0].name.split(" ")[0]
 
-    broker_name = embed.fields[0].name.split(" ")[0]
+        if broker_name.lower() == "webull":
+            all_holdings.extend(parse_webull_embed_message(embed))
+        elif broker_name.lower() == "fennel":
+            all_holdings.extend(parse_fennel_embed_message(embed))
+        else:
+            all_holdings.extend(parse_general_embed_message(embed))
 
-    if broker_name.lower() == "webull":
-        return parse_webull_embed_message(embed)
-    elif broker_name.lower() == "fennel":
-        return parse_fennel_embed_message(embed)
-    else:
-        return parse_general_embed_message(embed)
+    return all_holdings
 
 
 def parse_general_embed_message(embed):
