@@ -12,6 +12,7 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.order_exec import schedule_and_execute
+from utils import split_watch_utils
 
 from discord import Embed
 
@@ -85,6 +86,11 @@ async def handle_secondary_channel(bot, message):
                 f"✅ Round-up confirmed for {alert_ticker}. Scheduling autobuy..."
             )
             await attempt_autobuy(bot, message.channel, alert_ticker, quantity=1)
+            split_date = datetime.date.today().isoformat()  # We want to parse the split date from the actual confirm source eventually
+            ticker = result.get("ticker")
+            if ticker:
+                split_watch_utils.add_split_watch(ticker, split_date)
+                logger.info(f"Added {ticker} to split watch with date {split_date}.")
         else:
             logger.info(
                 f"⛔ No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
