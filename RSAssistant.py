@@ -67,7 +67,7 @@ from utils.watch_utils import (
     send_reminder_message_embed,
     watch_list_manager,
 )
-
+from utils import split_watch_utils
 # Webdriver imports - - see utils / web utils for implementation
 # from utils.Webdriver_FindFilings import fetch_results
 # from utils.Webdriver_Scraper import StockSplitScraper
@@ -93,6 +93,7 @@ discord.gateway.DiscordWebSocket.gateway_timeout = 60  # seconds
 bot = commands.Bot(
     command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
 )
+
 
 periodic_task = None
 reminder_scheduler = None
@@ -552,6 +553,62 @@ async def allwatching(ctx):
 async def watched_ticker(ctx, ticker: str):
     """Removes a ticker from the watchlist."""
     await watch_list_manager.stop_watching(ctx, ticker)
+
+
+@bot.command(name="splitstatus", help="Current tracked splits status.")
+async def splitstatus_command(ctx):
+    """
+    Displays the current split watch status: buy and sell lists.
+    """
+    split_watch_utils.update_split_status()  # Make sure split dates are up-to-date
+    watchlist = split_watch_utils.get_full_watchlist()
+
+    if not watchlist:
+        await ctx.send("🔍 No active split watches at the moment.")
+        return
+
+    messages = []
+
+    for ticker, info in watchlist.items():
+        split_date = info.get("split_date", "Unknown")
+        status = info.get("status", "Unknown").capitalize()
+        accounts_bought = set(info.get("accounts_bought", []))
+        accounts_sold = set(info.get("accounts_sold", []))
+
+        # If status is buying
+        if status.lower() == "buying":
+            all_accounts = (
+                split_watch_utils.get_all_accounts()
+            )  # <-- New helper we'll make
+            accounts_needed = all_accounts - accounts_bought
+            messages.append(
+                f"🛒 **{ticker}** | Split: {split_date} | Status: **{status}**\n"
+                f"Accounts needed to BUY: {', '.join(accounts_needed) if accounts_needed else '✅ All bought!'}"
+            )
+        elif status.lower() == "selling":
+            accounts_needed = accounts_bought - accounts_sold
+            messages.append(
+                f"💵 **{ticker}** | Split: {split_date} | Status: **{status}**\n"
+                f"Accounts needed to SELL: {', '.join(accounts_needed) if accounts_needed else '✅ All sold!'}"
+            )
+
+    # Send nicely chunked messages if too long
+    for msg_chunk in chunk_messages(messages):
+        await ctx.send(msg_chunk)
+
+
+def chunk_messages(messages, max_length=1900):
+    """Helper to chunk long Discord messages."""
+    chunks = []
+    current_chunk = ""
+    for message in messages:
+        if len(current_chunk) + len(message) + 2 > max_length:
+            chunks.append(current_chunk)
+            current_chunk = ""
+        current_chunk += message + "\n\n"
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
 
 
 @bot.command(name="todiscord", help="Prints text file one line at a time")
