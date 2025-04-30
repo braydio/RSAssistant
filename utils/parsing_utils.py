@@ -811,19 +811,26 @@ def parse_fennel_embed_message(embed):
 
 def get_account_nickname_or_default(broker_name, group_number, account_number):
     """
-    Returns the account nickname if found, otherwise returns 'AccountNotMapped'.
+    Returns the account nickname from ACCOUNT_MAPPING. Falls back to generic string if not found.
     """
     try:
-        # Assuming get_account_nickname is the existing function to retrieve the account nickname
-        account_details = f"{broker_name} {group_number} {account_number}"
-        logging.info(
-            f"Getting account nickname for {broker_name} {group_number} {account_number}"
+        broker_data = ACCOUNT_MAPPING.get(broker_name, {})
+        group_data = broker_data.get(str(group_number), {})
+
+        if not isinstance(group_data, dict):
+            logging.error(
+                f"[Nickname Error] Expected dict for {broker_name} group {group_number}, got {type(group_data)}"
+            )
+            return f"{broker_name} {group_number} {account_number}"
+
+        return group_data.get(
+            str(account_number), f"{broker_name} {group_number} {account_number}"
         )
-        return get_account_nickname(broker_name, group_number, account_number)
-    except KeyError:
-        # If the account is not found, return 'AccountNotMapped'
-        logging.info(f"Nickname not found for {account_details}")
-        return account_details
+    except Exception as e:
+        logging.error(
+            f"Error resolving nickname for {broker_name} {group_number} {account_number}: {e}"
+        )
+        return f"{broker_name} {group_number} {account_number}"
 
 
 # Alerts Message Logic
