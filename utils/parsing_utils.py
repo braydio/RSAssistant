@@ -571,9 +571,16 @@ def main_embed_message(embed):
     Dispatches to specific handler functions or general handler based on broker.
     Returns parsed holdings data.
     """
-    if not embed.fields or len(embed.fields) == 0:
+    # Handle if embed is passed as a list
+    if isinstance(embed, list):
+        if not embed:
+            logging.warning("Received empty embed list. Skipping.")
+            return []
+        embed = embed[0]
+
+    if not hasattr(embed, "fields") or not embed.fields:
         logging.warning("Received embed with no fields. Skipping.")
-        return []  # or return None if that's your pattern
+        return []
 
     broker_name = embed.fields[0].name.split(" ")[0]
 
