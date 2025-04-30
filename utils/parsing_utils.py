@@ -72,7 +72,7 @@ def parse_order_message(content):
                     if (
                         action == "sell"
                         and ticker
-                        and split_watch_utils.is_on_watchlist(ticker)
+                        and split_watch_utils.get_status(ticker)
                     ):
                         split_watch_utils.mark_account_sold(ticker, account_name)
                         logger.info(f"Marked {account_name} as having sold {ticker}.")
@@ -524,7 +524,7 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
             account_name = (
                 f"{order_data.get('Broker Name')} {order_data.get('Account Number')}"
             )
-            if ticker and split_watch_utils.is_on_watchlist(ticker):
+            if ticker and split_watch_utils.get_status(ticker):
                 split_watch_utils.mark_account_sold(ticker, account_name)
                 logging.info(
                     f"[Split Watch] Marked {account_name} as having sold {ticker}."
@@ -558,11 +558,21 @@ def parse_embed_message(embed):
     Handles a new holdings message by parsing it and saving the holdings to CSV.
     """
     # Step 1: Parse the holdings from the embed message
-    parsed_holdings = main_embed_message(embed)
-    # Step 2: Save the parsed holdings to CSV
-    save_holdings_to_csv(parsed_holdings)
+    parsed_holdings = main_embed_message([embed])
 
-    logging.info("Holdings have been successfully parsed and saved.")
+    # Check if holdings were successfully parsed
+    if not parsed_holdings:
+        logging.error("No holdings were parsed from the embed message.")
+        return  # Exit if no holdings were parsed
+
+    # Step 2: Save the parsed holdings to CSV
+    save_success = save_holdings_to_csv([parsed_holdings])
+
+    # Check if holdings were successfully saved
+    if save_success:
+        logging.info("Holdings have been successfully parsed and saved.")
+    else:
+        logging.error("Failed to save holdings to CSV.")
 
 
 def main_embed_message(embed_list):
@@ -589,9 +599,6 @@ def main_embed_message(embed_list):
 
 
 def parse_general_embed_message(embed):
-    """
-    Parses an embed message and returns parsed holdings data for general brokers.
-    """
     parsed_holdings = []
 
     for field in embed.fields:
@@ -600,13 +607,12 @@ def parse_general_embed_message(embed):
         embed_split = name_field.split(" ")
         broker_name = embed_split[0]
 
-        # Correct capitalization for specific brokers
         if broker_name.upper() == "WELLSFARGO":
             broker_name = "Wellsfargo"
         elif broker_name.upper() == "VANGUARD":
             broker_name = "Vanguard"
         elif broker_name.upper() == "SOFI":
-            broker_name == "SoFi"
+            broker_name = "SoFi"
 
         group_number = embed_split[1] if len(embed_split) > 1 else "1"
         account_number_match = re.search(r"x+(\d+)", name_field)
@@ -638,16 +644,16 @@ def parse_general_embed_message(embed):
                 price = match.group(3)
                 total_value = match.group(4)
                 new_holdings.append(
-                    [
-                        account_key,
-                        broker_name,
-                        group_number,
-                        account_number,
-                        stock,
-                        quantity,
-                        price,
-                        total_value,
-                    ]
+                    {
+                        "account_name": account_key,
+                        "broker": broker_name,
+                        "group": group_number,
+                        "account": account_number,
+                        "ticker": stock,
+                        "quantity": quantity,
+                        "price": price,
+                        "value": total_value,
+                    }
                 )
 
             if "Total:" in line:
@@ -655,13 +661,13 @@ def parse_general_embed_message(embed):
 
         if account_total:
             for holding in new_holdings:
-                holding.append(account_total)
+                holding["account_total"] = account_total
 
         parsed_holdings.extend(new_holdings)
         for holding in parsed_holdings:
             ticker = holding.get("ticker")
             account_name = holding.get("account_name")
-            if ticker and split_watch_utils.is_on_watchlist(ticker):
+            if ticker and split_watch_utils.get_status(ticker):
                 split_watch_utils.mark_account_bought(ticker, account_name)
 
         logging.info(parsed_holdings)
@@ -670,9 +676,6 @@ def parse_general_embed_message(embed):
 
 
 def parse_webull_embed_message(embed):
-    """
-    Parses an embed message and returns parsed holdings data for Webull accounts.
-    """
     parsed_holdings = []
 
     for field in embed.fields:
@@ -683,7 +686,6 @@ def parse_webull_embed_message(embed):
 
         group_number = embed_split[1] if len(embed_split) > 1 else "1"
         account_number_match = re.search(r"xxxx([\dA-Z]+)", name_field)
-
         account_number = account_number_match.group(1) if account_number_match else None
 
         if not account_number:
@@ -711,16 +713,16 @@ def parse_webull_embed_message(embed):
                 price = match.group(3)
                 total_value = match.group(4)
                 new_holdings.append(
-                    [
-                        account_key,
-                        broker_name,
-                        group_number,
-                        account_number,
-                        stock,
-                        quantity,
-                        price,
-                        total_value,
-                    ]
+                    {
+                        "account_name": account_key,
+                        "broker": broker_name,
+                        "group": group_number,
+                        "account": account_number,
+                        "ticker": stock,
+                        "quantity": quantity,
+                        "price": price,
+                        "value": total_value,
+                    }
                 )
 
             if "Total:" in line:
@@ -728,7 +730,7 @@ def parse_webull_embed_message(embed):
 
         if account_total:
             for holding in new_holdings:
-                holding.append(account_total)
+                holding["account_total"] = account_total
 
         parsed_holdings.extend(new_holdings)
 
@@ -736,22 +738,16 @@ def parse_webull_embed_message(embed):
 
 
 def parse_fennel_embed_message(embed):
-    """
-    Parses an embed message and returns parsed holdings data for Fennel accounts.
-    """
     parsed_holdings = []
     try:
-        # Loop through embed fields to process each account
         for field in embed.fields:
             name_field = field.name
             value_field = field.value
 
-            # Extract broker, group number, and account details
             embed_split = name_field.split(" ")
             broker_name = embed_split[0]
             group_number = embed_split[1] if len(embed_split) > 1 else "1"
 
-            # Extract account number from parentheses
             account_number_match = re.search(r"\(Account (\d+)\)", name_field)
             account_number = (
                 account_number_match.group(1).zfill(4) if account_number_match else None
@@ -761,13 +757,11 @@ def parse_fennel_embed_message(embed):
                 logging.error(f"Unable to extract account number from: {name_field}")
                 continue
 
-            # Create account key
             account_nickname = (
                 f"{broker_name} {group_number} (Account {account_number})"
             )
             account_key = f"{broker_name} {account_nickname}"
 
-            # Parse holdings in value_field
             new_holdings = []
             account_total = None
 
@@ -783,16 +777,16 @@ def parse_fennel_embed_message(embed):
                     price = match.group(3)
                     total_value = match.group(4)
                     new_holdings.append(
-                        [
-                            account_key,
-                            broker_name,
-                            group_number,
-                            account_number,
-                            stock,
-                            quantity,
-                            price,
-                            total_value,
-                        ]
+                        {
+                            "account_name": account_key,
+                            "broker": broker_name,
+                            "group": group_number,
+                            "account": account_number,
+                            "ticker": stock,
+                            "quantity": quantity,
+                            "price": price,
+                            "value": total_value,
+                        }
                     )
 
                 if "Total:" in line:
@@ -800,7 +794,7 @@ def parse_fennel_embed_message(embed):
 
             if account_total:
                 for holding in new_holdings:
-                    holding.append(account_total)
+                    holding["account_total"] = account_total
 
             parsed_holdings.extend(new_holdings)
 
