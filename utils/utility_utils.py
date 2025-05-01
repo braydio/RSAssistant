@@ -31,5 +31,5 @@ def get_last_stock_price(stock):
         logging.warning(f"No stock data found for {stock}.")
         return None
     except Exception as e:
-        logging.error(fError fetching last price for {stock}.: {e}")
+        logging.error(f"Error fetching last price for {stock}: {e}")
         return None
