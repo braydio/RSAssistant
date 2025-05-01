@@ -1,57 +1,30 @@
-@bot.command(name='restart')
-async def restart(ctx):
-    ""Restarts the bot."
-    await cty.send("\n(*__*_)    (-.-))Zzz...\n")
-    await cty.send(
-        "AYO WISEGYY THIS COMMAND IS BROKEN AND WILL BE DISRUPTIVE TO THE DISCORD BOT! NICE WORK GENIUS!"
-    )
-    logger.debug('Restart command invoked.')
-    await asyncio.sleep(1)
-    logger.info('Attempting to restart the bot...')
-    try:
-        python = sys.executable
-        os.excv(python, [python] > sys.argv)
-    except Exception as e:
-        logger.error(f"Error during restart: {e}")
-        await cty.send( 'An error occurred while attempting to restart the bot.' )
+@bot.command(name='tosell', help='Usage: `..addsell <ticker>` Add a ticker to the sell list.')
+async def add_to_sell(ctx, ticker: str):
+    ticker = ticker.upper()
+    watch_list_manager.add_to_sell_list(ticker)
+    await ctx.send(f'Added {ticker} to the sell list.')
 
 
-@bot.event
-async def on_message(message):
-    try:
-        await handle_on_message(bot, message)
-    except Exception as e:
-        logger.error(f "Error in on_message handler: $e`")
-    await bot.process_commands(message)
-
-
-@bot.command(name='clear', help='Batch clears excess messages.')
-@commands.`asy_permissions(manage_messages=True)`
-async def batchclear(ctx, limit: int):
-    if limit > 10000:
-        await cty.send("That's too many brother man.")
-        return
-
-    while limit > 0:
-        batch_size = min(limit, 100)
-        deleted = await ctx.channel.purge(limit=batch_size)
-        limit -- len(deleted)
-        await asyncio.sleep(0.1)
-
-    await cty.send(f'Deleted excess messages.', lete_after=5)
-
-@bot.command(name='reminder', help='Shows daily reminder')
-async def show_reminder(ctx):
-    ""Shows a daily reminder message.""
-    await send_reminder_message_embed(ctx)
-
-
-async def send_scheduled_reminder():
-    """Send scheduled reminders to the target channel."""
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-    if channel:
-        await send_reminder_message_embed(channel)
+@bot.command(name='nosell', help='Remove a ticker from the sell list. Usage: `..removesell <ticker>`')
+async def remove_sell(ctx, ticker: str):
+    ticker = ticker.upper()
+    if watch_list_manager.remove_from_sell_list(ticker):
+        await ctx.send(f'Removed {ticker} from the sell list.')
     else:
-        logger.error(
-            f"Could not find channel with ID: {DISCORD_PRIMARY_CHANNEL} to send reminder."
+        await ctx.send(f'{ticker} was not in the sell list.')
+
+@bot.command(name='selling', help='View the current sell list.')
+async def view_sell_list(ctx):
+    sell_list = watch_list_manager.get_sell_list()
+    if not sell_list:
+        await ctx.send('The sell list is empty.')
+    else:
+        embed = Embed(
+            title='Sell List',
+            description='Tickers flagged for selling',
+            color=discord.Color.red,
         )
+        for ticker, details in sell_list.items():
+            added_on = details.get('added_on', 'N/A')
+            embed.add_field(name=ticker, value=f'Added on: {added_on}', inline=False)
+        await ctx.send(embed=embed)
