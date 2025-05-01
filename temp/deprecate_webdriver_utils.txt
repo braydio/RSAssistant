@@ -1,0 +1,8 @@
+The following utility files are currently unused across the RSAssistant repository:
+
+- utils/Webdriver_FindFilings.py
+- utils/Webdriver_Scraper.py
+
+No current imports or references to these modules have been found in the main script, utilities, or config utility files.
+
+They can safely be deprecated or retained for future automated browser filing features.

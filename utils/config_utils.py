@@ -19,24 +19,15 @@ ENV_PATH = CONFIG_DIR / ".env"
 CONFIG_FILE = CONFIG_DIR / "settings.yaml"
 print(f"Config dir at {CONFIG_DIR} File at {CONFIG_FILE} ENV AT {ENV_PATH}")
 # Paths
+ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
 WATCH_FILE = CONFIG_DIR / "watch_list.json"
 SELL_FILE = CONFIG_DIR / "sell_list.json"
 EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
 HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
 ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
-SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
+SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database_troubleshooting.db"
 print(f"SQL DB at {SQL_DATABASE}")
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
-
-ACCOUNT_MAPPING_PATH = Path("config/account_mapping.json")
-try:
-    with open(ACCOUNT_MAPPING_PATH, "r", encoding="utf-8") as f:
-        ACCOUNT_MAPPING = json.load(f)
-except Exception as e:
-    logging.error(f"Failed to load ACCOUNT_MAPPING from {ACCOUNT_MAPPING_PATH}: {e}")
-    ACCOUNT_MAPPING = {}
-
-account_mapping = ACCOUNT_MAPPING
 
 # Cache for loaded configuration
 _config_cache = None

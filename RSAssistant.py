@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import json
+import logging
 import os
 import shutil
 import signal
@@ -10,14 +11,12 @@ from datetime import datetime, timedelta
 
 # Third-party imports
 import discord
-import discord.gateway
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
-from utils.logging_setup import logger
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     BOT_TOKEN,
@@ -45,15 +44,7 @@ from utils.parsing_utils import (
     parse_embed_message,
     parse_order_message,
 )
-from utils.autobuy_utils import autobuy_ticker
-from utils.order_queue_manager import (
-    add_to_order_queue,
-    get_order_queue,
-    remove_order,
-    list_order_queue,
-)
 from utils.sql_utils import bot_query_database, get_db_connection, init_db
-from utils.policy_resolver import SplitPolicyResolver
 from utils.utility_utils import (
     all_account_nicknames,
     all_brokers,
@@ -61,13 +52,12 @@ from utils.utility_utils import (
     print_to_discord,
     track_ticker_summary,
 )
-from utils.on_message_utils import handle_on_message, set_channels
 from utils.watch_utils import (
     periodic_check,
     send_reminder_message_embed,
     watch_list_manager,
 )
-from utils import split_watch_utils
+
 # Webdriver imports - - see utils / web utils for implementation
 # from utils.Webdriver_FindFilings import fetch_results
 # from utils.Webdriver_Scraper import StockSplitScraper
@@ -76,8 +66,8 @@ bot_info = f"RSAssistant - v{VERSION} by @braydio \n    <https://github.com/bray
 
 init_db()
 
-logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
-logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
+logging.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
+logging.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -85,15 +75,8 @@ intents.message_content = True
 intents.guilds = True
 intents.members = True
 
-
-discord.gateway.DiscordWebSocket.resume_timeout = 60  # seconds
-discord.gateway.DiscordWebSocket.gateway_timeout = 60  # seconds
-
 # Initialize bot
-bot = commands.Bot(
-    command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
-)
-
+bot = commands.Bot(command_prefix="~", case_insensitive=True, intents=intents)
 
 periodic_task = None
 reminder_scheduler = None
@@ -105,10 +88,10 @@ async def on_ready():
     global periodic_task
     now = datetime.now()
 
-    logger.info(
+    logging.info(
         f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
     )
-    logger.info(f"Version {VERSION} | Runtime Environment: Production")
+    logging.info(f"Version {VERSION} | Runtime Environment: Production")
 
     # Fetch the primary channel
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
@@ -136,22 +119,21 @@ async def on_ready():
             f"{ready_message}\nThe date-time is {now.strftime('%m-%d %H:%M')}"
         )
     else:
-        logger.warning(
+        logging.warning(
             f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup."
         )
 
-    logger.info(f"Initializing Application in Production environment.")
-    logger.info(
+    logging.info(f"Initializing Application in Production environment.")
+    logging.info(
         f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
     )
-    set_channels(DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL)
 
     # Check if the periodic task is already running, and start it if not
     if "periodic_task" not in globals() or periodic_task is None:
         periodic_task = asyncio.create_task(periodic_check(bot))
-        logger.info("Periodic check task started.")
+        logging.info("Periodic check task started.")
     else:
-        logger.info("Periodic check task is already running.")
+        logging.info("Periodic check task is already running.")
 
     # Schedule reminder task using APScheduler
     global reminder_scheduler
@@ -166,9 +148,9 @@ async def on_ready():
             CronTrigger(hour=15, minute=30),
         )
         reminder_scheduler.start()
-        logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
+        logging.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     else:
-        logger.info("Reminder scheduler already running.")
+        logging.info("Reminder scheduler already running.")
 
 
 async def process_sell_list(bot):
@@ -193,27 +175,17 @@ async def process_sell_list(bot):
                 channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                 if channel:
                     await channel.send(command)
-                    logger.info(
+                    logging.info(
                         f"Executed sell order for {ticker} via {details['broker']}"
                     )
 
                 # Remove the executed order from the sell list
                 del sell_list[ticker]
                 watch_list_manager.save_sell_list()
-                logger.info(f"Removed {ticker} from sell list after execution.")
+                logging.info(f"Removed {ticker} from sell list after execution.")
 
     except Exception as e:
-        logger.error(f"Error processing sell list: {e}")
-
-
-@bot.command(name="queue", help="View all scheduled orders.")
-async def show_order_queue(ctx):
-    queue = list_order_queue()
-    if not queue:
-        await ctx.send("There are no scheduled orders.")
-    else:
-        message = "**Scheduled Orders:**\n" + "\n".join(queue)
-        await ctx.send(message)
+        logging.error(f"Error processing sell list: {e}")
 
 
 @bot.command(
@@ -228,44 +200,43 @@ async def process_order(
     quantity: float = 1,
     time: str = None,
 ):
+    """
+    Processes and schedules a buy or sell order. Defaults:
+    - Action: 'buy' or 'sell'
+    - Quantity: 1
+    - Broker: all
+    - Dry mode: false
+    - Time: Executes immediately if not specified.
+    Supports scheduling:
+    - HH:MM time from now
+    - mm/dd date
+    - HH:MM time on mm/dd date
+    """
     try:
+        # Validate action
+        if action.lower() not in ["buy", "sell"]:
+            await ctx.send("Invalid action. Use 'buy' or 'sell'.")
+            return
+
+        # Validate quantity
+        if quantity <= 0:
+            await ctx.send("Quantity must be greater than 0.")
+            return
+
         now = datetime.now()
-        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        execution_time = now
 
-        if time is None:
-            if market_open <= now <= market_close:
-                execution_time = now
-                await ctx.send(
-                    f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
-                )
-            else:
-                # Market closed, schedule next open
-                execution_time = now
-                if now >= market_close:
-                    execution_time = (now + timedelta(days=1)).replace(
-                        hour=9, minute=30, second=0, microsecond=0
-                    )
-                elif now < market_open:
-                    execution_time = now.replace(
-                        hour=9, minute=30, second=0, microsecond=0
-                    )
-
-                # ⏩ SKIP to Monday if Saturday or Sunday
-                while execution_time.weekday() >= 5:
-                    execution_time += timedelta(days=1)
-
-                await ctx.send(
-                    f"Market closed. Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}."
-                )
-        else:
-            # Custom time provided
+        # Validate and parse time
+        if time:
             try:
-                if "/" in time:
-                    if " " in time:
+                if "/" in time:  # Check if a date is included
+                    if " " in time:  # HH:MM on mm/dd
                         date_part, time_part = time.split(" ")
                         month, day = map(int, date_part.split("/"))
                         hour, minute = map(int, time_part.split(":"))
+                        await ctx.send(
+                            f"Scheduled {action} order: {quantity} {ticker.upper()} in {broker}"
+                        )
                         execution_time = now.replace(
                             month=month,
                             day=day,
@@ -274,51 +245,53 @@ async def process_order(
                             second=0,
                             microsecond=0,
                         )
-                    else:
+                    else:  # mm/dd only
                         month, day = map(int, time.split("/"))
                         execution_time = now.replace(
                             month=month,
                             day=day,
-                            hour=9,
-                            minute=30,
+                            hour=0,
+                            minute=0,
                             second=0,
                             microsecond=0,
                         )
-                else:
+                else:  # HH:MM time only
                     hour, minute = map(int, time.split(":"))
                     execution_time = now.replace(
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
 
                 if execution_time < now:
-                    execution_time += timedelta(days=1)
-
-                # ⏩ Also skip weekends if custom-scheduled
-                while execution_time.weekday() >= 5:
-                    execution_time += timedelta(days=1)
-
+                    execution_time += timedelta(
+                        days=1
+                    )  # Adjust for next day if time has passed
             except ValueError:
                 await ctx.send(
                     "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
                 )
                 return
+        else:
+            execution_time = now
+            await ctx.send(f"Executing {action} order now {now}")
+            # await schedule_and_execute(ctx, action, ticker, quantity, broker, execution_time=now)  # Execute immediately if no time is specified
 
-        # Now actually schedule the order
-        await schedule_and_execute(
-            ctx,
-            action=action,
-            ticker=ticker,
-            quantity=quantity,
-            broker=broker,
-            execution_time=execution_time,
+        # Schedule the order using logic in `order_exec.py`
+        await ctx.send(
+            f"Schedule: {action} {ticker} in {broker} for {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
         )
-        logger.info(
-            f"Order scheduled: {action.upper()} {ticker.upper()} {quantity} {broker} at {execution_time}."
+        await schedule_and_execute(
+            ctx, action, ticker, quantity, broker, execution_time
+        )
+
+        # await ctx.send(f"!rsa {action} {quantity} {ticker.upper()} {broker}")
+
+        logging.info(
+            f"Scheduled {action} order: {ticker}, quantity: {quantity}, broker: {broker}, time: {execution_time}."
         )
 
     except Exception as e:
-        logger.error(f"Error scheduling {action} order: {e}")
-        await ctx.send(f"An error occurred: {e}")
+        logging.error(f"Error scheduling {action} order: {e}")
+        await ctx.send(f"An error occurred: {str(e)}")
 
 
 @bot.command(
@@ -337,11 +310,11 @@ async def liquidate(ctx, broker: str, test_mode: str = "false"):
         live_mode (str): Set to "true" for live mode or "false" for dry run mode. Defaults to "false".
     """
     try:
-        logger.info(f"Liquidate position order logged for {broker}")
+        logging.info(f"Liquidate position order logged for {broker}")
         await sell_all_position(ctx, broker, test_mode)
 
     except Exception as e:
-        logger.error(f"Error during liquidation: {e}")
+        logging.error(f"Error during liquidation: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
 
 
@@ -352,14 +325,14 @@ async def restart(ctx):
     await ctx.send(
         "AYO WISEGUY THIS COMMAND IS BROKEN AND WILL BE DISRUPTIVE TO THE DISCORD BOT! NICE WORK GENIUS!"
     )
-    logger.debug("The command now works as intended, but I like the message.")
+    logging.debug("The command now works as intended, but I like the message.")
     await asyncio.sleep(1)
-    logger.info("Attempting to restart the bot...")
+    logging.info("Attempting to restart the bot...")
     try:
         python = sys.executable
         os.execv(python, [python] + sys.argv)
     except Exception as e:
-        logger.error(f"Error during restart: {e}")
+        logging.error(f"Error during restart: {e}")
         await ctx.send("An error occurred while attempting to restart the bot.")
 
 
@@ -382,10 +355,48 @@ async def batchclear(ctx, limit: int):
 
 @bot.event
 async def on_message(message):
-    try:
-        await handle_on_message(bot, message)
-    except Exception as e:
-        logger.error(f"Error in on_message handler: {e}")
+    """Triggered when a message is received in the target channel."""
+    # if message.author == bot.user:
+    #    return  # Prevents the bot from responding to itself
+
+    # Check if the message was sent in the target channel
+    if message.channel.id == DISCORD_PRIMARY_CHANNEL:
+        if message.content.lower().startswith("manual"):
+            logging.warning(f"Manual order detected: {message.content}")
+            # manual_order(message.content)
+        elif message.embeds:
+            parse_embed_message(message.embeds[0])
+        else:
+            parse_order_message(message.content)
+
+    if message.channel.id == DISCORD_SECONDARY_CHANNEL:
+        if message.content:
+            logging.info(f"Received message: {message.content}")
+
+            channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
+            logging.info(f"Secondary Channel: {channel}")
+
+            content = message.content
+            result = alert_channel_message(content)
+
+            if result and result.get("reverse-split-confirm"):
+                alert_ticker = result.get("ticker")
+                alert_url = result.get("url")
+
+                logging.info(f"Nasdaq Feed - Ticker: {alert_ticker} URL: {alert_url}")
+
+                main_channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+                if main_channel:
+                    await main_channel.send(
+                        f"Reverse Split Alert for {alert_ticker} - {alert_url}"
+                    )
+                    logging.info("Alert Message Sent to Primary Channel")
+            else:
+                logging.warning(
+                    "No match found in content for alert message. Content may not follow the expected pattern."
+                )
+
+    # Always process bot commands
     await bot.process_commands(message)
 
 
@@ -401,7 +412,7 @@ async def send_scheduled_reminder():
     if channel:
         await send_reminder_message_embed(channel)
     else:
-        logger.error(
+        logging.error(
             f"Could not find channel with ID: {DISCORD_PRIMARY_CHANNEL} to send reminder."
         )
 
@@ -555,62 +566,6 @@ async def watched_ticker(ctx, ticker: str):
     await watch_list_manager.stop_watching(ctx, ticker)
 
 
-@bot.command(name="splitstatus", help="Current tracked splits status.")
-async def splitstatus_command(ctx):
-    """
-    Displays the current split watch status: buy and sell lists.
-    """
-    split_watch_utils.update_split_status()  # Make sure split dates are up-to-date
-    watchlist = split_watch_utils.get_full_watchlist()
-
-    if not watchlist:
-        await ctx.send("🔍 No active split watches at the moment.")
-        return
-
-    messages = []
-
-    for ticker, info in watchlist.items():
-        split_date = info.get("split_date", "Unknown")
-        status = info.get("status", "Unknown").capitalize()
-        accounts_bought = set(info.get("accounts_bought", []))
-        accounts_sold = set(info.get("accounts_sold", []))
-
-        # If status is buying
-        if status.lower() == "buying":
-            all_accounts = (
-                split_watch_utils.get_all_accounts()
-            )  # <-- New helper we'll make
-            accounts_needed = all_accounts - accounts_bought
-            messages.append(
-                f"🛒 **{ticker}** | Split: {split_date} | Status: **{status}**\n"
-                f"Accounts needed to BUY: {', '.join(accounts_needed) if accounts_needed else '✅ All bought!'}"
-            )
-        elif status.lower() == "selling":
-            accounts_needed = accounts_bought - accounts_sold
-            messages.append(
-                f"💵 **{ticker}** | Split: {split_date} | Status: **{status}**\n"
-                f"Accounts needed to SELL: {', '.join(accounts_needed) if accounts_needed else '✅ All sold!'}"
-            )
-
-    # Send nicely chunked messages if too long
-    for msg_chunk in chunk_messages(messages):
-        await ctx.send(msg_chunk)
-
-
-def chunk_messages(messages, max_length=1900):
-    """Helper to chunk long Discord messages."""
-    chunks = []
-    current_chunk = ""
-    for message in messages:
-        if len(current_chunk) + len(message) + 2 > max_length:
-            chunks.append(current_chunk)
-            current_chunk = ""
-        current_chunk += message + "\n\n"
-    if current_chunk:
-        chunks.append(current_chunk)
-    return chunks
-
-
 @bot.command(name="todiscord", help="Prints text file one line at a time")
 async def print_by_line(ctx):
     """Prints contents of a file to Discord, one line at a time."""
@@ -634,7 +589,7 @@ async def add_account_mappings_command(
 
         await add_account_mappings(ctx, brokerage, broker_no, account, nickname)
     except Exception as e:
-        logger.info(f"An error ocurred: {e}")
+        logging.info(f"An error ocurred: {e}")
 
 
 @bot.command(name="loadmap", help="Maps accounts from Account Details excel sheet")
@@ -770,14 +725,14 @@ async def send_negative_holdings(
 
             # Send the message
             await channel.send(embed=embed)
-            logger.info(f"Negative holdings alert sent for stock {stock}.")
+            logging.info(f"Negative holdings alert sent for stock {stock}.")
         else:
-            logger.error(
+            logging.error(
                 f"Target channel with ID {DISCORD_SECONDARY_CHANNEL} not found."
             )
 
     except Exception as e:
-        logger.error(f"Error sending negative holdings alert: {e}")
+        logging.error(f"Error sending negative holdings alert: {e}")
 
 
 @bot.command(
@@ -788,13 +743,13 @@ async def send_negative_holdings(
 )
 async def shutdown(ctx):
     await ctx.send("no you")
-    logger.info("Shutdown from main. Deactivating.")
+    logging.info("Shutdown from main. Deactivating.")
     shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
 
 
 # Graceful shutdown handler
 def shutdown_handler(signal_received, frame):
-    logger.info("RSAssistant - shutting down...")
+    logging.info("RSAssistant - shutting down...")
     global periodic_check, reminder_scheduler
     if periodic_check and not periodic_check.done():
         periodic_check.cancel()
@@ -809,4 +764,5 @@ signal.signal(signal.SIGTERM, shutdown_handler)
 
 # Start the bot with the token from the .env
 if __name__ == "__main__":
+    logging.info(f"Logging in using bot token:{BOT_TOKEN}")
     bot.run(BOT_TOKEN)
