@@ -1,0 +1,22 @@
+name: Auto PR
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          echo "Making changes..."
+          echo "// generated" >> newfile.txt
+          git config --global user.name "onBehalf.braydio"
+          git config --global user.email "chaffee.brayden@gmail.com"
+          git checkout -b auto pr-submit
+          git add .
+          git commit -m "auto generated change, please review"
+          git push origin auto-change
+      - run: gh pr create --title "AUTO-PR" --body "Submitted onBehalf.braydio" --base main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
