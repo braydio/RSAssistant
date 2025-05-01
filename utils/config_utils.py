@@ -25,7 +25,7 @@ SELL_FILE = CONFIG_DIR / "sell_list.json"
 EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
 HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
 ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
-SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
+SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database_troubleshooting.db"
 print(f"SQL DB at {SQL_DATABASE}")
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
 
