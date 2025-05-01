@@ -1,0 +1,5 @@
+The following files in utils/ appear to be unused in RSAssistant.py and are candidates for deprecation:
+
+- policy_resolver.py (v1.2.0, added 2025-04-27)
+- sec_policy_fetcher.py (v1.0.0, added 2025-04-27)
+	Last reviewed: 2025-04-30
