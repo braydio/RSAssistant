@@ -18,16 +18,17 @@ from discord.ext import commands
 
 # Local utility imports
 from utils.logging_setup import logger
+
 from utils.config_utils import (
-    ACCOUNT_MAPPING,
     BOT_TOKEN,
     DISCORD_PRIMARY_CHANNEL,
     DISCORD_SECONDARY_CHANNEL,
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
-    VERSION,
+    ACCOUNT_MAPPING,
 )
+
 from utils.csv_utils import (
     clear_holdings_log,
     sell_all_position,
@@ -40,11 +41,6 @@ from utils.excel_utils import (
     map_accounts_in_excel_log,
 )
 from utils.order_exec import process_sell_list, schedule_and_execute
-from utils.parsing_utils import (
-    alert_channel_message,
-    parse_embed_message,
-    parse_order_message,
-)
 from utils.autobuy_utils import autobuy_ticker
 from utils.order_queue_manager import (
     add_to_order_queue,
@@ -72,7 +68,9 @@ from utils.watch_utils import (
 # from utils.Webdriver_FindFilings import fetch_results
 # from utils.Webdriver_Scraper import StockSplitScraper
 
-bot_info = f"RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
+bot_info = (
+    "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
+)
 
 init_db()
 
