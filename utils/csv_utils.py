@@ -10,14 +10,35 @@ import discord
 import yfinance as yf
 from discord import Embed
 
-from utils.config_utils import (HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
-                                load_config)
+from utils.config_utils import HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, load_config
 from utils.sql_utils import update_holdings_live
 
 # Load configuration and mappings
 config = load_config()
-HOLDINGS_HEADERS = config["header_settings"]["holdings_headers"]
-ORDERS_HEADERS = config["header_settings"]["orders_headers"]
+HOLDINGS_HEADERS = [
+    "Key",
+    "Broker Name",
+    "Broker Number",
+    "Account Number",
+    "Stock",
+    "Quantity",
+    "Price",
+    "Position Value",
+    "Account Total",
+    "Timestamp",
+]
+
+ORDERS_HEADERS = [
+    "Broker Name",
+    "Broker Number",
+    "Account Number",
+    "Order Type",
+    "Stock",
+    "Quantity",
+    "Price",
+    "Date",
+    "Timestamp",
+]
 
 
 def ensure_csv_file_exists(file_path, headers):
@@ -50,7 +71,8 @@ def archive_stale_orders(existing_orders, cutoff_date, archive_file_path):
     """
     # Identify stale orders
     stale_orders = [
-        order for order in existing_orders
+        order
+        for order in existing_orders
         if datetime.strptime(order["Date"], "%Y-%m-%d") < cutoff_date
     ]
 
@@ -65,11 +87,13 @@ def archive_stale_orders(existing_orders, cutoff_date, archive_file_path):
 
     # Filter out stale orders from the original list
     non_stale_orders = [
-        order for order in existing_orders
+        order
+        for order in existing_orders
         if datetime.strptime(order["Date"], "%Y-%m-%d") >= cutoff_date
     ]
 
     return non_stale_orders
+
 
 def identify_latest_orders(orders, new_order):
     """Keeps the latest order for each unique key based on Timestamp."""
@@ -111,6 +135,7 @@ def identify_latest_orders(orders, new_order):
 
     return list(latest_orders.values())
 
+
 def write_orders_to_csv(orders, file_path):
     """Writes orders to CSV, overwriting the file."""
     with open(file_path, mode="w", newline="") as file:
@@ -133,7 +158,9 @@ def alert_negative_quantity(order_data):
             # You can add additional alert mechanisms here (e.g., email, Discord message)
             print(f"ALERT: Negative Quantity detected in order: {order_data}")
     except ValueError:
-        logging.error(f"Invalid Quantity value in order: {order_data.get('Quantity')}, unable to check for negativity.")
+        logging.error(
+            f"Invalid Quantity value in order: {order_data.get('Quantity')}, unable to check for negativity."
+        )
 
 
 def save_order_to_csv(order_data):
@@ -142,7 +169,9 @@ def save_order_to_csv(order_data):
         logging.info(f"Processing order data: {order_data}")
 
         ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
-        logging.info("Processing new order in csv_utils, checking for duplicates and stale entries.")
+        logging.info(
+            "Processing new order in csv_utils, checking for duplicates and stale entries."
+        )
 
         if "Timestamp" not in order_data or not order_data["Timestamp"]:
             order_data["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -170,10 +199,10 @@ def save_order_to_csv(order_data):
         logging.error(f"Error saving order to CSV: {e}")
 
 
-
 # ! --- Holdings Management ---
 
 CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
+
 
 def save_holdings_to_csv(parsed_holdings):
     """Saves holdings data to CSV, ensuring no duplicates are saved, quantities are valid floats, and a timestamp is added."""
@@ -222,8 +251,12 @@ def save_holdings_to_csv(parsed_holdings):
             try:
                 holding_dict["Quantity"] = float(holding_dict["Quantity"])
                 holding_dict["Price"] = float(holding_dict["Price"])
-                holding_dict["Position Value"] = holding_dict["Quantity"] * holding_dict["Price"]  # Recalculate Position Value
-                holding_dict["Account Total"] = float(holding_dict.get("Account Total", 0))  # Optional field
+                holding_dict["Position Value"] = (
+                    holding_dict["Quantity"] * holding_dict["Price"]
+                )  # Recalculate Position Value
+                holding_dict["Account Total"] = float(
+                    holding_dict.get("Account Total", 0)
+                )  # Optional field
             except (ValueError, KeyError):
                 logging.warning(f"Invalid numeric value in holding: {holding_dict}")
                 continue  # Skip invalid entries
@@ -243,16 +276,17 @@ def save_holdings_to_csv(parsed_holdings):
                     account_number=holding_dict["Account Number"],
                     ticker=holding_dict["Stock"],
                     quantity=holding_dict["Quantity"],
-                    price=holding_dict["Price"]
+                    price=holding_dict["Price"],
                 )
-
 
         # Write the updated holdings to the CSV
         if new_holdings:
             with open(HOLDINGS_LOG_CSV, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
                 writer.writeheader()
-                writer.writerows(existing_holdings + new_holdings)  # Append new entries to existing ones
+                writer.writerows(
+                    existing_holdings + new_holdings
+                )  # Append new entries to existing ones
 
             logging.info(f"Holdings saved, with {len(new_holdings)} new entries added.")
         else:
@@ -294,13 +328,14 @@ def clear_holdings_log(filename):
 
 # ! --- Sell All Command ---
 
+
 async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
     """
     Liquidates all holdings for a given brokerage.
     - Checks the holdings log for the brokerage.
     - Sells the smallest quantity found for each stock across all accounts.
     - Runs the sell command for each stock with a 30-second interval.
-    
+
     Args:
         broker (str): The name of the brokerage to liquidate.
         live_mode (str): Set to "true" for live mode or "false" for dry run mode. Defaults to "false".
@@ -308,7 +343,9 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
     try:
         # Validate live_mode
         if live_mode.lower() not in ["true", "false"]:
-            await ctx.send("Invalid live mode. Use 'true' for live mode or 'false' for dry run mode.")
+            await ctx.send(
+                "Invalid live mode. Use 'true' for live mode or 'false' for dry run mode."
+            )
             return
 
         # Load holdings from CSV
@@ -342,7 +379,9 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
             # Wait 30 seconds before the next stock
             await asyncio.sleep(30)
 
-        await ctx.send(f"Liquidation completed for brokerage: {broker} in {'live' if live_mode == 'true' else 'dry'} mode.")
+        await ctx.send(
+            f"Liquidation completed for brokerage: {broker} in {'live' if live_mode == 'true' else 'dry'} mode."
+        )
         logging.info(f"Liquidation completed for brokerage: {broker}.")
 
     except Exception as e:
@@ -351,6 +390,7 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
 
 
 # ! --- Holdings Summaries ---
+
 
 def get_top_holdings(range=3):
     """
@@ -378,14 +418,20 @@ def get_top_holdings(range=3):
                     # Update the latest timestamp
                     timestamp = holding.get("Timestamp")
                     if timestamp:
-                        parsed_timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                        parsed_timestamp = datetime.strptime(
+                            timestamp, "%Y-%m-%d %H:%M:%S"
+                        )
                         if not latest_timestamp or parsed_timestamp > latest_timestamp:
                             latest_timestamp = parsed_timestamp
             except ValueError:
-                logging.warning(f"Skipping invalid Quantity value: {holding.get('Quantity')} in holding: {holding}")
+                logging.warning(
+                    f"Skipping invalid Quantity value: {holding.get('Quantity')} in holding: {holding}"
+                )
                 continue
 
-        logging.debug(f"Filtered {len(filtered_holdings)} holdings where Quantity <= 1.")
+        logging.debug(
+            f"Filtered {len(filtered_holdings)} holdings where Quantity <= 1."
+        )
 
         # Group by broker while ensuring distinct tickers
         for holding in filtered_holdings:
@@ -398,8 +444,12 @@ def get_top_holdings(range=3):
                 existing_tickers = {h.get("Stock") for h in broker_data[broker_name]}
                 if stock_ticker not in existing_tickers:
                     broker_data[broker_name].append(holding)
-                    logging.debug(f"Added distinct holding for broker '{broker_name}': {holding}")
-                    print(f"Added distinct holding for broker '{broker_name}': {holding}")
+                    logging.debug(
+                        f"Added distinct holding for broker '{broker_name}': {holding}"
+                    )
+                    print(
+                        f"Added distinct holding for broker '{broker_name}': {holding}"
+                    )
 
         # Sort and take the top X (range) for each broker
         top_range = {}
@@ -407,10 +457,12 @@ def get_top_holdings(range=3):
             sorted_holdings = sorted(
                 holdings_list,
                 key=lambda x: float(x.get("Position Value", 0)),
-                reverse=True
+                reverse=True,
             )[:range]
             top_range[broker] = sorted_holdings
-            logging.info(f"Top {range} distinct holdings for broker '{broker}': {sorted_holdings}")
+            logging.info(
+                f"Top {range} distinct holdings for broker '{broker}': {sorted_holdings}"
+            )
 
         logging.info("Completed aggregation of top holdings.")
         return top_range, latest_timestamp
@@ -442,13 +494,14 @@ async def send_top_holdings_embed(ctx, range):
         # Format the timestamp for the footer
         formatted_timestamp = (
             latest_timestamp.strftime("%B %d, %Y at %I:%M %p")
-            if latest_timestamp else "Unknown"
+            if latest_timestamp
+            else "Unknown"
         )
 
         # Create embed
         embed = discord.Embed(
             title=f"Top {range} Holdings by Broker < R/S Only >",
-            color=discord.Color.blue()
+            color=discord.Color.blue(),
         )
 
         for broker, holdings in top_holdings.items():
@@ -457,18 +510,10 @@ async def send_top_holdings_embed(ctx, range):
                     f"**{holding['Stock']}**: ${float(holding['Position Value']):,.2f})"
                     for holding in holdings
                 )
-                embed.add_field(
-                    name=broker,
-                    value=holding_details,
-                    inline=True
-                )
+                embed.add_field(name=broker, value=holding_details, inline=True)
                 logging.debug(f"Added broker '{broker}' to embed.")
             else:
-                embed.add_field(
-                    name=broker,
-                    value="No holdings found.",
-                    inline=True
-                )
+                embed.add_field(name=broker, value="No holdings found.", inline=True)
                 logging.debug(f"No holdings found for broker '{broker}'.")
 
         # Add footer with the latest timestamp
