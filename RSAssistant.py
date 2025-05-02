@@ -105,7 +105,7 @@ async def on_ready():
     logger.info(
         f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
     )
-    logger.info(f"Version {VERSION} | Runtime Environment: Production")
+    logger.info(f"V3.1 | Running in CLI | Runtime Environment: Production")
 
     # Fetch the primary channel
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
