@@ -7,6 +7,7 @@ from utils.watch_utils import watch_list_manager
 # Task queue for handling messages
 task_queue = asyncio.Queue()
 
+
 async def processTasks(message):
     """
     Processes the task queue and sends messages (mock implementation).
@@ -18,19 +19,20 @@ async def processTasks(message):
     # Simulate sending a message to Discord here
     await asyncio.sleep(0.1)  # Mock delay for sending the message
 
+
 def printAndDiscord(message, loop=None):
     """
-    Adds a message to the task queue and sends it using an event loop.
-
-    Args:
-        message (str): The message to send to Discord.
-        loop (asyncio.AbstractEventLoop): The event loop for task queue processing.
+        Adds a message to the task queue and sends it using an event loop.
+    :
+            message (str): The message to send to Discord.
+            loop (asyncio.AbstractEventLoop): The event loop for task queue processing.
     """
     print(message)  # Log to console
     if loop:
         loop.call_soon_threadsafe(task_queue.put_nowait, message)
         if task_queue.qsize() == 1:  # Start processing if the queue is not empty
             asyncio.run_coroutine_threadsafe(processQueue(), loop)
+
 
 async def processQueue():
     """
@@ -40,6 +42,7 @@ async def processQueue():
         message = await task_queue.get()
         await processTasks(message)
         task_queue.task_done()
+
 
 async def send_sell_command(ctx, command: str, loop=None):
     """
@@ -65,10 +68,12 @@ async def process_sell_list():
         try:
             now = datetime.now()
             for ticker, details in list(watch_list_manager.sell_list.items()):
-                scheduled_time = datetime.strptime(details["scheduled_time"], "%Y-%m-%d %H:%M:%S")
+                scheduled_time = datetime.strptime(
+                    details["scheduled_time"], "%Y-%m-%d %H:%M:%S"
+                )
                 if now >= scheduled_time:
                     # Execute the sell command
-                    command = f"test command {details['quantity']} {ticker} {details['broker']} false"
+                    command = f"test command {details['quantity']} {ticker} {details['broker']} true"
                     await send_sell_command(None, command)
 
                     # Remove the executed order from the sell list
@@ -80,19 +85,14 @@ async def process_sell_list():
             logging.error(f"Error processing sell list: {e}")
 
 
-
-async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, broker: str, execution_time: datetime):
-    """
-    Schedules and executes a sell order by sending a command to the target bot using helperAPI.
-
-    Args:
-        ctx (discord.ext.commands.Context): The Discord context object.
-        action (str): Order type - buy|sell
-        ticker (str): The stock ticker symbol.
-        quantity (float): Quantity of stock to sell.
-        broker (str): Broker to execute the sell order. Use 'all' for all brokers.
-        execution_time (datetime): The time to execute the sell order.
-    """
+async def schedule_and_execute(
+    ctx,
+    action: str,
+    ticker: str,
+    quantity: float,
+    broker: str,
+    execution_time: datetime,
+):
     try:
         # Add order to the sell list
         watch_list_manager.add_to_sell_list(
