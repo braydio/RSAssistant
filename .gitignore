@@ -12,7 +12,7 @@
 *.db
 *.db-shm
 *.db-wal
-
+heartbeat.txt
 # Volumes
 *.xlsx
 !example.ReverseSplitLog.xlsx
