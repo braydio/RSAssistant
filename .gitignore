@@ -1,4 +1,5 @@
 # environment stuff
+volumes/
 .venv/*
 *.env
 !example.env
