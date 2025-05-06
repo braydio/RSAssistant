@@ -11,9 +11,9 @@ from utils.logging_setup import setup_logging
 # Base directories
 UTILS_DIR = Path(__file__).resolve().parent  # Move up one directory from utils
 BASE_DIR = Path(UTILS_DIR).resolve().parent
-CONFIG_DIR = BASE_DIR / "config"
-print(f"Config dir at {CONFIG_DIR}")
 VOLUMES_DIR = BASE_DIR / "volumes"
+CONFIG_DIR = VOLUMES_DIR / "config"
+print(f"Config dir at {CONFIG_DIR}")
 
 ENV_PATH = CONFIG_DIR / ".env"
 CONFIG_FILE = CONFIG_DIR / "settings.yaml"
