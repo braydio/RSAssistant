@@ -18,15 +18,15 @@ from discord.ext import commands
 
 # Local utility imports
 from utils.config_utils import (
-    ACCOUNT_MAPPING,
     BOT_TOKEN,
     DISCORD_PRIMARY_CHANNEL,
     DISCORD_SECONDARY_CHANNEL,
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
-    VERSION,
+    ACCOUNT_MAPPING,
 )
+
 from utils.csv_utils import (
     clear_holdings_log,
     sell_all_position,
@@ -62,7 +62,9 @@ from utils.watch_utils import (
 # from utils.Webdriver_FindFilings import fetch_results
 # from utils.Webdriver_Scraper import StockSplitScraper
 
-bot_info = f"RSAssistant - v{VERSION} by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
+bot_info = (
+    "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
+)
 
 init_db()
 
@@ -76,7 +78,9 @@ intents.guilds = True
 intents.members = True
 
 # Initialize bot
-bot = commands.Bot(command_prefix="~", case_insensitive=True, intents=intents)
+bot = commands.Bot(
+    command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
+)
 
 periodic_task = None
 reminder_scheduler = None
@@ -91,7 +95,7 @@ async def on_ready():
     logging.info(
         f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
     )
-    logging.info(f"Version {VERSION} | Runtime Environment: Production")
+    logger.info(f"V3.1 | Running in CLI | Runtime Environment: Production")
 
     # Fetch the primary channel
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
@@ -520,19 +524,28 @@ async def top_holdings_command(ctx, range: int = 3):
 
 @bot.command(
     name="watch",
-    help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'",
+    help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'. Add 'noexec' to skip buy.",
 )
-async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
-    """Adds a ticker to the watchlist with an optional split date and split ratio."""
+async def watch(
+    ctx,
+    ticker: str,
+    split_date: str = None,
+    split_ratio: str = None,
+    noexec: str = None,
+):
+    """Adds a ticker to the watchlist and optionally schedules a buy unless 'noexec' is passed."""
+    from utils.order_exec import schedule_and_execute
+    from datetime import datetime, timedelta
+
     try:
         if split_date:
             datetime.strptime(split_date, "%m/%d")  # Validates the format as mm/dd
     except ValueError:
-        await ctx.send("Invalid date format. Please use * mm/dd * e.g., 11/4.")
+        await ctx.send("Invalid date format. Please use mm/dd, e.g., 11/04.")
         return
 
     if not split_date:
-        await ctx.send("Please include split date: * mm/dd *")
+        await ctx.send("Please include split date using format mm/dd.")
         return
 
     if split_ratio and not split_ratio.count("-") == 1:
@@ -540,6 +553,41 @@ async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = Non
         return
 
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
+    await ctx.send(f"{ticker.upper()} has been added to the watchlist.")
+
+    if noexec and noexec.lower() == "noexec":
+        await ctx.send("Buy order was skipped due to 'noexec' flag.")
+        return
+
+    # Auto-buy logic
+    now = datetime.now()
+    market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = now.replace(hour=16, minute=0, microsecond=0)
+
+    if now.weekday() >= 5:
+        days_until_monday = (7 - now.weekday()) % 7 or 7
+        execution_time = (now + timedelta(days=days_until_monday)).replace(
+            hour=9, minute=30, second=0, microsecond=0
+        )
+    elif market_open <= now <= market_close:
+        execution_time = now
+    else:
+        execution_time = (now + timedelta(days=1)).replace(
+            hour=9, minute=30, second=0, microsecond=0
+        )
+
+    await schedule_and_execute(
+        ctx=ctx,
+        action="buy",
+        ticker=ticker,
+        quantity=1,
+        broker="all",
+        execution_time=execution_time,
+    )
+
+    await ctx.send(
+        f"Scheduled BUY for {ticker.upper()} at {execution_time.strftime('%Y-%m-%d %H:%M:%S')} (triggered by watch command)."
+    )
 
 
 @bot.command(
