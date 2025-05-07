@@ -41,6 +41,56 @@ ORDERS_HEADERS = [
 ]
 
 
+# Utility functions for external tools
+
+
+def is_ticker_currently_held(ticker: str) -> bool:
+    """Returns True if the ticker is currently held based on CSV log."""
+    from utils.config_utils import HOLDINGS_LOG_CSV
+    import csv
+    import os
+
+    if not os.path.exists(HOLDINGS_LOG_CSV):
+        return False
+
+    with open(HOLDINGS_LOG_CSV, mode="r") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if row.get("Stock", "").strip().upper() == ticker.upper():
+                try:
+                    quantity = float(row.get("Quantity", 0))
+                    if quantity > 0:
+                        return True
+                except ValueError:
+                    continue
+    return False
+
+
+def was_ticker_held_recently(ticker: str, days: int = 7) -> bool:
+    """Returns True if the ticker appears in CSV with a timestamp within the last X days."""
+    from utils.config_utils import HOLDINGS_LOG_CSV
+    import csv
+    import os
+
+    if not os.path.exists(HOLDINGS_LOG_CSV):
+        return False
+
+    cutoff = datetime.now() - timedelta(days=days)
+
+    with open(HOLDINGS_LOG_CSV, mode="r") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if row.get("Stock", "").strip().upper() == ticker.upper():
+                ts = row.get("Timestamp", "")
+                try:
+                    parsed = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                    if parsed >= cutoff:
+                        return True
+                except Exception:
+                    continue
+    return False
+
+
 def ensure_csv_file_exists(file_path, headers):
     if not os.path.exists(file_path):
         with open(file_path, mode="w", newline="") as file:
