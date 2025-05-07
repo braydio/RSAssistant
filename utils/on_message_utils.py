@@ -90,6 +90,27 @@ async def handle_secondary_channel(bot, message):
                 f"⛔ No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
             )
 
+        # --------------- 🔁 Holdings-Based Watchlist Auto-Add ----------------
+        from utils.csv_utils import is_ticker_currently_held, was_ticker_held_recently
+        from utils import watch_list_manager
+
+        if not watch_list_manager.is_ticker_watched(alert_ticker):
+            currently_held = is_ticker_currently_held(alert_ticker)
+            recently_held = was_ticker_held_recently(alert_ticker, days=5)
+
+            if currently_held or recently_held:
+                watch_list_manager.add_watch(alert_ticker)
+                logger.info(
+                    f"Ticker {alert_ticker} was {'currently held' if currently_held else 'recently held'}; auto-added to watchlist."
+                )
+            else:
+                logger.info(
+                    f"Ticker {alert_ticker} is not in watchlist or holdings. Skipping watchlist addition."
+                )
+        else:
+            logger.info(f"Ticker {alert_ticker} already in watchlist. No action taken.")
+        # ---------------------------------------------------------------------
+
     except Exception as e:
         logger.error(f"Exception during policy analysis for {alert_ticker}: {e}")
 
