@@ -1,0 +1,10 @@
+{
+  "custom": {
+    "description": "Custom action directory",
+    "contents": {
+      "/endpoint": {
+        "note": "Using this URL to connect: /custom/endpoint - Signed: RSAssistant Companion"
+      }
+    }
+  }
+}
