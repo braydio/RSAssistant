@@ -1,6 +1,6 @@
 {
-  "custom": {
-    "description": "Custom action directory",
+  "iam_sorry": {
+    "description": "This file was wrongly committed directly to main. I sincerely apologise for the overszght.",
     "contents": {
       "/endpoint": {
         "note": "Using this URL to connect: /custom/endpoint - Signed: RSAssistant Companion"
