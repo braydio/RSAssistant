@@ -9,8 +9,8 @@ from utils.logging_setup import setup_logging, logger
 # --- Directories ---
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
-CONFIG_DIR = BASE_DIR / "config"
 VOLUMES_DIR = BASE_DIR / "volumes"
+CONFIG_DIR = VOLUMES_DIR / "config"
 
 # --- Config paths ---
 ENV_PATH = CONFIG_DIR / ".env"
