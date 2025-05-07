@@ -195,18 +195,26 @@ async def post_policy_summary(bot, ticker, summary):
 
 
 # -------------------------
-# OnMessagePolicyResolver
+# SplitPolicyResolver
 # -------------------------
 
 
-class OnMessagePolicyResolver:
+class SplitPolicyResolver:
+    BASE_URL = "https://efts.sec.gov/LATEST/search-index"
+    HEADERS = {"User-Agent": "MyApp/1.0 (my.email@example.com)"}
+    SEARCH_TERMS = [
+        "reverse stock split",
+        "no fractional shares",
+        "reverse split",
+        "in lieu",
+        "preserve round lot",
+    ]
     NASDAQ_KEYWORDS = [
         "cash in lieu",
         "no fractional shares",
         "rounded up",
         "not issuing fractional shares",
     ]
-
     SEC_KEYWORDS = [
         "cash in lieu",
         "rounded up",
@@ -215,239 +223,79 @@ class OnMessagePolicyResolver:
         "paid in cash",
     ]
 
-    sec_fetcher = SECPolicyFetcher()
+    def __init__(self, back_days=30):
+        self.start_date = (datetime.today() - timedelta(days=back_days)).strftime(
+            "%Y-%m-%d"
+        )
+        self.end_date = datetime.today().strftime("%Y-%m-%d")
 
-    @classmethod
-    def full_analysis(cls, nasdaq_url):
+    def build_search_params(self, ticker):
+        return {
+            "q": f"{ticker} "
+            + " OR ".join([f'"{term}"' for term in self.SEARCH_TERMS]),
+            "dateRange": "custom",
+            "startdt": self.start_date,
+            "enddt": self.end_date,
+            "category": "full",
+            "start": 0,
+            "count": 10,
+        }
+
+    def search_sec_filings(self, ticker):
         try:
-            logger.info(f"Starting full_analysis for: {nasdaq_url}")
-            ticker = cls.extract_ticker_from_url(nasdaq_url)
-            nasdaq_result = cls.analyze_nasdaq_notice(nasdaq_url, ticker=ticker)
-
-            if not nasdaq_result:
-                logger.warning("NASDAQ notice analysis failed or returned no result.")
-                return None
-
-            if nasdaq_result.get("sec_url"):
-                sec_result = cls.analyze_sec_filing(nasdaq_result["sec_url"])
-                nasdaq_result.update(sec_result)
-
-            if not nasdaq_result.get("sec_policy") or nasdaq_result["sec_policy"] in [
-                "Unable to retrieve SEC filing.",
-                "No text content available.",
-                "Policy not clearly stated.",
-            ]:
-                press_url = nasdaq_result.get("press_url")
-                if press_url:
-                    logger.info(
-                        f"Attempting fallback analysis using Press Release at {press_url}"
-                    )
-                    press_text = cls.fetch_sec_filing_text(press_url)
-                    if press_text:
-                        press_policy = cls.analyze_fractional_share_policy(press_text)
-                        nasdaq_result["sec_policy"] = press_policy
-                        logger.info(f"Press Release analysis result: {press_policy}")
-
-                        # 🚨 Immediately update round-up confirmed from PR
-                        nasdaq_result["round_up_confirmed"] = cls.is_round_up_policy(
-                            press_policy
-                        )
-                        logger.info(
-                            f"Round-up confirmed after press release analysis: {nasdaq_result['round_up_confirmed']}"
-                        )
-                    else:
-                        logger.warning(
-                            "Failed to fetch Press Release text for fallback policy analysis."
-                        )
-
-            # FINAL fallback, if still no round_up_confirmed
-            if "round_up_confirmed" not in nasdaq_result:
-                policy_text = nasdaq_result.get("sec_policy") or nasdaq_result.get(
-                    "policy"
-                )
-                nasdaq_result["round_up_confirmed"] = cls.is_round_up_policy(
-                    policy_text
-                )
-                logger.info(
-                    f"Final round-up detection result: {nasdaq_result['round_up_confirmed']}"
-                )
-
-            logger.info(f"Completed full_analysis for: {nasdaq_url}")
-            return nasdaq_result
-
-        except Exception as e:
-            logger.error(f"Critical failure during full_analysis: {e}")
-            return None
-
-    @staticmethod
-    def extract_ticker_from_url(url):
-        match = re.search(r"\((.*?)\)", url)
-        if match:
-            return match.group(1)
-        return None
-
-    @classmethod
-    def analyze_nasdaq_notice(cls, nasdaq_url, ticker=None):
-        try:
-            logger.info(f"Analyzing NASDAQ notice at {nasdaq_url}")
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
-            response = requests.get(nasdaq_url, headers=headers, timeout=10)
+            logger.info(
+                f"Searching SEC filings for {ticker} from {self.start_date} to {self.end_date}"
+            )
+            params = self.build_search_params(ticker)
+            response = requests.get(
+                self.BASE_URL, params=params, headers=self.HEADERS, timeout=10
+            )
             response.raise_for_status()
-
-            text = response.text.lower()
-            policy = cls.detect_policy_from_text(text, cls.NASDAQ_KEYWORDS)
-            sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker=ticker)
-            press_url = cls.get_press_release_link_from_nasdaq(response.text)
-
-            return {
-                "policy": policy,
-                "nasdaq_url": nasdaq_url,
-                "sec_url": sec_url,
-                "press_url": press_url,
-            }
+            return response.json()
         except Exception as e:
-            logger.error(f"Error analyzing NASDAQ notice: {e}")
+            logger.error(f"Error fetching SEC search results: {e}")
             return None
 
-    @classmethod
-    def analyze_sec_filing(cls, sec_url):
+    def extract_policy_from_sec_filing(self, filing_url):
         try:
-            logger.info(f"Analyzing SEC filing at {sec_url}")
-            filing_text = cls.fetch_sec_filing_text(sec_url)
-            if filing_text:
-                sec_policy = cls.analyze_fractional_share_policy(filing_text)
-                return {
-                    "sec_policy": sec_policy,
-                    "sec_url": sec_url,
-                }
-            else:
-                return {
-                    "sec_policy": "Unable to retrieve SEC filing.",
-                    "sec_url": sec_url,
-                }
-        except Exception as e:
-            logger.error(f"Failed to retrieve or analyze SEC filing: {e}")
-            return {
-                "sec_policy": "Unable to retrieve SEC filing.",
-                "sec_url": sec_url,
-            }
-
-    @staticmethod
-    def get_sec_link_from_nasdaq(nasdaq_url, ticker=None):
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
-            response = requests.get(nasdaq_url, headers=headers, timeout=10)
+            logger.info(f"Fetching and analyzing SEC filing from {filing_url}")
+            response = requests.get(filing_url, headers=self.HEADERS, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
-            links = [
-                link["href"]
-                for link in soup.find_all("a", href=True)
-                if "sec.gov" in link["href"]
-            ]
+            text_content = soup.get_text(separator=" ")
 
-            if not links:
-                logger.warning("No SEC Filing links found on NASDAQ page.")
-                return None
-
-            # Filter SEC links
-            filtered_links = []
-            for link in links:
-                if "/rules/sro/" in link:
-                    logger.info(f"Skipping rules/sro link: {link}")
-                    continue
-                if ticker and ticker.lower() in link.lower():
-                    filtered_links.append(link)
-                elif re.search(r"/20\d{2}/", link):
-                    filtered_links.append(link)
-
-            if filtered_links:
-                logger.info(f"SEC Filing link selected: {filtered_links[0]}")
-                return filtered_links[0]
-
-            logger.warning("No valid SEC Filing link after filtering.")
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to retrieve SEC link from NASDAQ: {e}")
-            return None
-
-    @staticmethod
-    def get_press_release_link_from_nasdaq(html_text):
-        try:
-            soup = BeautifulSoup(html_text, "html.parser")
-            link = soup.find("a", string="Press Release")
-            if link and link.get("href"):
-                press_url = link["href"]
-                if press_url.startswith("/"):
-                    press_url = "https://www.nasdaqtrader.com" + press_url
-                logger.info(f"Press Release link found: {press_url}")
-                return press_url
-            else:
-                logger.warning("No Press Release link found on NASDAQ page.")
-                return None
-        except Exception as e:
-            logger.error(f"Error extracting Press Release link: {e}")
-            return None
-
-    @staticmethod
-    def fetch_sec_filing_text(url):
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+            return {
+                "round_up": self.is_round_up_policy(text_content),
+                "cash_in_lieu": "cash in lieu" in text_content.lower()
+                or "paid in cash" in text_content.lower(),
+                "round_down": "rounded down" in text_content.lower(),
             }
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-
-            if "html" in response.headers.get("Content-Type", ""):
-                soup = BeautifulSoup(response.text, "html.parser")
-                text = soup.get_text(separator=" ")
-            else:
-                text = response.text
-
-            text = " ".join(text.split())
-            logger.info(f"Fetched SEC filing text ({len(text)} characters)")
-            return text
         except Exception as e:
-            logger.error(f"Error fetching SEC filing text: {e}")
+            logger.error(f"Error analyzing SEC filing text: {e}")
             return None
 
-    @staticmethod
-    def detect_policy_from_text(text, keywords):
-        for keyword in keywords:
-            if keyword in text:
-                logger.info(f"Detected policy keyword: {keyword}")
-                return keyword.capitalize()
-        logger.warning("No specific policy keywords detected.")
-        return "Policy not clearly stated."
+    def fetch_sec_policy(self, ticker):
+        search_data = self.search_sec_filings(ticker)
+        if not search_data or "hits" not in search_data.get("hits", {}):
+            logger.warning(f"No filings found for ticker {ticker}")
+            return None
 
-    @staticmethod
-    def analyze_fractional_share_policy(text):
-        if not text:
-            return "No text content available."
+        filings = search_data["hits"]["hits"]
+        for filing in filings:
+            form_type = filing["_source"].get("form", "")
+            if form_type in ["8-K", "S-1", "S-3", "S-4", "14A", "10-K", "10-Q"]:
+                cik = filing["_source"].get("ciks", [""])[0]
+                accession_number = filing["_source"].get("adsh", "")
+                file_id = filing["_id"].split(":")[1]
+                filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_number.replace('-', '')}/{file_id}"
 
-        text_lower = text.lower()
+                policy_info = self.extract_policy_from_sec_filing(filing_url)
+                if policy_info:
+                    logger.info(f"Policy info extracted for {ticker}: {policy_info}")
+                    return policy_info
 
-        if "fractional share" not in text_lower:
-            return "No mention of fractional shares."
-
-        cash_indicators = ["cash in lieu", "paid in cash", "payment for fractional"]
-
-        if any(term in text_lower for term in cash_indicators):
-            return "Fractional shares will be paid out in cash."
-
-        if "rounded up" in text_lower and not any(
-            term in text_lower for term in cash_indicators
-        ):
-            return "Fractional shares will be rounded up to a full share."
-
-        if "rounded down" in text_lower:
-            return "Fractional shares will be rounded down (likely forfeited)."
-
-        return "Fractional share handling mentioned, but unclear policy."
+        logger.warning(f"No valid policy extracted for {ticker}")
+        return None
 
     @staticmethod
     def is_round_up_policy(text):
@@ -465,3 +313,120 @@ class OnMessagePolicyResolver:
             and all(term not in text for term in cash_indicators)
             and "fractional share" in text
         )
+
+    @staticmethod
+    def detect_policy_from_text(text, keywords):
+        for keyword in keywords:
+            if keyword in text:
+                logger.info(f"Detected policy keyword: {keyword}")
+                return keyword.capitalize()
+        logger.warning("No specific policy keywords detected.")
+        return "Policy not clearly stated."
+
+    @staticmethod
+    def fetch_text_from_url(url):
+        try:
+            headers = SplitPolicyResolver.HEADERS
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            if "html" in response.headers.get("Content-Type", ""):
+                soup = BeautifulSoup(response.text, "html.parser")
+                text = soup.get_text(separator=" ")
+            else:
+                text = response.text
+
+            text = " ".join(text.split())
+            logger.info(f"Fetched SEC filing text ({len(text)} characters)")
+            return text
+        except Exception as e:
+            logger.error(f"Error fetching SEC filing text: {e}")
+            return None
+
+    @classmethod
+    def analyze_text(cls, text_source, keywords=None):
+        if not text_source:
+            return None
+
+        text = cls.fetch_text_from_url(text_source)
+        if not text:
+            return None
+
+        policy = cls.detect_policy_from_text(text, keywords or cls.SEC_KEYWORDS)
+        round_up = cls.is_round_up_policy(text)
+        return {
+            "policy": policy,
+            "round_up_confirmed": round_up,
+            "source_url": text_source,
+        }
+
+
+# -------------------------
+# OnMessagePolicyResolver
+# -------------------------
+
+
+class OnMessagePolicyResolver:
+    resolver = SplitPolicyResolver()
+
+    @classmethod
+    def full_analysis(cls, nasdaq_url):
+        try:
+            logger.info(f"Starting full_analysis for: {nasdaq_url}")
+            ticker = cls.extract_ticker_from_url(nasdaq_url)
+
+            notice = cls.resolver.analyze_text(
+                nasdaq_url, SplitPolicyResolver.NASDAQ_KEYWORDS
+            )
+            if not notice:
+                logger.warning("NASDAQ notice analysis failed.")
+                return None
+
+            sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker)
+            if sec_url:
+                sec_result = cls.resolver.analyze_text(sec_url)
+                notice.update(sec_result or {})
+
+            return notice
+        except Exception as e:
+            logger.error(f"Critical failure during full_analysis: {e}")
+            return None
+
+    @staticmethod
+    def extract_ticker_from_url(url):
+        match = re.search(r"\((.*?)\)", url)
+        return match.group(1) if match else None
+
+    @staticmethod
+    def get_sec_link_from_nasdaq(nasdaq_url, ticker=None):
+        try:
+            headers = SplitPolicyResolver.HEADERS
+            response = requests.get(nasdaq_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+            links = [
+                link["href"]
+                for link in soup.find_all("a", href=True)
+                if "sec.gov" in link["href"]
+            ]
+
+            filtered_links = [
+                link
+                for link in links
+                if "/rules/sro/" not in link
+                and (
+                    ticker
+                    and ticker.lower() in link.lower()
+                    or re.search(r"/20\d{2}/", link)
+                )
+            ]
+
+            if filtered_links:
+                logger.info(f"SEC Filing link selected: {filtered_links[0]}")
+                return filtered_links[0]
+
+            logger.warning("No valid SEC link found.")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve SEC link from NASDAQ: {e}")
+            return None
