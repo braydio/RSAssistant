@@ -12,12 +12,11 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.order_exec import schedule_and_execute
-
+from utils.config_utils import DISCORD_SUMMARY_CHANNEL
 from discord import Embed
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
-
 
 def set_channels(primary_id, secondary_id):
     """Sets primary and secondary channel IDs for use in on_message handling."""
@@ -53,6 +52,9 @@ async def handle_primary_channel(bot, message):
 
 
 async def handle_secondary_channel(bot, message):
+
+    if message.author.bot:
+        return  # Skip messages sent by the bot itself
     logger.info(f"Received message on secondary channel: {message.content}")
 
     result = alert_channel_message(message.content)
@@ -144,7 +146,13 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         broker="all",
         execution_time=execution_time,
     )
-
+    
+    summary_channel = bot.get_channel(DISCORD_SUMMARY_CHANNEL)
+    if summary_channel:
+        logger.info(f"Sending summary to Summary Channel {DISCORD_SUMMARY_CHANNEL}")
+        await summary_channel.send(
+            f"Scheduled BUY for {ticker} at {execution_time.strftime('%Y-%m-%d %H:%M:%S')} (autobuy confirmed)."
+    )
     confirmation = f"✅ Autobuy for `{ticker}` scheduled at {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
     logger.info(confirmation)
     await channel.send(confirmation)
@@ -165,15 +173,16 @@ def build_policy_summary(ticker, policy_info, fallback_url):
 
     return summary
 
-
 async def post_policy_summary(bot, ticker, summary):
-    """Posts the policy summary to the primary channel."""
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    """Posts the policy summary to the summary channel."""
+
+    channel = bot.get_channel(DISCORD_SUMMARY_CHANNEL)
     if channel:
         await channel.send(summary)
-        logger.info(f"Policy summary posted successfully for {ticker}.")
+        logger.info(f"Policy summary posted to summary channel for {ticker}.")
     else:
-        logger.error("Primary channel not found to post summary.")
+        logger.error("Summary channel not found to post summary.")
+
 
 
 # -------------------------
