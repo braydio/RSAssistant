@@ -1,0 +1,49 @@
+# Module Directory Map
+
+- `/`
+  - `.dockerignore`
+  - `.gitignore`
+  - `DirMap.txt`
+  - `Dockerfile`
+  - `FUTURE_PLANS.md`
+  - `LICENSE `
+  - `README.md`
+  - `RSAssistant.py`
+  - `RSAssistant001.py`
+  - `RSAssistant002.py`
+  - `docker-compose.yml`
+  - `entrypoint.sh`
+  - `requirements.txt`
+  - `test-file.txt`
+- `cleanup/`
+  - `RSAssistant.py`
+  - `RSAssistant001.py`
+  - `temp.txt`
+- `config/`
+  - `example.env`
+  - `example.settings.yaml`
+- `custom/`
+  - `DirMap.json`
+- `utils/`
+  - `Wabdriver_FindFilings.py`
+  - `Webdriver_Scraper.py`
+  - `autobuy_utils.py`
+  - `config_utils.py`
+  - `csv_utils.py`
+  - `develop_split_handling_checks.py`
+  - `excel_utils.py`
+  - `helper_api.py`
+  - `history_query.py`
+  - `logging_setup.py`
+  - `on_message_utils.py`
+  - `order_exec.py`
+  - `order_queue_manager.py`
+  - `parsing_utils.py`
+  - `policy_resolver.py`
+  - `sec_policy_fetcher.py`
+  - `split_watch_utils.py`
+  - `sql.utils.py`
+  - `utility_utils.py`
+  - `utility_utils_deprecated.py`
+  - `watch_list_manager.py`
+  - `watch_utils.py`
