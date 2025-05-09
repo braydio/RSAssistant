@@ -64,10 +64,6 @@ from utils.watch_utils import (
     watch_list_manager,
 )
 
-# Webdriver imports - - see utils / web utils for implementation
-# from utils.Webdriver_FindFilings import fetch_results
-# from utils.Webdriver_Scraper import StockSplitScraper
-
 bot_info = (
     "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
 )
@@ -130,13 +126,14 @@ async def on_ready():
     # Send ready message to the primary channel
     if channel:
         await channel.send(
-            f"{ready_message}\nThe date-time is {now.strftime('%m-%d %H:%M')}"
+            f"{ready_message}\nThe time is {now.strftime('%m-%d %H:%M')}"
+            f"Orders Log at {ORDERS_LOG_CSV}"
+            f"Holdings Log at {HOLDINGS_LOG_CSV}"
         )
     else:
         logger.warning(
             f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup."
         )
-
     logger.info(f"Initializing Application in Production environment.")
     logger.info(
         f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
@@ -166,10 +163,6 @@ async def on_ready():
         logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     else:
         logger.info("Reminder scheduler already running.")
-
-    logger.info("✅ SplitPolicyResolver module loaded and ready.")
-    logger.info("✅ order_exec module loaded and ready.")
-    logger.info("✅ autobuy_ticker function ready for auto-order execution.")
 
 
 async def process_sell_list(bot):
