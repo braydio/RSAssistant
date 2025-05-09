@@ -73,17 +73,30 @@ class WatchListManager:
         else:
             logging.info("No sell list file found, starting fresh.")
 
-    def add_to_sell_list(self, ticker, broker, quantity, scheduled_time):
-        """
-        Add a ticker with details to the sell list.
-        """
-        self.sell_list[ticker.upper()] = {
+    
+    def add_to_sell_list(ticker: str, broker: str = "all", quantity: float = 1.0, scheduled_time: str = None):
+        """Adds a ticker to the sell list if not already present."""
+        from datetime import datetime
+
+        ticker = ticker.upper()
+
+        if ticker in sell_list:
+            logger.info(f"{ticker} already exists in sell list. Skipping add.")
+            return False  # Already scheduled
+
+        if not scheduled_time:
+            scheduled_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        sell_list[ticker] = {
             "broker": broker,
             "quantity": quantity,
             "scheduled_time": scheduled_time,
-            "added_on": datetime.now().strftime("%Y-%m-%d"),
+            "added_on": scheduled_time,
         }
-        self.save_sell_list()
+        save_sell_list()
+        logger.info(f"Added {ticker} to sell list.")
+        return True
+
 
     def remove_from_sell_list(self, ticker):
         """Remove a ticker from the sell list."""
@@ -216,6 +229,9 @@ async def send_reminder_message_embed(ctx):
 
     logging.info(f"Reminder message called for {datetime.now()}")
     update_historical_holdings()
+  
+    await ctx.send("!rsa holdings all")
+    logging.info("Sent holdings refresh command as part of reminder task.")
     
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
