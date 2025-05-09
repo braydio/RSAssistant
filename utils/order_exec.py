@@ -102,6 +102,8 @@ async def schedule_and_execute(
             scheduled_time=execution_time.strftime("%Y-%m-%d %H:%M:%S"),
         )
 
+
+
         # Calculate delay until execution
         now = datetime.now()
         delay = (execution_time - now).total_seconds()
