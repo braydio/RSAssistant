@@ -8,9 +8,9 @@ services:
     env_file:
       - ./config/.env  # config/ is in the root directory
     volumes:
-      - ./volumes/logs:/app/volumes/logs   # Persist logs
-      - ./volumes/db:/app/volumes/db       # Persist database
-      - ./volumes/excel:/app/volumes/excel # Persist Excel
+      - ./volumes/logs:/volumes/logs   # Persist logs
+      - ./volumes/db:/volumes/db       # Persist database
+      - ./volumes/excel:/volumes/excel # Persist Excel
       - ./volumes/config:/app/config       # Shared config files
       - ./utils:/app/utils
     environment:
