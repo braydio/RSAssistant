@@ -15,6 +15,7 @@ services:
       - ./utils:/app/utils
     environment:
       ENVIRONMENT: production
+      TZ: America/New_York              # Set the timezone to New York
     deploy:
       resources:
         limits:
