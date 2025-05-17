@@ -30,6 +30,22 @@ def start_heartbeat_writer(path="./volumes/logs/heartbeat.txt", interval=60):
     Thread(target=writer, daemon=True).start()
 
 
+class ColoredFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: Fore.BLUE,
+        logging.INFO: Fore.GREEN,
+        logging.WARNING: Fore.YELLOW,
+        logging.ERROR: Fore.RED,
+        logging.CRITICAL: Fore.MAGENTA,
+    }
+
+    def format(self, record):
+        color = self.COLORS.get(record.levelno, "")
+        reset = Style.RESET_ALL
+        record.msg = f"{color}{record.msg}{reset}"
+        return super().format(record)
+
+
 class TimeLengthListDuplicateFilter(logging.Filter):
     def __init__(self, interval=60, max_message_length=200, max_sample_items=5):
         super().__init__()
@@ -85,9 +101,15 @@ def setup_logging(verbose=False):
     except Exception as e:
         print(f"Failed to set UTF-8 encoding for console: {e}")
 
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s() - %(message)s"
+    )
+
     handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(
+        ColoredFormatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
+
 
     filter_invalid = ReplaceInvalidCharactersFilter()
     duplicate_filter = TimeLengthListDuplicateFilter()
