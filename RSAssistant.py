@@ -227,33 +227,31 @@ async def process_order(
         market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
         market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
 
-        if time is None:
-            if market_open <= now <= market_close:
-                execution_time = now
-                await ctx.send(
-                    f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
-                )
-            else:
-                # Market closed, schedule next open
-                execution_time = now
-                if now >= market_close:
-                    execution_time = (now + timedelta(days=1)).replace(
-                        hour=9, minute=30, second=0, microsecond=0
-                    )
-                elif now < market_open:
-                    execution_time = now.replace(
-                        hour=9, minute=30, second=0, microsecond=0
-                    )
-
-                # ⏩ SKIP to Monday if Saturday or Sunday
-                while execution_time.weekday() >= 5:
-                    execution_time += timedelta(days=1)
-
-                await ctx.send(
-                    f"Market closed. Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}."
-                )
+        if market_open <= now <= market_close:
+            execution_time = now
+            logger.info(
+                f"Executing order {action.upper()} {ticker.upper()} now, market is open"
+            )
+            await ctx.send(
+                f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
+            )
         else:
-            # Custom time provided
+            # Market closed, schedule next open
+            execution_time = now
+            if now >= market_close:
+                execution_time = (now + timedelta(days=1)).replace(
+                    hour=9, minute=30, second=0, microsecond=0
+                )
+            elif now < market_open:
+                execution_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
+
+            # ⏩ SKIP to Monday if Saturday or Sunday
+            while execution_time.weekday() >= 5:
+                execution_time += timedelta(days=1)
+
+            await ctx.send(
+                f"Market closed. Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}."
+            )
             try:
                 if "/" in time:
                     if " " in time:
@@ -291,7 +289,10 @@ async def process_order(
                 while execution_time.weekday() >= 5:
                     execution_time += timedelta(days=1)
 
-            except ValueError:
+            except ValueError as ve:
+                logger.error(
+                    f"Invalid time format provided by user: {time}. Error: {ve}"
+                )
                 await ctx.send(
                     "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
                 )
@@ -383,12 +384,6 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-@bot.command(name="reminder", help="Shows daily reminder")
-async def show_reminder(ctx):
-    """Shows a daily reminder message."""
-    await send_reminder_message_embed(ctx)
-
-
 async def send_scheduled_reminder():
     """Send scheduled reminders to the target channel."""
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
@@ -454,8 +449,8 @@ async def brokerlist(ctx, broker: str = None):
 
 
 @bot.command(
-    name="brokerwith",
-    help="All brokers with specified tickers > brokerwith <ticker> (details)",
+    name="bw",
+    help="Broker-With <ticker> (details) | All brokers with specified ticker, opt details=specific broker",
 )
 async def broker_has(ctx, ticker: str, *args):
     """Shows broker-level summary for a specific ticker."""
@@ -543,7 +538,7 @@ async def allwatching(ctx):
     await watch_list_manager.list_watched_tickers(ctx)
 
 
-@bot.command(name="watched", help="Removes a ticker from the watchlist.")
+@bot.command(name="ok", help="watched <ticker> | Removes a ticker from the watchlist.")
 async def watched_ticker(ctx, ticker: str):
     """Removes a ticker from the watchlist."""
     await watch_list_manager.stop_watching(ctx, ticker)
@@ -620,102 +615,12 @@ async def clear_holdings(ctx):
     await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
 
-@bot.command(
-    name="sql",
-    help=(
-        "Query a table from the database.\n\n"
-        "**Arguments:**\n"
-        "- `table`: Name of the table to query (e.g., Orders, Holdings).\n"
-        "- `filters`: Optional key=value pairs for filtering (e.g., ticker=AAPL).\n"
-        "- `limit`: Optional row limit (e.g., limit=5)."
-    ),
-)
-async def query_table(ctx, table_name: str, *args):
-    try:
-        results = bot_query_database(
-            table_name, filters=None, order_by=None, limit=None
-        )
-        if not results:
-            await ctx.send(
-                f"No results found for table `{table_name}` with the provided filters."
-            )
-            return
-
-        # Send results as a message
-        response = ""
-        for row in results:
-            response += (
-                "\n".join([f"{key}: {value}" for key, value in row.items()]) + "\n\n"
-            )
-
-        # Send response (Discord limits messages to 2000 characters)
-        for chunk in [response[i : i + 2000] for i in range(0, len(response), 2000)]:
-            await ctx.send(chunk)
-    except Exception as e:
-        await ctx.send(f"Error querying table `{table_name}`: {e}")
-
-
-@bot.command(
-    name="history",
-    help="Shows historical holdings over time from the database. Usage: `..history <account> <ticker> <start_date> <end_date>`",
-)
-async def sql_historical_holdings(
-    ctx,
-    account: str = None,
-    ticker: str = None,
-    start_date: str = None,
-    end_date: str = None,
-):
-    """
-    Displays historical holdings over time from the SQL database.
-    """
-    await show_sql_holdings_history(ctx, account, ticker, start_date, end_date)
-
-
-async def send_negative_holdings(
-    quantity, stock, alert_type, broker_name, broker_number, account_number
-):
-    """
-    Sends an alert message to the target Discord channel for negative holdings.
-
-    Args:
-        quantity (float): The negative quantity detected.
-        stock (str): The stock symbol associated with the alert.
-        alert_type (str): Type of alert, e.g., "Negative Holdings".
-        broker_name (str): The name of the broker.
-        broker_number (str): The broker's identifier.
-        account_number (str): The account number associated with the holdings.
-
-    Raises:
-        Exception: If the channel cannot be found or an error occurs while sending the message.
-    """
-    try:
-        # Fetch the target channel
-        channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)
-
-        if channel:
-            # Build the embed message
-            embed = Embed(
-                title=f"Alert! {alert_type}",
-                description="A negative holdings quantity was detected.",
-                color=0xFF0000,
-            )
-            embed.add_field(name="Stock", value=stock, inline=True)
-            embed.add_field(name="Quantity", value=quantity, inline=True)
-            embed.add_field(name="Broker Name", value=broker_name, inline=True)
-            embed.add_field(name="Broker Number", value=broker_number, inline=True)
-            embed.add_field(name="Account Number", value=account_number, inline=True)
-
-            # Send the message
-            await channel.send(embed=embed)
-            logger.info(f"Negative holdings alert sent for stock {stock}.")
-        else:
-            logger.error(
-                f"Target channel with ID {DISCORD_SECONDARY_CHANNEL} not found."
-            )
-
-    except Exception as e:
-        logger.error(f"Error sending negative holdings alert: {e}")
+@bot.command(name="all", help="Daily reminder with holdings refresh.")
+async def show_reminder(ctx):
+    """Shows a daily reminder message."""
+    await ctx.send("Clearing the current holdings for refresh.")
+    await clear_holdings(ctx)
+    await send_reminder_message_embed(ctx)
 
 
 @bot.command(
