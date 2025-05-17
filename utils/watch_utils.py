@@ -9,8 +9,13 @@ from datetime import datetime, timedelta
 import discord
 import pandas as pd
 
-from utils.config_utils import (DISCORD_SECONDARY_CHANNEL, SELL_FILE,
-                                WATCH_FILE, load_account_mappings, load_config)
+from utils.config_utils import (
+    DISCORD_SECONDARY_CHANNEL,
+    SELL_FILE,
+    WATCH_FILE,
+    load_account_mappings,
+    load_config,
+)
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import get_last_stock_price, send_large_message_chunks
 from utils.sql_utils import update_historical_holdings
@@ -18,6 +23,7 @@ from utils.sql_utils import update_historical_holdings
 # Load configuration and paths from settings
 config = load_config()
 account_mapping = load_account_mappings
+
 
 # WatchList Manager
 class WatchListManager:
@@ -73,8 +79,12 @@ class WatchListManager:
         else:
             logging.info("No sell list file found, starting fresh.")
 
-    
-    def add_to_sell_list(ticker: str, broker: str = "all", quantity: float = 1.0, scheduled_time: str = None):
+    def add_to_sell_list(
+        ticker: str,
+        broker: str = "all",
+        quantity: float = 1.0,
+        scheduled_time: str = None,
+    ):
         """Adds a ticker to the sell list if not already present."""
         from datetime import datetime
 
@@ -96,7 +106,6 @@ class WatchListManager:
         save_sell_list()
         logger.info(f"Added {ticker} to sell list.")
         return True
-
 
     def remove_from_sell_list(self, ticker):
         """Remove a ticker from the sell list."""
@@ -134,7 +143,9 @@ class WatchListManager:
         """Get the current watch list."""
         return self.watch_list
 
-    async def watch_ticker(self, ctx, ticker: str, split_date: str, split_ratio: str = None):
+    async def watch_ticker(
+        self, ctx, ticker: str, split_date: str, split_ratio: str = None
+    ):
         """Add a stock ticker with a split date and optional split ratio to the watch list."""
         ticker = ticker.upper()
 
@@ -142,8 +153,12 @@ class WatchListManager:
             self.add_ticker(ticker, split_date, split_ratio or "N/A")
             try:
                 # Update Excel log for the new ticker
-                await add_stock_to_excel_log(ctx, ticker, split_date, split_ratio or "N/A")
-                logging.info(f"{ticker} with Split Ratio {split_ratio or 'N/A'} on {split_date} saved to watchlist & Excel log.")
+                await add_stock_to_excel_log(
+                    ctx, ticker, split_date, split_ratio or "N/A"
+                )
+                logging.info(
+                    f"{ticker} with Split Ratio {split_ratio or 'N/A'} on {split_date} saved to watchlist & Excel log."
+                )
             except Exception as e:
                 await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")
                 logging.error(f"Error adding stock {ticker} to Excel: {str(e)}")
@@ -192,7 +207,9 @@ class WatchListManager:
             for ticker, data in watch_list.items():
                 split_date = data.get("split_date", "N/A")
                 last_price = get_last_stock_price(ticker)
-                last_price_display = f"{last_price:.2f}" if last_price is not None else "N/A"
+                last_price_display = (
+                    f"{last_price:.2f}" if last_price is not None else "N/A"
+                )
                 embed.add_field(
                     name=f"{ticker} **|** ${last_price_display}",
                     value=f" **|** Split Date: {split_date} \n",
@@ -212,8 +229,10 @@ class WatchListManager:
             await ctx.send(f"{ticker} is not being watched.")
             logging.info(f"{ticker} was not being watched.")
 
+
 # Initialize WatchList Manager
 watch_list_manager = WatchListManager(WATCH_FILE, SELL_FILE)
+
 
 # Main functions
 async def send_reminder_message_embed(ctx):
@@ -229,10 +248,10 @@ async def send_reminder_message_embed(ctx):
 
     logging.info(f"Reminder message called for {datetime.now()}")
     update_historical_holdings()
-  
+
     await ctx.send("!rsa holdings all")
     logging.info("Sent holdings refresh command as part of reminder task.")
-    
+
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
 
@@ -259,7 +278,7 @@ async def send_reminder_message_embed(ctx):
             inline=False,
         )
 
-    embed.set_footer(text="Repeat this message with '..reminder'")
+    embed.set_footer(text="Repeat this message with '..all'")
 
     # Send the embed message to the context
     await ctx.send(embed=embed)
@@ -353,7 +372,9 @@ async def send_reminder_message(bot):
     embed.set_footer(text="Automated message will repeat.")
 
     # Send the embed message to the specified channel
-    channel = bot.get_channel(DISCORD_SECONDARY_CHANNEL)  # Replace with correct channel ID
+    channel = bot.get_channel(
+        DISCORD_SECONDARY_CHANNEL
+    )  # Replace with correct channel ID
     if channel:
         await channel.send(embed=embed)
     else:
