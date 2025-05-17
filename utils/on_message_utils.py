@@ -12,11 +12,12 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.order_exec import schedule_and_execute
-from utils.config_utils import DISCORD_SUMMARY_CHANNEL
+
 from discord import Embed
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
+
 
 def set_channels(primary_id, secondary_id):
     """Sets primary and secondary channel IDs for use in on_message handling."""
@@ -52,9 +53,6 @@ async def handle_primary_channel(bot, message):
 
 
 async def handle_secondary_channel(bot, message):
-
-    if message.author.bot:
-        return  # Skip messages sent by the bot itself
     logger.info(f"Received message on secondary channel: {message.content}")
 
     result = alert_channel_message(message.content)
@@ -86,32 +84,13 @@ async def handle_secondary_channel(bot, message):
             logger.info(
                 f"✅ Round-up confirmed for {alert_ticker}. Scheduling autobuy..."
             )
-            await attempt_autobuy(bot, message.channel, alert_ticker, quantity=1)
+            channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+            if channel:
+                await attempt_autobuy(bot, channel, alert_ticker, quantity=1)
         else:
             logger.info(
                 f"⛔ No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
             )
-
-        # --------------- 🔁 Holdings-Based Watchlist Auto-Add ----------------
-        from utils.csv_utils import is_ticker_currently_held, was_ticker_held_recently
-        from utils import watch_list_manager
-
-        if not watch_list_manager.is_ticker_watched(alert_ticker):
-            currently_held = is_ticker_currently_held(alert_ticker)
-            recently_held = was_ticker_held_recently(alert_ticker, days=5)
-
-            if currently_held or recently_held:
-                watch_list_manager.add_watch(alert_ticker)
-                logger.info(
-                    f"Ticker {alert_ticker} was {'currently held' if currently_held else 'recently held'}; auto-added to watchlist."
-                )
-            else:
-                logger.info(
-                    f"Ticker {alert_ticker} is not in watchlist or holdings. Skipping watchlist addition."
-                )
-        else:
-            logger.info(f"Ticker {alert_ticker} already in watchlist. No action taken.")
-        # ---------------------------------------------------------------------
 
     except Exception as e:
         logger.error(f"Exception during policy analysis for {alert_ticker}: {e}")
@@ -146,13 +125,7 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         broker="all",
         execution_time=execution_time,
     )
-    
-    summary_channel = bot.get_channel(DISCORD_SUMMARY_CHANNEL)
-    if summary_channel:
-        logger.info(f"Sending summary to Summary Channel {DISCORD_SUMMARY_CHANNEL}")
-        await summary_channel.send(
-            f"Scheduled BUY for {ticker} at {execution_time.strftime('%Y-%m-%d %H:%M:%S')} (autobuy confirmed)."
-    )
+
     confirmation = f"✅ Autobuy for `{ticker}` scheduled at {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
     logger.info(confirmation)
     await channel.send(confirmation)
@@ -173,16 +146,15 @@ def build_policy_summary(ticker, policy_info, fallback_url):
 
     return summary
 
-async def post_policy_summary(bot, ticker, summary):
-    """Posts the policy summary to the summary channel."""
 
-    channel = bot.get_channel(DISCORD_SUMMARY_CHANNEL)
+async def post_policy_summary(bot, ticker, summary):
+    """Posts the policy summary to the primary channel."""
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await channel.send(summary)
-        logger.info(f"Policy summary posted to summary channel for {ticker}.")
+        logger.info(f"Policy summary posted successfully for {ticker}.")
     else:
-        logger.error("Summary channel not found to post summary.")
-
+        logger.error("Primary channel not found to post summary.")
 
 
 # -------------------------
