@@ -620,7 +620,9 @@ async def show_reminder(ctx):
     """Shows a daily reminder message."""
     await ctx.send("Clearing the current holdings for refresh.")
     await clear_holdings(ctx)
-    await send_reminder_message_embed(ctx)
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    if channel:
+        await send_reminder_message_embed(channel)
 
 
 @bot.command(
