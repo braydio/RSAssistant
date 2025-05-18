@@ -1,10 +1,12 @@
 # utils/on_message_utils.py
 
 import re
+import requests
+from bs4 import BeautifulSoup
+from utils.sec_policy_fetcher import SECPolicyFetcher
+
 import asyncio
 from datetime import datetime, timedelta
-import requests
-
 from utils.logging_setup import logger
 from utils.parsing_utils import (
     alert_channel_message,
@@ -142,7 +144,12 @@ def build_policy_summary(ticker, policy_info, fallback_url):
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
     policy_text = policy_info.get("sec_policy") or policy_info.get("policy")
+    context_snippet = policy_info.get("sec_context")
+
     summary += f"🧾 **Fractional Share Policy:** {policy_text}"
+
+    if context_snippet:
+        summary += f"\n\n📄 **Context Snippet:**\n> {context_snippet.strip()}"
 
     return summary
 
@@ -160,13 +167,6 @@ async def post_policy_summary(bot, ticker, summary):
 # -------------------------
 # OnMessagePolicyResolver
 # -------------------------
-
-
-import re
-import requests
-from bs4 import BeautifulSoup
-from utils.logging_setup import logger
-from utils.sec_policy_fetcher import SECPolicyFetcher
 
 
 class OnMessagePolicyResolver:
@@ -287,10 +287,14 @@ class OnMessagePolicyResolver:
             logger.info(f"Analyzing SEC filing at {sec_url}")
             filing_text = cls.fetch_sec_filing_text(sec_url)
             if filing_text:
-                sec_policy = cls.analyze_fractional_share_policy(filing_text)
+                result = cls.analyze_fractional_share_policy(filing_text)
+                sec_policy = result["summary"]
+                sec_context = result["context"]
+
                 return {
                     "sec_policy": sec_policy,
                     "sec_url": sec_url,
+                    "sec_context": sec_context,
                 }
             else:
                 return {
@@ -306,6 +310,10 @@ class OnMessagePolicyResolver:
 
     @staticmethod
     def get_sec_link_from_nasdaq(nasdaq_url, ticker=None):
+        """
+        Parses a NASDAQ alert page and extracts a valid SEC Filing URL.
+        Now also supports QuoteMedia-based SEC filings.
+        """
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
@@ -313,32 +321,27 @@ class OnMessagePolicyResolver:
             response = requests.get(nasdaq_url, headers=headers, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
-            links = [
-                link["href"]
-                for link in soup.find_all("a", href=True)
-                if "sec.gov" in link["href"]
-            ]
 
-            if not links:
-                logger.warning("No SEC Filing links found on NASDAQ page.")
-                return None
+            links = soup.find_all("a", href=True)
+            sec_links = []
 
-            # Filter SEC links
-            filtered_links = []
             for link in links:
-                if "/rules/sro/" in link:
-                    logger.info(f"Skipping rules/sro link: {link}")
-                    continue
-                if ticker and ticker.lower() in link.lower():
-                    filtered_links.append(link)
-                elif re.search(r"/20\d{2}/", link):
-                    filtered_links.append(link)
+                href = link["href"]
+                # Handle SEC.gov and QuoteMedia-based filings
+                if "sec.gov" in href or "quotemedia.com/data/downloadFiling" in href:
+                    if "/rules/sro/" in href:
+                        logger.info(f"Skipping rules/sro link: {href}")
+                        continue
+                    if ticker and ticker.lower() in href.lower():
+                        sec_links.append(href)
+                    elif re.search(r"/20\d{2}/", href) or "formType=" in href:
+                        sec_links.append(href)
 
-            if filtered_links:
-                logger.info(f"SEC Filing link selected: {filtered_links[0]}")
-                return filtered_links[0]
+            if sec_links:
+                logger.info(f"SEC Filing link selected: {sec_links[0]}")
+                return sec_links[0]
 
-            logger.warning("No valid SEC Filing link after filtering.")
+            logger.warning("No valid SEC or QuoteMedia filing link after filtering.")
             return None
 
         except Exception as e:
@@ -386,27 +389,60 @@ class OnMessagePolicyResolver:
             return None
 
     @staticmethod
-    def analyze_fractional_share_policy(text):
+    def analyze_fractional_share_policy(text, window=300):
+        """
+        Detects fractional share policy and returns a summary + contextual snippet.
+        """
         if not text:
-            return "No text content available."
+            return {"summary": "No text content available.", "context": None}
 
         text_lower = text.lower()
 
+        # Known policy patterns
         if "fractional share" not in text_lower:
-            return "No mention of fractional shares."
+            return {"summary": "No mention of fractional shares.", "context": None}
 
-        if "cash in lieu" in text_lower or "paid in cash" in text_lower:
-            return "Fractional shares will be paid out in cash."
+        # Pick target phrases to extract context around
+        match_phrases = [
+            "no fractional shares will be issued",
+            "cash in lieu",
+            "rounded up",
+            "rounded down",
+            "entitled to receive an additional fraction",
+            "cash will not be paid",
+        ]
 
-        if "rounded up" in text_lower and not (
-            "cash" in text_lower or "cash in lieu" in text_lower
-        ):
-            return "Fractional shares will be rounded up to a full share."
+        # Scan for any match
+        for phrase in match_phrases:
+            idx = text_lower.find(phrase)
+            if idx != -1:
+                start = max(0, idx - window // 2)
+                end = min(len(text), idx + window // 2)
+                snippet = text[start:end].strip().replace("\n", " ")
 
-        if "rounded down" in text_lower:
-            return "Fractional shares will be rounded down (likely forfeited)."
+                # Classify
+                if "cash in lieu" in phrase or "paid in cash" in phrase:
+                    summary = "Fractional shares will be paid out in cash."
+                elif (
+                    "rounded up" in phrase
+                    or "entitled to receive an additional fraction" in phrase
+                ):
+                    summary = "Fractional shares will be rounded up to a full share."
+                elif "rounded down" in phrase:
+                    summary = (
+                        "Fractional shares will be rounded down (likely forfeited)."
+                    )
+                elif "no fractional shares" in phrase:
+                    summary = "Fractional shares will not be issued."
+                else:
+                    summary = "Fractional share policy mentioned, but unclear details."
 
-        return "Fractional share handling mentioned, but unclear policy."
+                return {"summary": summary, "context": snippet}
+
+        return {
+            "summary": "Fractional share handling mentioned, but unclear policy.",
+            "context": None,
+        }
 
     @staticmethod
     def detect_policy_from_text(text, keywords):
