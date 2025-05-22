@@ -10,6 +10,7 @@ import discord
 import pandas as pd
 
 from utils.config_utils import (
+    DISCORD_PRIMARY_CHANNEL,
     DISCORD_SECONDARY_CHANNEL,
     SELL_FILE,
     WATCH_FILE,
@@ -19,6 +20,7 @@ from utils.config_utils import (
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import get_last_stock_price, send_large_message_chunks
 from utils.sql_utils import update_historical_holdings
+from utils.logging_setup import logger
 
 # Load configuration and paths from settings
 config = load_config()
@@ -239,7 +241,6 @@ async def send_reminder_message_embed(ctx):
     """Sends a reminder message with upcoming split dates in an embed."""
     # Create the embed message
     logging.info(f"Sending reminder message at {datetime.now()}")
-    update_historical_holdings()
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
@@ -249,7 +250,20 @@ async def send_reminder_message_embed(ctx):
     logging.info(f"Reminder message called for {datetime.now()}")
     update_historical_holdings()
 
-    await ctx.send("!rsa holdings all")
+    primary_channel = DISCORD_PRIMARY_CHANNEL
+    if primary_channel:
+        logging.debug(f"Showing message context: {ctx}")
+        await ctx.send("!rsa holdings all")
+        # Debug log detailed attributes of the Discord context object
+        logging.debug("Detailed ctx attributes:")
+        for attribute in dir(ctx):
+            try:
+                value = getattr(ctx, attribute)
+            except Exception as e:
+                value = f"Error retrieving attribute: {e}"
+            logging.debug(f"{attribute}: {value}")
+    else:
+        logging.error("Channel not found.")
     logging.info("Sent holdings refresh command as part of reminder task.")
 
     # Get the watch list from the manager

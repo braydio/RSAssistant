@@ -60,12 +60,8 @@ async def handle_secondary_channel(bot, message):
     result = alert_channel_message(message.content)
     logger.info(f"Alert parser result: {result}")
 
-    if (
-        not result
-        or not isinstance(result, dict)
-        or not result.get("reverse_split_confirmed")
-    ):
-        logger.warning("Message does not confirm reverse split or result malformed.")
+    if not result or not result.get("reverse_split_confirmed"):
+        logger.warning("Message does not confirm reverse split.")
         return
 
     alert_ticker = result.get("ticker")
@@ -87,8 +83,16 @@ async def handle_secondary_channel(bot, message):
         await post_policy_summary(bot, alert_ticker, summary)
 
         if policy_info.get("round_up_confirmed"):
-            logger.info(f"Round-up confirmed for {alert_ticker}. Scheduling autobuy...")
-            await attempt_autobuy(bot, message.channel, alert_ticker, quantity=1)
+            logger.info(
+                f"✅ Round-up confirmed for {alert_ticker}. Scheduling autobuy..."
+            )
+            channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+            if channel:
+                await attempt_autobuy(bot, channel, alert_ticker, quantity=1)
+        else:
+            logger.info(
+                f"⛔ No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
+            )
 
     except Exception as e:
         logger.error(f"Exception during policy analysis for {alert_ticker}: {e}")
@@ -400,15 +404,18 @@ class OnMessagePolicyResolver:
 
         # Pick target phrases to extract context around
         match_phrases = [
+            "round up",
+            "rounding up",
+            "rounded up",
+            "entitled to receive an additional fraction",
+            "round down",
+            "rounded down",
+            "rounding down",
             "no fractional shares will be issued",
             "cash in lieu",
-            "rounded up",
-            "rounded down",
-            "entitled to receive an additional fraction",
             "cash will not be paid",
         ]
 
-        # Scan for any match
         for phrase in match_phrases:
             idx = text_lower.find(phrase)
             if idx != -1:
@@ -416,19 +423,20 @@ class OnMessagePolicyResolver:
                 end = min(len(text), idx + window // 2)
                 snippet = text[start:end].strip().replace("\n", " ")
 
-                # Classify
-                if "cash in lieu" in phrase or "paid in cash" in phrase:
+                # Classify based on phrase
+                if "cash in lieu" in phrase or "cash will not be paid" in phrase:
                     summary = "Fractional shares will be paid out in cash."
                 elif (
-                    "rounded up" in phrase
-                    or "entitled to receive an additional fraction" in phrase
+                    "round up" in phrase
+                    or "rounded up" in phrase
+                    or "entitled to receive" in phrase
                 ):
                     summary = "Fractional shares will be rounded up to a full share."
-                elif "rounded down" in phrase:
+                elif "round down" in phrase or "rounded down" in phrase:
                     summary = (
                         "Fractional shares will be rounded down (likely forfeited)."
                     )
-                elif "no fractional shares" in phrase:
+                elif "no fractional" in phrase:
                     summary = "Fractional shares will not be issued."
                 else:
                     summary = "Fractional share policy mentioned, but unclear details."

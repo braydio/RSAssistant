@@ -846,36 +846,35 @@ async def send_negative_holdings(
         )
 
 
-def alert_channel_message(content):
-    """Extracts ticker, URL, and confirms if a reverse split alert is present."""
+def alert_channel_message(message: str):
+    """
+    Parses secondary channel messages to detect reverse split announcements and extract key info.
+    """
+    url_match = re.search(r"(https?://\S+)", message)
+    url = url_match.group(1) if url_match else None
 
-    # Regex pattern to extract the URL
-    url_pattern = r"http[s]?://[^\s]+"
-    url_match = re.search(url_pattern, content)
-    url = url_match.group(0) if url_match else None
+    reverse_split_confirmed = any(
+        kw in message.lower()
+        for kw in [
+            "reverse stock split",
+            "1-for-",  # e.g., "1-for-15"
+            "effective date of reverse stock split",
+            "authority to implement a reverse stock split",
+        ]
+    )
 
-    if url:
-        logging.info(f"URL detected in alert message: {url}")
-
-    # Regex pattern to extract the ticker inside parentheses
-    ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
-    ticker_match = re.search(ticker_pattern, content)
+    # Primary ticker pattern: (NASDAQ: TICKER)
+    ticker_match = re.search(r"\((?:NASDAQ|OTC):\s*([A-Z]+)\)", message)
     ticker = ticker_match.group(1) if ticker_match else None
 
-    if ticker:
-        logging.info(f"Ticker detected in alert message: {ticker}")
+    # Secondary fallback: Try inline all-caps ticker (1-6 chars)
+    if not ticker:
+        inline_match = re.search(r"\b([A-Z]{2,6})\b", message)
+        if inline_match:
+            ticker = inline_match.group(1)
 
-    # Case-insensitive check if "Reverse Stock Split" appears anywhere in the message
-    reverse_split_confirm = (
-        re.search(r"reverse stock split", content, re.IGNORECASE) is not None
-    )
-    logging.info(
-        f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}"
-    )
-
-    # Return the parsed information
     return {
         "ticker": ticker,
         "url": url,
-        "reverse_split_confirmed": reverse_split_confirm,
+        "reverse_split_confirmed": reverse_split_confirmed,
     }

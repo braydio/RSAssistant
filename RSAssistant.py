@@ -171,31 +171,26 @@ async def process_sell_list(bot):
         now = datetime.now()
         sell_list = watch_list_manager.sell_list
 
-        # Iterate over sell list items
-        for ticker, details in list(
-            sell_list.items()
-        ):  # Use list() to safely modify during iteration
+        for ticker, details in list(sell_list.items()):
             scheduled_time = datetime.strptime(
                 details["scheduled_time"], "%Y-%m-%d %H:%M:%S"
             )
 
-            if now >= scheduled_time:  # Check if the order's time has come
-                # Construct the sell command
+            if now >= scheduled_time:
                 command = f"!rsa sell {details['quantity']} {ticker} {details['broker']} false"
-
-                # Send the sell command
                 channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
                 if channel:
                     await channel.send(command)
                     logger.info(
                         f"Executed sell order for {ticker} via {details['broker']}"
                     )
-
-                # Remove the executed order from the sell list
+                else:
+                    logger.warning(
+                        f"Primary channel not found when sending sell command for {ticker}."
+                    )
                 del sell_list[ticker]
                 watch_list_manager.save_sell_list()
                 logger.info(f"Removed {ticker} from sell list after execution.")
-
     except Exception as e:
         logger.error(f"Error processing sell list: {e}")
 
@@ -405,26 +400,26 @@ async def add_to_sell(ctx, ticker: str):
     await ctx.send(f"Added {ticker} to the sell list.")
 
 
-@bot.command(
-    name="nosell",
-    help="Remove a ticker from the sell list. Usage: `..removesell <ticker>`",
-)
+@bot.command(name="nosell", help="Remove a ticker from the sell list.")
 async def remove_sell(ctx, ticker: str):
-    """Remove a ticker from the sell list."""
     ticker = ticker.upper()
     if watch_list_manager.remove_from_sell_list(ticker):
+        logger.info(f"{ticker} removed from sell list by user.")
         await ctx.send(f"Removed {ticker} from the sell list.")
     else:
+        logger.info(
+            f"Attempted to remove {ticker} from sell list but it was not present."
+        )
         await ctx.send(f"{ticker} was not in the sell list.")
 
 
 @bot.command(name="selling", help="View the current sell list.")
 async def view_sell_list(ctx):
-    """Display the current sell list."""
     sell_list = watch_list_manager.get_sell_list()
     if not sell_list:
         await ctx.send("The sell list is empty.")
     else:
+        logger.info("User requested view of sell list.")
         embed = discord.Embed(
             title="Sell List",
             description="Tickers flagged for selling:",
