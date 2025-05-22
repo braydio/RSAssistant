@@ -844,37 +844,3 @@ async def send_negative_holdings(
         logging.error(
             f"Error sending Discord alert for stock {stock}, account {account_number}: {e}"
         )
-
-
-def alert_channel_message(message: str):
-    """
-    Parses secondary channel messages to detect reverse split announcements and extract key info.
-    """
-    url_match = re.search(r"(https?://\S+)", message)
-    url = url_match.group(1) if url_match else None
-
-    reverse_split_confirmed = any(
-        kw in message.lower()
-        for kw in [
-            "reverse stock split",
-            "1-for-",  # e.g., "1-for-15"
-            "effective date of reverse stock split",
-            "authority to implement a reverse stock split",
-        ]
-    )
-
-    # Primary ticker pattern: (NASDAQ: TICKER)
-    ticker_match = re.search(r"\((?:NASDAQ|OTC):\s*([A-Z]+)\)", message)
-    ticker = ticker_match.group(1) if ticker_match else None
-
-    # Secondary fallback: Try inline all-caps ticker (1-6 chars)
-    if not ticker:
-        inline_match = re.search(r"\b([A-Z]{2,6})\b", message)
-        if inline_match:
-            ticker = inline_match.group(1)
-
-    return {
-        "ticker": ticker,
-        "url": url,
-        "reverse_split_confirmed": reverse_split_confirmed,
-    }
