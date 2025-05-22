@@ -41,9 +41,7 @@ async def handle_on_message(bot, message):
 
 
 def alert_channel_message(message: str):
-    """
-    Parses secondary channel messages to detect reverse split announcements and extract key info.
-    """
+    """Parses secondary channel messages to detect reverse split announcements and extract key info."""
     url_match = re.search(r"(https?://\S+)", message)
     url = url_match.group(1) if url_match else None
 
@@ -51,21 +49,21 @@ def alert_channel_message(message: str):
         kw in message.lower()
         for kw in [
             "reverse stock split",
-            "1-for-",  # e.g., "1-for-15"
+            "1-for-",
             "effective date of reverse stock split",
             "authority to implement a reverse stock split",
         ]
     )
 
-    # Primary ticker pattern: (NASDAQ: TICKER)
     ticker_match = re.search(r"\((?:NASDAQ|OTC):\s*([A-Z]+)\)", message)
     ticker = ticker_match.group(1) if ticker_match else None
 
-    # Secondary fallback: Try inline all-caps ticker (1-6 chars)
     if not ticker:
         inline_match = re.search(r"\b([A-Z]{2,6})\b", message)
         if inline_match:
-            ticker = inline_match.group(1)
+            candidate = inline_match.group(1)
+            if candidate not in {"NASDAQ", "OTC", "CEO", "FDA"}:  # add more false positives
+                ticker = candidate
 
     return {
         "ticker": ticker,
@@ -76,9 +74,10 @@ def alert_channel_message(message: str):
 
 async def handle_primary_channel(bot, message):
     """Handles messages in the primary channel."""
-    if message.content.lower().startswith("manual"):
-        logger.warning(f"Manual order detected: {message.content}")
-        # manual_order(message.content)  # Future expansion
+    content = message.content.lower()
+    if content.startswith(".."):
+        logger.info(f"Starting command flow for message: {message.content}")
+        await bot.process_commands(message)
     elif message.embeds:
         logger.info("Embed message detected.")
         parse_embed_message(message.embeds[0])
@@ -93,26 +92,21 @@ async def handle_secondary_channel(bot, message):
     result = alert_channel_message(message.content)
     logger.info(f"Alert parser result: {result}")
 
-    if (
-        not result
-        or not isinstance(result, dict)
-        or not result.get("reverse_split_confirmed")
-    ):
+    if not result.get("reverse_split_confirmed"):
         logger.warning("Message does not confirm reverse split or result malformed.")
         return
 
     alert_ticker = result.get("ticker")
     alert_url = result.get("url")
 
-    if not alert_url or not alert_ticker:
+    if not alert_ticker or not alert_url:
         logger.error("Missing ticker or URL in parsed alert.")
         return
 
     try:
         logger.info(f"Calling OnMessagePolicyResolver.full_analysis for {alert_url}")
-        policy_info = OnMessagePolicyResolver.full_analysis(alert_url)
-
-        if not policy_info:
+        policy_info = await asyncio.to_thread(OnMessagePolicyResolver.full_analysis(alert_url))
+    if not policy_info:
             logger.warning(f"No data returned for {alert_ticker}.")
             return
 
@@ -128,22 +122,22 @@ async def handle_secondary_channel(bot, message):
 
 
 async def attempt_autobuy(bot, channel, ticker, quantity=1):
-    """attempts autobuy immediately or schedules at next market open."""
+    """Attempts autobuy immediately or schedules at next market open."""
     now = datetime.now()
     market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = now.replace(hour=16, minute=0, microsecond=0)
+    market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
 
     if now.weekday() >= 5:
-        logger.warning("weekend detected. scheduling for next monday 9:30am.")
+        logger.warning("Weekend detected. Scheduling for next Monday 9:30am.")
         days_until_monday = (7 - now.weekday()) % 7 or 7
         execution_time = (now + timedelta(days=days_until_monday)).replace(
             hour=9, minute=30, second=0, microsecond=0
         )
     elif market_open <= now <= market_close:
-        logger.info("market open now. executing immediate autobuy.")
+        logger.info("Market open now. Executing immediate autobuy.")
         execution_time = now
     else:
-        logger.info("market closed. scheduling for next market open.")
+        logger.info("Market closed. Scheduling for next market open.")
         execution_time = (now + timedelta(days=1)).replace(
             hour=9, minute=30, second=0, microsecond=0
         )
@@ -157,13 +151,10 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         execution_time=execution_time,
     )
 
-    confirmation = f"✅ autobuy for `{ticker}` scheduled at {execution_time.strftime('%y-%m-%d %h:%m:%s')}."
+    confirmation = f"✅ autobuy for `{ticker}` scheduled at {execution_time.strftime('%y-%m-%d %H:%M:%S')}."
     logger.info(confirmation)
     await channel.send(confirmation)
 
-
-def build_policy_summary(ticker, policy_info, fallback_url):
-    """builds the policy summary message for discord posting."""
     summary = f"**reverse split alert** for `{ticker}`\n"
     summary += f"[nasdaq notice]({policy_info.get('nasdaq_url', fallback_url)})\n"
 
@@ -185,7 +176,7 @@ def build_policy_summary(ticker, policy_info, fallback_url):
 
 async def post_policy_summary(bot, ticker, summary):
     """posts the policy summary to the primary channel."""
-    channel = bot.get_channel(discord_primary_channel)
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await channel.send(summary)
         logger.info(f"policy summary posted successfully for {ticker}.")
@@ -194,11 +185,11 @@ async def post_policy_summary(bot, ticker, summary):
 
 
 # -------------------------
-# onmessagepolicyresolver
+# OnMessagePolicyResolver
 # -------------------------
 
 
-class onmessagepolicyresolver:
+class OnMessagePolicyResolver:
     nasdaq_keywords = [
         "cash in lieu",
         "no fractional shares",
@@ -214,7 +205,7 @@ class onmessagepolicyresolver:
         "paid in cash",
     ]
 
-    sec_fetcher = secpolicyfetcher()
+    sec_fetcher = SECPolicyFetcher()
 
     @classmethod
     def full_analysis(cls, nasdaq_url):
@@ -225,7 +216,7 @@ class onmessagepolicyresolver:
 
             if not nasdaq_result:
                 logger.warning("nasdaq notice analysis failed or returned no result.")
-                return none
+                return None
 
             if nasdaq_result.get("sec_url"):
                 sec_result = cls.analyze_sec_filing(nasdaq_result["sec_url"])
@@ -274,19 +265,19 @@ class onmessagepolicyresolver:
             logger.info(f"completed full_analysis for: {nasdaq_url}")
             return nasdaq_result
 
-        except exception as e:
+        except Exception as e:
             logger.error(f"critical failure during full_analysis: {e}")
-            return none
+            return None
 
     @staticmethod
     def extract_ticker_from_url(url):
         match = re.search(r"\((.*?)\)", url)
         if match:
             return match.group(1)
-        return none
+        return None
 
     @classmethod
-    def analyze_nasdaq_notice(cls, nasdaq_url, ticker=none):
+    def analyze_nasdaq_notice(cls, nasdaq_url, ticker=None):
         try:
             logger.info(f"analyzing nasdaq notice at {nasdaq_url}")
             headers = {
@@ -306,9 +297,9 @@ class onmessagepolicyresolver:
                 "sec_url": sec_url,
                 "press_url": press_url,
             }
-        except exception as e:
+        except Exception as e:
             logger.error(f"error analyzing nasdaq notice: {e}")
-            return none
+            return None
 
     @classmethod
     def analyze_sec_filing(cls, sec_url):
@@ -330,7 +321,7 @@ class onmessagepolicyresolver:
                     "sec_policy": "unable to retrieve sec filing.",
                     "sec_url": sec_url,
                 }
-        except exception as e:
+        except Exception as e:
             logger.error(f"failed to retrieve or analyze sec filing: {e}")
             return {
                 "sec_policy": "unable to retrieve sec filing.",
@@ -338,7 +329,7 @@ class onmessagepolicyresolver:
             }
 
     @staticmethod
-    def get_sec_link_from_nasdaq(nasdaq_url, ticker=none):
+    def get_sec_link_from_nasdaq(nasdaq_url, ticker=None):
         """
         parses a nasdaq alert page and extracts a valid sec filing url.
         now also supports quotemedia-based sec filings.
@@ -351,7 +342,7 @@ class onmessagepolicyresolver:
             response.raise_for_status()
             soup = beautifulsoup(response.text, "html.parser")
 
-            links = soup.find_all("a", href=true)
+            links = soup.find_all("a", href=True)
             sec_links = []
 
             for link in links:
@@ -371,11 +362,11 @@ class onmessagepolicyresolver:
                 return sec_links[0]
 
             logger.warning("no valid sec or quotemedia filing link after filtering.")
-            return none
+            return None
 
-        except exception as e:
+        except Exception as e:
             logger.error(f"failed to retrieve sec link from nasdaq: {e}")
-            return none
+            return None
 
     @staticmethod
     def get_press_release_link_from_nasdaq(html_text):
@@ -390,10 +381,10 @@ class onmessagepolicyresolver:
                 return press_url
             else:
                 logger.warning("no press release link found on nasdaq page.")
-                return none
-        except exception as e:
+                return None
+        except Exception as e:
             logger.error(f"error extracting press release link: {e}")
-            return none
+            return None
 
     @staticmethod
     def fetch_sec_filing_text(url):
@@ -413,9 +404,9 @@ class onmessagepolicyresolver:
             text = " ".join(text.split())
             logger.info(f"fetched sec filing text ({len(text)} characters)")
             return text
-        except exception as e:
+        except Exception as e:
             logger.error(f"error fetching sec filing text: {e}")
-            return none
+            return None
 
     @staticmethod
     def analyze_fractional_share_policy(text, window=300):
@@ -423,13 +414,13 @@ class onmessagepolicyresolver:
         detects fractional share policy and returns a summary + contextual snippet.
         """
         if not text:
-            return {"summary": "no text content available.", "context": none}
+            return {"summary": "no text content available.", "context": None}
 
         text_lower = text.lower()
 
         # known policy patterns
         if "fractional share" not in text_lower:
-            return {"summary": "no mention of fractional shares.", "context": none}
+            return {"summary": "no mention of fractional shares.", "context": None}
 
         # pick target phrases to extract context around
         match_phrases = [
@@ -470,7 +461,7 @@ class onmessagepolicyresolver:
 
         return {
             "summary": "fractional share handling mentioned, but unclear policy.",
-            "context": none,
+            "context": None,
         }
 
     @staticmethod
@@ -485,7 +476,7 @@ class onmessagepolicyresolver:
     @staticmethod
     def is_round_up_policy(text):
         if not text:
-            return false
+            return False
 
         text = text.lower()
         return ("round up" in text or "rounded up" in text) and not any(

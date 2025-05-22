@@ -3,7 +3,7 @@ volumes/
 .venv/*
 *.env
 !example.env
-
+heartbeat.txt
 # config / settings
 *.yaml
 !example.settings.yaml

@@ -237,7 +237,7 @@ watch_list_manager = WatchListManager(WATCH_FILE, SELL_FILE)
 
 
 # Main functions
-async def send_reminder_message_embed(ctx):
+async def send_reminder_message_embed(channel):
     """Sends a reminder message with upcoming split dates in an embed."""
     # Create the embed message
     logging.info(f"Sending reminder message at {datetime.now()}")
@@ -253,7 +253,7 @@ async def send_reminder_message_embed(ctx):
     primary_channel = DISCORD_PRIMARY_CHANNEL
     if primary_channel:
         logging.debug(f"Showing message context: {ctx}")
-        await ctx.send("!rsa holdings all")
+        await channel.send("!rsa holdings all")
         # Debug log detailed attributes of the Discord context object
         logging.debug("Detailed ctx attributes:")
         for attribute in dir(ctx):
@@ -295,7 +295,7 @@ async def send_reminder_message_embed(ctx):
     embed.set_footer(text="Repeat this message with '..all'")
 
     # Send the embed message to the context
-    await ctx.send(embed=embed)
+    await channel.send(embed=embed)
 
 
 def get_seconds_until_next_reminder(target_hour, target_minute):

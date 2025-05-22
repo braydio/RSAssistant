@@ -1,9 +1,0 @@
-services:
-  app: RSAssistant-Dev
-    volumes:
-      - F:\Shared\DiscordScripts\RSAssistant:/app
-    environment:
-      - DEBUG=true
-    command: watchmedo auto-restart --recursive --pattern="*.py" --directory=/app --python
-    stdin_open: true
-    tty: true
