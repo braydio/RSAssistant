@@ -3,7 +3,6 @@
 import re
 import requests
 from bs4 import BeautifulSoup
-from utils.sec_policy_fetcher import SECPolicyFetcher
 
 import asyncio
 from datetime import datetime, timedelta
@@ -13,8 +12,7 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.order_exec import schedule_and_execute
-
-from discord import Embed
+from utils.sec_policy_fetcher import SECPolicyFetcher
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
@@ -32,6 +30,11 @@ def set_channels(primary_id, secondary_id):
 
 async def handle_on_message(bot, message):
     """Main on_message event handler."""
+    content = message.content.lower()
+    if content.startswith(".."):
+        await bot.process_commands(message)
+        return
+
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
         await handle_primary_channel(bot, message)
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
@@ -62,8 +65,25 @@ def alert_channel_message(message: str):
         inline_match = re.search(r"\b([A-Z]{2,6})\b", message)
         if inline_match:
             candidate = inline_match.group(1)
-            if candidate not in {"NASDAQ", "OTC", "CEO", "FDA"}:  # add more false positives
+            common_exclusions = {
+                "NASDAQ",
+                "OTC",
+                "CEO",
+                "FDA",
+                "USD",
+                "NEWS",
+                "NYSE",
+                "ETF",
+                "SEC",
+                "PR",
+                "IPO",
+                "CFO",
+                "INC",
+                "LLC",
+            }
+            if candidate not in common_exclusions:
                 ticker = candidate
+                logger.warning(f"Fallback ticker used: {candidate}")
 
     return {
         "ticker": ticker,
@@ -105,8 +125,10 @@ async def handle_secondary_channel(bot, message):
 
     try:
         logger.info(f"Calling OnMessagePolicyResolver.full_analysis for {alert_url}")
-        policy_info = await asyncio.to_thread(OnMessagePolicyResolver.full_analysis(alert_url))
-    if not policy_info:
+        policy_info = await asyncio.to_thread(
+            OnMessagePolicyResolver.full_analysis, alert_url
+        )
+        if not policy_info:
             logger.warning(f"No data returned for {alert_ticker}.")
             return
 
@@ -155,6 +177,9 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
     logger.info(confirmation)
     await channel.send(confirmation)
 
+
+def build_policy_summary(ticker, policy_info, fallback_url):
+    """Builds the policy summary message for Discord posting."""
     summary = f"**reverse split alert** for `{ticker}`\n"
     summary += f"[nasdaq notice]({policy_info.get('nasdaq_url', fallback_url)})\n"
 
@@ -175,13 +200,13 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
 
 
 async def post_policy_summary(bot, ticker, summary):
-    """posts the policy summary to the primary channel."""
+    """Posts the policy summary to the primary channel."""
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await channel.send(summary)
-        logger.info(f"policy summary posted successfully for {ticker}.")
+        logger.info(f"Policy summary posted successfully for {ticker}.")
     else:
-        logger.error("primary channel not found to post summary.")
+        logger.error("Primary channel not found to post summary.")
 
 
 # -------------------------
@@ -210,12 +235,12 @@ class OnMessagePolicyResolver:
     @classmethod
     def full_analysis(cls, nasdaq_url):
         try:
-            logger.info(f"starting full_analysis for: {nasdaq_url}")
+            logger.info(f"Starting full_analysis for: {nasdaq_url}")
             ticker = cls.extract_ticker_from_url(nasdaq_url)
             nasdaq_result = cls.analyze_nasdaq_notice(nasdaq_url, ticker=ticker)
 
             if not nasdaq_result:
-                logger.warning("nasdaq notice analysis failed or returned no result.")
+                logger.warning("Nasdaq notice analysis failed or returned no result.")
                 return None
 
             if nasdaq_result.get("sec_url"):
@@ -230,27 +255,21 @@ class OnMessagePolicyResolver:
                 press_url = nasdaq_result.get("press_url")
                 if press_url:
                     logger.info(
-                        f"attempting fallback analysis using press release at {press_url}"
+                        f"Attempting fallback analysis using press release at {press_url}"
                     )
                     press_text = cls.fetch_sec_filing_text(press_url)
                     if press_text:
                         press_policy = cls.analyze_fractional_share_policy(press_text)
-                        nasdaq_result["sec_policy"] = press_policy
-                        logger.info(f"press release analysis result: {press_policy}")
-
-                        # 🚨 immediately update round-up confirmed from pr
+                        nasdaq_result["sec_policy"] = press_policy["summary"]
                         nasdaq_result["round_up_confirmed"] = cls.is_round_up_policy(
-                            press_policy
+                            press_policy["summary"]
                         )
                         logger.info(
-                            f"round-up confirmed after press release analysis: {nasdaq_result['round_up_confirmed']}"
+                            f"Press release analysis result: {press_policy['summary']}"
                         )
                     else:
-                        logger.warning(
-                            "failed to fetch press release text for fallback policy analysis."
-                        )
+                        logger.warning("Failed to fetch press release text.")
 
-            # final fallback, if still no round_up_confirmed
             if "round_up_confirmed" not in nasdaq_result:
                 policy_text = nasdaq_result.get("sec_policy") or nasdaq_result.get(
                     "policy"
@@ -259,30 +278,26 @@ class OnMessagePolicyResolver:
                     policy_text
                 )
                 logger.info(
-                    f"final round-up detection result: {nasdaq_result['round_up_confirmed']}"
+                    f"Final round-up detection result: {nasdaq_result['round_up_confirmed']}"
                 )
 
-            logger.info(f"completed full_analysis for: {nasdaq_url}")
+            logger.info(f"Completed full_analysis for: {nasdaq_url}")
             return nasdaq_result
 
         except Exception as e:
-            logger.error(f"critical failure during full_analysis: {e}")
+            logger.error(f"Critical failure during full_analysis: {e}")
             return None
 
     @staticmethod
     def extract_ticker_from_url(url):
         match = re.search(r"\((.*?)\)", url)
-        if match:
-            return match.group(1)
-        return None
+        return match.group(1) if match else None
 
     @classmethod
     def analyze_nasdaq_notice(cls, nasdaq_url, ticker=None):
         try:
-            logger.info(f"analyzing nasdaq notice at {nasdaq_url}")
-            headers = {
-                "user-agent": "mozilla/5.0 (windows nt 10.0; win64; x64) applewebkit/537.36 (khtml, like gecko) chrome/112.0.0.0 safari/537.36"
-            }
+            logger.info(f"Analyzing Nasdaq notice at {nasdaq_url}")
+            headers = {"user-agent": "Mozilla/5.0"}
             response = requests.get(nasdaq_url, headers=headers, timeout=10)
             response.raise_for_status()
 
@@ -298,23 +313,20 @@ class OnMessagePolicyResolver:
                 "press_url": press_url,
             }
         except Exception as e:
-            logger.error(f"error analyzing nasdaq notice: {e}")
+            logger.error(f"Error analyzing Nasdaq notice: {e}")
             return None
 
     @classmethod
     def analyze_sec_filing(cls, sec_url):
         try:
-            logger.info(f"analyzing sec filing at {sec_url}")
+            logger.info(f"Analyzing SEC filing at {sec_url}")
             filing_text = cls.fetch_sec_filing_text(sec_url)
             if filing_text:
                 result = cls.analyze_fractional_share_policy(filing_text)
-                sec_policy = result["summary"]
-                sec_context = result["context"]
-
                 return {
-                    "sec_policy": sec_policy,
+                    "sec_policy": result["summary"],
                     "sec_url": sec_url,
-                    "sec_context": sec_context,
+                    "sec_context": result["context"],
                 }
             else:
                 return {
@@ -322,7 +334,7 @@ class OnMessagePolicyResolver:
                     "sec_url": sec_url,
                 }
         except Exception as e:
-            logger.error(f"failed to retrieve or analyze sec filing: {e}")
+            logger.error(f"Failed to retrieve or analyze SEC filing: {e}")
             return {
                 "sec_policy": "unable to retrieve sec filing.",
                 "sec_url": sec_url,
@@ -330,27 +342,20 @@ class OnMessagePolicyResolver:
 
     @staticmethod
     def get_sec_link_from_nasdaq(nasdaq_url, ticker=None):
-        """
-        parses a nasdaq alert page and extracts a valid sec filing url.
-        now also supports quotemedia-based sec filings.
-        """
         try:
-            headers = {
-                "user-agent": "mozilla/5.0 (windows nt 10.0; win64; x64) applewebkit/537.36 (khtml, like gecko) chrome/112.0.0.0 safari/537.36"
-            }
+            headers = {"user-agent": "Mozilla/5.0"}
             response = requests.get(nasdaq_url, headers=headers, timeout=10)
             response.raise_for_status()
-            soup = beautifulsoup(response.text, "html.parser")
+            soup = BeautifulSoup(response.text, "html.parser")
 
             links = soup.find_all("a", href=True)
             sec_links = []
 
             for link in links:
                 href = link["href"]
-                # handle sec.gov and quotemedia-based filings
                 if "sec.gov" in href or "quotemedia.com/data/downloadfiling" in href:
                     if "/rules/sro/" in href:
-                        logger.info(f"skipping rules/sro link: {href}")
+                        logger.info(f"Skipping rules/sro link: {href}")
                         continue
                     if ticker and ticker.lower() in href.lower():
                         sec_links.append(href)
@@ -358,71 +363,64 @@ class OnMessagePolicyResolver:
                         sec_links.append(href)
 
             if sec_links:
-                logger.info(f"sec filing link selected: {sec_links[0]}")
+                logger.info(f"SEC filing link selected: {sec_links[0]}")
                 return sec_links[0]
 
-            logger.warning("no valid sec or quotemedia filing link after filtering.")
+            logger.warning("No valid SEC or QuoteMedia filing link found.")
             return None
 
         except Exception as e:
-            logger.error(f"failed to retrieve sec link from nasdaq: {e}")
+            logger.error(f"Failed to retrieve SEC link from Nasdaq: {e}")
             return None
 
     @staticmethod
     def get_press_release_link_from_nasdaq(html_text):
         try:
-            soup = beautifulsoup(html_text, "html.parser")
+            soup = BeautifulSoup(html_text, "html.parser")
             link = soup.find("a", string="press release")
             if link and link.get("href"):
                 press_url = link["href"]
                 if press_url.startswith("/"):
                     press_url = "https://www.nasdaqtrader.com" + press_url
-                logger.info(f"press release link found: {press_url}")
+                logger.info(f"Press release link found: {press_url}")
                 return press_url
             else:
-                logger.warning("no press release link found on nasdaq page.")
+                logger.warning("No press release link found.")
                 return None
         except Exception as e:
-            logger.error(f"error extracting press release link: {e}")
+            logger.error(f"Error extracting press release link: {e}")
             return None
 
     @staticmethod
     def fetch_sec_filing_text(url):
         try:
-            headers = {
-                "user-agent": "mozilla/5.0 (windows nt 10.0; win64; x64) applewebkit/537.36 (khtml, like gecko) chrome/112.0.0.0 safari/537.36"
-            }
+            headers = {"user-agent": "Mozilla/5.0"}
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
 
             if "html" in response.headers.get("content-type", ""):
-                soup = beautifulsoup(response.text, "html.parser")
+                soup = BeautifulSoup(response.text, "html.parser")
                 text = soup.get_text(separator=" ")
             else:
                 text = response.text
 
             text = " ".join(text.split())
-            logger.info(f"fetched sec filing text ({len(text)} characters)")
+            logger.info(f"Fetched SEC filing text ({len(text)} characters)")
             return text
         except Exception as e:
-            logger.error(f"error fetching sec filing text: {e}")
+            logger.error(f"Error fetching SEC filing text: {e}")
             return None
 
     @staticmethod
     def analyze_fractional_share_policy(text, window=300):
-        """
-        detects fractional share policy and returns a summary + contextual snippet.
-        """
         if not text:
             return {"summary": "no text content available.", "context": None}
 
         text_lower = text.lower()
 
-        # known policy patterns
         if "fractional share" not in text_lower:
             return {"summary": "no mention of fractional shares.", "context": None}
 
-        # pick target phrases to extract context around
         match_phrases = [
             "no fractional shares will be issued",
             "cash in lieu",
@@ -432,7 +430,6 @@ class OnMessagePolicyResolver:
             "cash will not be paid",
         ]
 
-        # scan for any match
         for phrase in match_phrases:
             idx = text_lower.find(phrase)
             if idx != -1:
@@ -440,7 +437,6 @@ class OnMessagePolicyResolver:
                 end = min(len(text), idx + window // 2)
                 snippet = text[start:end].strip().replace("\n", " ")
 
-                # classify
                 if "cash in lieu" in phrase or "paid in cash" in phrase:
                     summary = "fractional shares will be paid out in cash."
                 elif (
@@ -468,9 +464,9 @@ class OnMessagePolicyResolver:
     def detect_policy_from_text(text, keywords):
         for keyword in keywords:
             if keyword in text:
-                logger.info(f"detected policy keyword: {keyword}")
+                logger.info(f"Detected policy keyword: {keyword}")
                 return keyword.capitalize()
-        logger.warning("no specific policy keywords detected.")
+        logger.warning("No specific policy keywords detected.")
         return "policy not clearly stated."
 
     @staticmethod
