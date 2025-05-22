@@ -239,52 +239,44 @@ watch_list_manager = WatchListManager(WATCH_FILE, SELL_FILE)
 # Main functions
 async def send_reminder_message_embed(channel):
     """Sends a reminder message with upcoming split dates in an embed."""
-    # Create the embed message
-    logging.info(f"Sending reminder message at {datetime.now()}")
+    logger.info(f"Sending reminder message at {datetime.now()}")
+
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
         color=discord.Color.blue(),
     )
 
-    logging.info(f"Reminder message called for {datetime.now()}")
+    logger.info("Refreshing historical holdings before sending reminder.")
     update_historical_holdings()
 
-    primary_channel = DISCORD_PRIMARY_CHANNEL
-    if primary_channel:
-        logging.debug(f"Showing message context: {ctx}")
+    if channel.id == DISCORD_PRIMARY_CHANNEL:
+        logger.info("Sending holdings refresh command to primary channel.")
         await channel.send("!rsa holdings all")
-        # Debug log detailed attributes of the Discord context object
-        logging.debug("Detailed ctx attributes:")
-        for attribute in dir(ctx):
-            try:
-                value = getattr(ctx, attribute)
-            except Exception as e:
-                value = f"Error retrieving attribute: {e}"
-            logging.debug(f"{attribute}: {value}")
     else:
-        logging.error("Channel not found.")
-    logging.info("Sent holdings refresh command as part of reminder task.")
+        logger.warning(f"Reminder triggered in unexpected channel: {channel.id}")
 
-    # Get the watch list from the manager
+    logger.info("Retrieving watchlist from manager...")
     watch_list = watch_list_manager.get_watch_list()
-
-    # Prepare a list to store tickers and their days left until the split
     sorted_tickers = []
 
-    # Add each ticker and its days left as a field in the embed
     for ticker, data in watch_list.items():
-        split_date_str = data["split_date"]
-        days_left = calculate_days_left(split_date_str)
+        split_date_str = data.get("split_date")
+        if not split_date_str:
+            logger.warning(f"Missing split_date for {ticker}")
+             continue
 
-        # Only include stocks with split dates within 21 days
+        try:
+            days_left = calculate_days_left(split_date_str)
+        except Exception as e:
+            logger.error(f"Error parsing split_date for {ticker}: {e}")
+            continue
+
         if days_left <= 21:
             sorted_tickers.append((days_left, ticker, split_date_str))
 
-    # Sort the list by days_left (first element of the tuple)
     sorted_tickers.sort(key=lambda x: x[0])
 
-    # Add the sorted tickers to the embed
     for days_left, ticker, split_date_str in sorted_tickers:
         embed.add_field(
             name=f"**| {ticker}** - Effective on {split_date_str}",
@@ -293,10 +285,9 @@ async def send_reminder_message_embed(channel):
         )
 
     embed.set_footer(text="Repeat this message with '..all'")
-
-    # Send the embed message to the context
     await channel.send(embed=embed)
-
+    logger.info(f"Reminder message sent to channel {channel.id}")
+t t t 
 
 def get_seconds_until_next_reminder(target_hour, target_minute):
     """Calculate the number of seconds until the next occurrence of a specific time (HH:MM)."""
