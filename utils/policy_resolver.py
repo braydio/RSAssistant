@@ -262,7 +262,6 @@ class SplitPolicyResolver:
         if "round up" in text and not any(
             bad_phrase in text
             for bad_phrase in [
-                "no fractional",
                 "sold",
                 "aggregated",
                 "not issued",
