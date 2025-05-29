@@ -2,7 +2,8 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 
-from utils.watch_utils import watch_list_manager
+from utils.watch_utils import WatchListManager
+
 
 # Task queue for handling messages
 task_queue = asyncio.Queue()
@@ -67,7 +68,7 @@ async def process_sell_list():
     while True:
         try:
             now = datetime.now()
-            for ticker, details in list(watch_list_manager.sell_list.items()):
+            for ticker, details in list(WatchListManager.sell_list.items()):
                 scheduled_time = datetime.strptime(
                     details["scheduled_time"], "%Y-%m-%d %H:%M:%S"
                 )
@@ -94,17 +95,6 @@ async def schedule_and_execute(
     execution_time: datetime,
 ):
     try:
-        # Add order to the sell list
-        watch_list_manager.add_to_sell_list(
-            ticker=ticker,
-            broker=broker,
-            quantity=quantity,
-            scheduled_time=execution_time.strftime("%Y-%m-%d %H:%M:%S"),
-        )
-
-
-
-        # Calculate delay until execution
         now = datetime.now()
         delay = (execution_time - now).total_seconds()
 
