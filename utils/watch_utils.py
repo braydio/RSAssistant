@@ -239,7 +239,9 @@ watch_list_manager = WatchListManager(WATCH_FILE, SELL_FILE)
 # Main functions
 async def send_reminder_message_embed(channel):
     """Sends a reminder message with upcoming split dates in an embed."""
-    logger.info(f"Sending reminder message at {datetime.now()}")
+    logger.info(
+        f"WatchListManager (ln. 242) sending reminder message at {datetime.now()}"
+    )
 
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
@@ -264,7 +266,7 @@ async def send_reminder_message_embed(channel):
         split_date_str = data.get("split_date")
         if not split_date_str:
             logger.warning(f"Missing split_date for {ticker}")
-             continue
+            continue
 
         try:
             days_left = calculate_days_left(split_date_str)
@@ -287,7 +289,7 @@ async def send_reminder_message_embed(channel):
     embed.set_footer(text="Repeat this message with '..all'")
     await channel.send(embed=embed)
     logger.info(f"Reminder message sent to channel {channel.id}")
-t t t 
+
 
 def get_seconds_until_next_reminder(target_hour, target_minute):
     """Calculate the number of seconds until the next occurrence of a specific time (HH:MM)."""
