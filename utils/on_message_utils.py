@@ -45,9 +45,12 @@ async def handle_on_message(bot, message):
 
 def alert_channel_message(message: str):
     """Parses secondary channel messages to detect reverse split announcements and extract key info."""
+
+    # Extract primary URL (first one in message)
     url_match = re.search(r"(https?://\S+)", message)
     url = url_match.group(1) if url_match else None
 
+    # Detect reverse split terms
     reverse_split_confirmed = any(
         kw in message.lower()
         for kw in [
@@ -58,32 +61,43 @@ def alert_channel_message(message: str):
         ]
     )
 
-    ticker_match = re.search(r"\((?:NASDAQ|OTC):\s*([A-Z]+)\)", message)
+    # Try to extract ticker in common formats: (NASDAQ: TICKER)
+    ticker_match = re.search(r"\((?:NASDAQ|OTC):\s*([A-Z]{1,5})\)", message)
     ticker = ticker_match.group(1) if ticker_match else None
 
+    # If not found, try generic inline fallback with filters
     if not ticker:
-        inline_match = re.search(r"\b([A-Z]{2,6})\b", message)
-        if inline_match:
-            candidate = inline_match.group(1)
-            common_exclusions = {
-                "NASDAQ",
-                "OTC",
-                "CEO",
-                "FDA",
-                "USD",
-                "NEWS",
-                "NYSE",
-                "ETF",
-                "SEC",
-                "PR",
-                "IPO",
-                "CFO",
-                "INC",
-                "LLC",
-            }
-            if candidate not in common_exclusions:
-                ticker = candidate
-                logger.warning(f"Fallback ticker used: {candidate}")
+        candidates = re.findall(r"\b[A-Z]{2,5}\b", message)
+        exclusions = {
+            "NASDAQ",
+            "OTC",
+            "CEO",
+            "FDA",
+            "USD",
+            "NEWS",
+            "NYSE",
+            "ETF",
+            "SEC",
+            "PR",
+            "IPO",
+            "CFO",
+            "INC",
+            "LLC",
+            "CUSIP",
+            "SPLIT",
+            "SHARE",
+            "SHARES",
+            "DIVIDEND",
+            "STOCK",
+            "PAR",
+            "VALUE",
+            "NUMBER",
+        }
+        for token in candidates:
+            if token not in exclusions and not token.isdigit():
+                ticker = token
+                logger.warning(f"Fallback ticker used: {ticker}")
+                break
 
     return {
         "ticker": ticker,
