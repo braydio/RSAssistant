@@ -134,7 +134,7 @@ async def on_ready():
         logger.warning(
             f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup."
         )
-    logger.info(f"Initializing Application in Production environment.")
+    logger.info("Initializing Application in Production environment.")
     logger.info(
         f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
     )
