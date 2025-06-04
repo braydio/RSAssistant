@@ -18,7 +18,7 @@ from utils.config_utils import (
     load_config,
 )
 from utils.excel_utils import add_stock_to_excel_log
-from utils.utility_utils import get_last_stock_price, send_large_message_chunks
+from utils.pricing_utils import last_stock_price
 from utils.sql_utils import update_historical_holdings
 from utils.logging_setup import logger
 
@@ -205,10 +205,14 @@ class WatchListManager:
                 description="All tickers and split dates:",
                 color=discord.Color.blue(),
             )
+            price_cache = {}
+            for ticker in watch_list:
+                price_cache[ticker] = await last_stock_price(ticker)
+                logger.info(f"Price of {price_cache[ticker]} returned for {ticker}")
 
             for ticker, data in watch_list.items():
                 split_date = data.get("split_date", "N/A")
-                last_price = get_last_stock_price(ticker)
+                last_price = price_cache[ticker]
                 last_price_display = (
                     f"{last_price:.2f}" if last_price is not None else "N/A"
                 )

@@ -11,13 +11,19 @@ import discord
 import yaml
 import yfinance as yf
 
-from utils.config_utils import (ACCOUNT_MAPPING, 
-                                HOLDINGS_LOG_CSV, ORDERS_LOG_CSV,
-                                get_account_nickname, load_account_mappings,
-                                load_config)
+from utils.config_utils import (
+    ACCOUNT_MAPPING,
+    HOLDINGS_LOG_CSV,
+    ORDERS_LOG_CSV,
+    get_account_nickname,
+    load_account_mappings,
+    load_config,
+)
+from utils.pricing_utils import last_stock_price
 
 # Load configuration and holdings data
 config = load_config()
+
 
 def check_holdings_timestamp(filename):
     """Reads the latest timestamp from the specified CSV file."""
@@ -32,6 +38,7 @@ def check_holdings_timestamp(filename):
     except FileNotFoundError:
         return "CSV file not found"
 
+
 ## -- Print raw order data to term for debugging
 def debug_insert_order_history(order_data):
     """Debug function to log and return the order data instead of saving it."""
@@ -42,12 +49,14 @@ def debug_insert_order_history(order_data):
         logging.error(f"Error processing order data for debug: {e}")
         return None
 
+
 def debug_order_data(order_data):
     debug_data = debug_insert_order_history(order_data)
     print(f"Order data being passed to SQL: {debug_data}")
 
 
 HOLDINGS_TIMESTAMP = check_holdings_timestamp(HOLDINGS_LOG_CSV)
+
 
 async def track_ticker_summary(
     ctx,
@@ -64,7 +73,7 @@ async def track_ticker_summary(
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
 
-    # Load account mappings 
+    # Load account mappings
     mapped_accounts = load_account_mappings()
 
     try:
@@ -125,6 +134,7 @@ async def track_ticker_summary(
     except Exception as e:
         await ctx.send(f"Error: {e}")
 
+
 async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping):
     """
     Generates an aggregated summary of positions across all brokers for a given ticker.
@@ -177,6 +187,7 @@ async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping):
         text=f"Try: '..brokerwith {ticker} <broker>' for details. • {HOLDINGS_TIMESTAMP}"
     )
     await ctx.send(embed=embed)
+
 
 async def get_detailed_broker_view(
     ctx, ticker, specific_broker, holdings, account_mapping
@@ -242,6 +253,7 @@ async def get_detailed_broker_view(
     else:
         await ctx.send(f"No broker found for {broker_name}.")
 
+
 async def send_accounts_with_position_embed(
     ctx, broker_name, ticker, accounts_with_position
 ):
@@ -287,6 +299,7 @@ async def send_accounts_with_position_embed(
         embed_with_position.set_footer(text=HOLDINGS_TIMESTAMP)
         await ctx.send(embed=embed_with_position)
 
+
 async def send_accounts_without_position_embed(
     ctx, broker_name, ticker, accounts_without_position
 ):
@@ -320,6 +333,7 @@ async def send_accounts_without_position_embed(
         )
         embed_without_position.set_footer(text=HOLDINGS_TIMESTAMP)
         await ctx.send(embed=embed_without_position)
+
 
 async def all_brokers(ctx):
     account_mapping = load_account_mappings()
@@ -364,19 +378,13 @@ async def all_brokers(ctx):
         await ctx.send(f"An error occurred: {e}")
         logging.error(f"Exception in all_brokers: {e}")
 
+
 # Retrieve Last Stock Price
 def get_last_stock_price(stock):
     """Fetches the last price of a given stock using Yahoo Finance."""
-    try:
-        ticker = yf.Ticker(stock)
-        stock_info = ticker.history(period="1d")
-        if not stock_info.empty:
-            return round(stock_info["Close"].iloc[-1], 2)
-        logging.warning(f"No stock data found for {stock}.")
-        return None
-    except Exception as e:
-        logging.error(f"Error fetching last price for {stock}: {e}")
-        return None
+    logging.warning("This is deprecated and moved to pricing_utils.py please adjust.")
+    return last_stock_price(stock)
+
 
 # -- Get Totals for Specific Broker
 def get_account_totals(broker, group_number=None, account_number=None):
@@ -404,6 +412,7 @@ def get_account_totals(broker, group_number=None, account_number=None):
                 account_totals[row["Account Number"]] = float(row["Account Total"])
 
     return account_totals
+
 
 # Sum Account Totals by Broker and Group
 def sum_account_totals(broker, group_number, accounts):
@@ -435,6 +444,7 @@ def sum_account_totals(broker, group_number, accounts):
 
     return account_count, total_sum
 
+
 # Calculate Totals for All Brokers and Groups
 def calculate_broker_totals(account_mapping):
     """
@@ -460,6 +470,7 @@ def calculate_broker_totals(account_mapping):
 
     return broker_totals
 
+
 # Get All Accounts for a Broker
 def all_broker_accounts(broker):
     """
@@ -477,6 +488,7 @@ def all_broker_accounts(broker):
             f"Broker '{broker}' not found. Available brokers: {list(mappings.keys())}"
         )
     return mappings[broker].get("accounts", [])
+
 
 # Retrieve Account Nicknames for a Broker
 async def all_account_nicknames(ctx, broker):
@@ -539,6 +551,7 @@ def all_account_numbers(broker):
     if isinstance(accounts, str):
         return accounts
     return [account["account_number"] for account in accounts]
+
 
 def all_brokers_summary_by_owner(specific_broker=None):
     """
@@ -618,9 +631,9 @@ def all_brokers_summary_by_owner(specific_broker=None):
                     print(f"Match found! Indicator: '{indicator}' -> Owner: {owner}")
                     break
                 # else:
-                    # print(
-                    #    f"No match for indicator '{indicator}' in nickname '{nickname}'."
-                    # )
+                # print(
+                #    f"No match for indicator '{indicator}' in nickname '{nickname}'."
+                # )
 
             # Initialize broker in summary if it doesn't exist
             if broker_name not in brokers_summary:
@@ -634,6 +647,7 @@ def all_brokers_summary_by_owner(specific_broker=None):
             print(f"Added ${total:,.2f} to {owner} under {broker_name}")
 
     return brokers_summary
+
 
 def generate_broker_summary_embed(ctx, specific_broker=None):
     """
@@ -665,10 +679,14 @@ def generate_broker_summary_embed(ctx, specific_broker=None):
             for broker_number, accounts in ACCOUNT_MAPPING.get(broker, {}).items()
         )
 
-        broker_total = sum(owner_totals.values())  # Calculate the total holdings for the broker
+        broker_total = sum(
+            owner_totals.values()
+        )  # Calculate the total holdings for the broker
 
         # Include broker total in the summary header
-        broker_summary = f"({account_owner_count} Owner groups, Total: ${broker_total:,.2f})\n"
+        broker_summary = (
+            f"({account_owner_count} Owner groups, Total: ${broker_total:,.2f})\n"
+        )
 
         for account_owner, account_totals in owner_totals.items():
             broker_summary += f"{account_owner}: ${account_totals:,.2f}\n"
@@ -701,6 +719,7 @@ def generate_broker_summary_embed(ctx, specific_broker=None):
 
     return embed
 
+
 def get_fennel_account_number(account_str):
     """Extract Fennel account number by combining the first and second number from the string."""
     parts = account_str.split()
@@ -717,7 +736,7 @@ def get_fennel_account_number(account_str):
 
 
 # Function to print lines from a file to Discord
-async def print_to_discord(ctx, file_path='todiscord.txt', delay=1):
+async def print_to_discord(ctx, file_path="todiscord.txt", delay=1):
     """
     Reads a file line by line and sends each line as a message to Discord.
     Args:
@@ -739,6 +758,7 @@ async def print_to_discord(ctx, file_path='todiscord.txt', delay=1):
         await ctx.send(f"Error: The file {file_path} was not found.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
+
 
 async def send_large_message_chunks(ctx, message):
     print("This function depraced, move it to config boy.")
@@ -767,6 +787,7 @@ async def send_large_message_chunks(ctx, message):
     # Send any remaining text in the current chunk
     if current_chunk:
         await ctx.send(current_chunk)
+
 
 def get_order_details(broker, account_number, ticker):
     """# Search orders_log.csv for matching broker, account, and stock ticker.
@@ -800,6 +821,7 @@ def get_order_details(broker, account_number, ticker):
 
 # -- DEV Functions
 
+
 def update_file_version(config_path, new_version):
     """
     Update the file_version in the given YAML configuration file.
@@ -809,27 +831,28 @@ def update_file_version(config_path, new_version):
         new_version (str): The new file version to set.
     """
     config_path = Path(config_path)
-    
+
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    
+
     # Load the current YAML data
     with open(config_path, "r") as file:
         config_data = yaml.safe_load(file)
-    
+
     # Update the file_version
     config_data["general_settings"]["file_version"] = new_version
-    
+
     # Save the updated YAML data back to the file
     with open(config_path, "w") as file:
         yaml.safe_dump(config_data, file)
-    
+
     logging.info(f"Updated file_version to {new_version} in {config_path}")
+
 
 def get_file_version(config_path):
     """
     Retrieves the current file version from the configuration file.
-    
+
     Args:
         config_path (str): Path to the settings.yaml file.
 

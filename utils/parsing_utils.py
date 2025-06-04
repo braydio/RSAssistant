@@ -18,7 +18,8 @@ from utils.excel_utils import update_excel_log
 from utils.sql_utils import insert_order_history
 
 # from RSAssistant import send_discord_alert
-from utils.utility_utils import debug_order_data, get_last_stock_price
+from utils.utility_utils import debug_order_data
+from utils.pricing_utils import get_last_stock_price
 
 account_mapping = ACCOUNT_MAPPING
 

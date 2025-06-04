@@ -6,6 +6,7 @@ import shutil
 import signal
 import sys
 import time
+import logging
 from datetime import datetime, timedelta
 
 # Third-party imports
@@ -17,7 +18,7 @@ from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
-from utils.logging_setup import logger
+from utils.logging_setup import setup_logging
 
 from utils.config_utils import (
     BOT_TOKEN,
@@ -67,6 +68,9 @@ from utils.watch_utils import (
 bot_info = (
     "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
 )
+setup_logging()
+
+logger = logging.getLogger(__name__)
 
 init_db()
 
