@@ -426,6 +426,31 @@ def parse_bulk_watchlist_message(content: str):
     return entries
 
 
+async def watch(ctx, *, text: str):
+    """Discord command handler for ``..watch``.
+
+    Supports the traditional format ``..watch TICKER mm/dd [ratio]`` or a
+    multi-line block of entries like ``TICKER 1-10 (purchase by 6/5)``.
+    """
+    entries = parse_bulk_watchlist_message(text)
+    if entries:
+        count = add_entries_from_message(text)
+        await ctx.send(f"Added {count} tickers to watchlist.")
+        return
+
+    parts = text.split()
+    if len(parts) < 2:
+        await ctx.send(
+            "Usage: '..watch TICKER mm/dd [ratio]' or paste multiple lines in the new format."
+        )
+        return
+
+    ticker = parts[0]
+    split_date = parts[1]
+    split_ratio = parts[2] if len(parts) > 2 else None
+    await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
+
+
 def add_entries_from_message(content: str) -> int:
     """Add multiple watchlist entries parsed from a message."""
     entries = parse_bulk_watchlist_message(content)
