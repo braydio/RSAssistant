@@ -103,6 +103,46 @@ class WatchListManager:
         """Get the current sell list."""
         return self.sell_list
 
+    def move_expired_to_sell(self):
+        """Move tickers with past split dates to the sell list."""
+        today = datetime.now().date()
+        to_remove = []
+        for ticker, data in list(self.watch_list.items()):
+            split_str = data.get("split_date")
+            if not split_str:
+                continue
+            split_dt = None
+            # Try common date formats
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%d"):
+                try:
+                    split_dt = datetime.strptime(split_str, fmt)
+                    if fmt == "%m/%d":
+                        split_dt = split_dt.replace(year=today.year)
+                    break
+                except ValueError:
+                    continue
+            if not split_dt:
+                logging.error(
+                    f"Unable to parse split date '{split_str}' for {ticker}."
+                )
+                continue
+
+            if split_dt.date() < today:
+                if ticker.upper() not in self.sell_list:
+                    self.add_to_sell_list(
+                        ticker=ticker,
+                        broker="all",
+                        quantity=0,
+                        scheduled_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                to_remove.append(ticker.upper())
+
+        for ticker in to_remove:
+            if ticker in self.watch_list:
+                del self.watch_list[ticker]
+        if to_remove:
+            self.save_watch_list()
+
     def add_ticker(self, ticker, split_date, split_ratio="N/A"):
         """Add or update a ticker in the watch list."""
         self.watch_list[ticker.upper()] = {
@@ -224,6 +264,7 @@ async def send_reminder_message_embed(ctx):
     # Create the embed message
     logging.info(f"Sending reminder message at {datetime.now()}")
     update_historical_holdings()
+    watch_list_manager.move_expired_to_sell()
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
@@ -323,6 +364,7 @@ async def send_reminder_message(bot):
 
     logging.info(f"Automated reminder message for {datetime.now()}")
     update_historical_holdings()
+    watch_list_manager.move_expired_to_sell()
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
