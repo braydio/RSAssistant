@@ -3,6 +3,7 @@ import csv
 import json
 import logging
 import os
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -360,3 +361,33 @@ async def send_reminder_message(bot):
         await channel.send(embed=embed)
     else:
         logging.error("Channel not found.")
+
+
+def parse_bulk_watchlist_message(content: str):
+    """Parse lines of the form 'TICKER X-Y (purchase by mm/dd)'.
+
+    Returns a list of tuples: (ticker, date, ratio).
+    """
+    entries = []
+    pattern = re.compile(
+        r"^([A-Za-z]+)\s+(\d+-\d+)\s*\(purchase by\s+(\d{1,2}/\d{1,2})\)",
+        re.IGNORECASE,
+    )
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = pattern.match(line)
+        if match:
+            ticker, ratio, date = match.groups()
+            entries.append((ticker.upper(), date, ratio))
+    return entries
+
+
+def add_entries_from_message(content: str) -> int:
+    """Add multiple watchlist entries parsed from a message."""
+    entries = parse_bulk_watchlist_message(content)
+    for ticker, date, ratio in entries:
+        watch_list_manager.add_ticker(ticker, date, ratio)
+    return len(entries)
+
