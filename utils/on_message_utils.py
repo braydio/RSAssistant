@@ -11,6 +11,8 @@ from utils.parsing_utils import (
     parse_embed_message,
     parse_order_message,
 )
+from utils.csv_utils import save_holdings_to_csv
+from utils.watch_utils import parse_bulk_watchlist_message, add_entries_from_message
 from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
 from utils.sec_policy_fetcher import SECPolicyFetcher
@@ -83,6 +85,12 @@ async def handle_primary_channel(bot, message):
 
     else:
         logger.info("Parsing regular order message.")
+        entries = parse_bulk_watchlist_message(message.content)
+        if entries:
+            count = add_entries_from_message(message.content)
+            await message.channel.send(f"Added {count} tickers to watchlist.")
+            logger.info(f"Added {count} tickers from bulk watchlist message.")
+            return
         parse_order_message(message.content)
 
 
