@@ -89,6 +89,7 @@ async def handle_primary_channel(bot, message):
         if entries:
             ctx = await bot.get_context(message)
             count = await add_entries_from_message(message.content, ctx)
+
             await message.channel.send(f"Added {count} tickers to watchlist.")
             logger.info(f"Added {count} tickers from bulk watchlist message.")
             return

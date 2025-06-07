@@ -10,21 +10,15 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 # Import configuration and functions from init.py
-from utils.config_utils import (
-    ACCOUNT_MAPPING,
-    ERROR_LOG_FILE,
-    EXCEL_FILE_MAIN,
-    HOLDINGS_LOG_CSV,
-    get_account_nickname,
-    load_account_mappings,
-    load_config,
-)
+from utils.config_utils import (ACCOUNT_MAPPING,
+                                ERROR_LOG_FILE, EXCEL_FILE_MAIN,
+                                HOLDINGS_LOG_CSV, get_account_nickname,
+                                load_account_mappings, load_config,
+                                setup_logging)
 
-EXCEL_FILE_DIRECTORY = "./volumes/excel/"
-EXCEL_FILE_NAME = "ReverseSplitLog"
-BASE_EXCEL_FILE = "ReverseSplitLog.xlsx"
-
-logger = logging.getLogger(__name__)
+EXCEL_FILE_DIRECTORY = './volumes/excel/'
+EXCEL_FILE_NAME = 'ReverseSplitLog'
+BASE_EXCEL_FILE = 'ReverseSplitLog.xlsx'
 
 # Load Excel log settings
 stock_row = 1
@@ -33,63 +27,60 @@ ratio_row = 2
 order_row = 3
 account_start_row = 4
 account_start_column = 1
-days_keep_backup = 2
+days_keep_backup = 2   
 
+
+# setup_logging()
 
 today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
 tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
-
 
 def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
     """
     Returns the path of the base Excel file (without date).
     If today's backup or tomorrow's backup doesn't exist, it creates them from the base file or today's file.
     """
-    # logger: Log directory and filename values
-    logger.debug(f"directory={directory}, filename={filename}")
+    # Logging: Log directory and filename values
+    logging.debug(f"directory={directory}, filename={filename}")
 
     archive_dir = os.path.join(str(directory), "archive")
-    logger.debug(f"archive_dir={archive_dir}")
+    logging.debug(f"archive_dir={archive_dir}")
 
     # Full paths for today's and tomorrow's backup files
     today_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{today}.xlsx")
-    tomorrow_excel_file = os.path.join(
-        archive_dir, f"Backup_{filename}.{tomorrow}.xlsx"
-    )
-
+    tomorrow_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{tomorrow}.xlsx")
+    
     # Path to the base file (this is the file we will use for reading/writing)
     base_excel_file_path = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
 
     # Ensure the archive directory exists
     if not os.path.exists(archive_dir):
         os.makedirs(archive_dir)
-        logger.debug(f"Created archive directory: {archive_dir}")
+        logging.debug(f"Created archive directory: {archive_dir}")
 
     # Check if today's backup file exists
     if not os.path.exists(today_excel_file):
         # If not, copy from the base file
         if os.path.exists(base_excel_file_path):
             shutil.copy(base_excel_file_path, today_excel_file)
-            logger.info(f"Created today's backup Excel file: {today_excel_file}")
+            logging.info(f"Created today's backup Excel file: {today_excel_file}")
         else:
-            logger.error(f"Base Excel file {base_excel_file_path} not found.")
+            logging.error(f"Base Excel file {base_excel_file_path} not found.")
 
     # Check if tomorrow's backup file exists
     if not os.path.exists(tomorrow_excel_file):
         # If not, copy from today's backup if it exists
         if os.path.exists(today_excel_file):
             shutil.copy(today_excel_file, tomorrow_excel_file)
-            logger.info(f"Created tomorrow's backup Excel file: {tomorrow_excel_file}")
+            logging.info(f"Created tomorrow's backup Excel file: {tomorrow_excel_file}")
         else:
-            logger.error(f"Today's backup file {today_excel_file} not found.")
+            logging.error(f"Today's backup file {today_excel_file} not found.")
 
     # Return the path to the base file (this is the file you will use)
     return base_excel_file_path
 
-
 EXCEL_FILE_PATH = get_excel_file_path()
 # Example usage
-
 
 def copy_cell_format(source_cell, target_cell):
     """Copy cell formatting from source to target cell."""
@@ -104,11 +95,11 @@ def copy_cell_format(source_cell, target_cell):
 def create_excel_backups(excel_backup):
     if not os.path.exists(excel_backup):
         shutil.copy(BASE_EXCEL_FILE, excel_backup)
-        logger.info(
+        logging.info(
             f"{BASE_EXCEL_FILE} - New backup created as {excel_backup} from base file."
         )
     else:
-        logger.info(f"Active backup file at {excel_backup}")
+        logging.info(f"Active backup file at {excel_backup}")
 
 
 def excel_backups_checks():
@@ -119,7 +110,7 @@ def excel_backups_checks():
 
     if not os.path.exists(archive_dir):
         os.makedirs(archive_dir, exist_ok=True)
-        logger.info(f"Created archive at {archive_dir}")
+        logging.info(f"Created archive at {archive_dir}")
     if not os.path.exists(prior_backup):
         create_excel_backups(prior_backup)
     if not os.path.exists(new_backup):
@@ -129,18 +120,16 @@ def excel_backups_checks():
 def load_excel_workbook(file_path):
     """Load an Excel workbook or return None if not found."""
     if os.path.exists(file_path):
-        logger.info(f"Loading workbook: {file_path}")
+        logging.info(f"Loading workbook: {file_path}")
         excel_backups_checks()
         return openpyxl.load_workbook(file_path)
     else:
-        logger.error(f"Workbook not found: {file_path}")
+        logging.error(f"Workbook not found: {file_path}")
         return None
-
 
 EXCEL_FILE_LIVE = load_excel_workbook(EXCEL_FILE_PATH)
 
 # -- Update Account Mappings
-
 
 async def index_account_details(
     ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING
@@ -220,9 +209,7 @@ async def index_account_details(
                     )
 
             # Add or update the account details under the broker and group number
-            account_mappings[broker_name][group_number][account_number] = (
-                account_nickname
-            )
+            account_mappings[broker_name][group_number][account_number] = account_nickname
 
     except Exception as e:
         await ctx.send(f"Error processing Excel rows: {e}")
@@ -231,7 +218,7 @@ async def index_account_details(
     # If there were any changes, send them via ctx.send
     if changes:
         change_message = "\n".join(changes)
-        logger.info(change_message)
+        logging.info(change_message)
     else:
         await ctx.send("No changes detected in account mappings.")
 
@@ -375,7 +362,6 @@ async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
     except Exception as e:
         await ctx.send(f"Error clearing the JSON file: {e}")
 
-
 async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
     try:
         # Load the account mappings
@@ -397,12 +383,11 @@ async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
             json.dump(account_mappings, f, indent=4)
 
         # Confirmation message
-        await ctx.send(
-            f"Added mapping: {brokerage} - Broker No: {broker_no}, Account: {account}, Nickname: {nickname}"
-        )
+        await ctx.send(f"Added mapping: {brokerage} - Broker No: {broker_no}, Account: {account}, Nickname: {nickname}")
 
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
+
 
 
 def copy_complete_row(worksheet, source_row, target_row):
@@ -445,7 +430,7 @@ def generate_account_nickname(
         with open(ACCOUNT_MAPPING, "r") as f:
             account_mappings = json.load(f)
     except FileNotFoundError:
-        logger.info(f"")
+        logging.info(f"")
         account_mappings = {}  # Initialize empty if file doesn't exist
 
     # Ensure structure for broker and group exists
@@ -490,27 +475,27 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
     try:
         # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
         wb = load_excel_workbook(EXCEL_FILE_PATH)
-
-        logger.info("Loaded Excel log workbook")
+        
+        logging.info("Loaded Excel log workbook")
 
         if not wb:
-            logger.error("Workbook could not be loaded.")
+            logging.error("Workbook could not be loaded.")
             return
 
         if "Reverse Split Log" not in wb.sheetnames:
-            logger.error("Sheet 'Reverse Split Log' not found in the workbook.")
+            logging.error("Sheet 'Reverse Split Log' not found in the workbook.")
             return
         ws = wb["Reverse Split Log"]
 
         # Find the last filled column in the row where stock tickers are listed
         last_filled_column = find_last_filled_column(ws, stock_row)
-        logger.info(f"Last filled column: {last_filled_column}")
+        logging.info(f"Last filled column: {last_filled_column}")
 
         # Find the next available columns for the ticker and split ratio
         cost_col = last_filled_column + 1
         proceeds_col = cost_col + 1
         spacer_col = proceeds_col + 1
-        logger.info(
+        logging.info(
             f"Columns Letters: Ticker is {get_column_letter(cost_col)}, Date is {get_column_letter(proceeds_col)}"
         )
 
@@ -529,7 +514,7 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
 
         # Save the workbook and close it (no await)
         save_workbook(wb, EXCEL_FILE_PATH)
-        logger.info(
+        logging.info(
             f"Added {ticker} to Excel log at column {get_column_letter(cost_col)} with split date {split_date}."
         )
 
@@ -538,7 +523,7 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
         )
 
     except Exception as e:
-        logger.error(f"Error adding stock to Excel log: {e}")
+        logging.error(f"Error adding stock to Excel log: {e}")
     finally:
         if wb:
             wb.close()
@@ -572,35 +557,35 @@ def find_last_filled_column(ws, row):
 # -- Logger Functions and Erroring
 
 
-def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
+def update_excel_log(
+    order_data, order_type=None, filename=BASE_EXCEL_FILE
+):
     """Update the Excel log with buy or sell orders, handling single or multiple orders."""
-    logger.info("Updating excel log.")
+    logging.info("Updating excel log.")
     if isinstance(order_data, dict):
         order_data = [order_data]
     elif not isinstance(order_data, list):
-        logger.error("order_data must be a list or dict.")
+        logging.error("order_data must be a list or dict.")
         return
-
-    logger.debug(f"order_data received: {order_data}")
+    
+    logging.debug(f"order_data received: {order_data}")
 
     wb = load_excel_workbook(EXCEL_FILE_PATH)
     if not wb:
-        logger.error("Workbook loading failed.")
+        logging.error("Workbook loading failed.")
         return
 
     ws = get_or_create_sheet(wb, "Reverse Split Log")
     try:
         order_data = validate_order_data(order_data)
-        logger.debug(f"Validated order_data: {order_data}")
+        logging.debug(f"Validated order_data: {order_data}")
     except TypeError as e:
-        logger.error(f"Invalid order_data format: {str(e)}")
+        logging.error(f"Invalid order_data format: {str(e)}")
         return
 
     for order in order_data:
         if not isinstance(order, dict):
-            logger.error(
-                f"Invalid order format, expected dict but got {type(order)}: {order}"
-            )
+            logging.error(f"Invalid order format, expected dict but got {type(order)}: {order}")
             continue  # Skip malformed entries
         try:
             # Extract order details
@@ -614,13 +599,13 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
             date = order["Date"]
 
             # Log the extracted details
-            logger.debug(f"Processing order: {order}")
+            logging.debug(f"Processing order: {order}")
 
             account_nickname = get_account_nickname(
                 broker_name, broker_number, account_number
             )
             excel_nickname = f"{broker_name} {account_nickname}"
-            logger.info(f"Finding for {excel_nickname}")
+            logging.info(f"Finding for {excel_nickname}")
 
             # Locate the account row
             account_row = locate_row_for_lookup(ws, excel_nickname, account_start_row)
@@ -637,13 +622,13 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
                     # Update the cell value
                     update_cell_value(ws, account_row, stock_col, price)
                     confirm_update = get_column_letter(stock_col)
-                    logger.info(
+                    logging.info(
                         f"Updated log for {broker_name} {account_nickname} at cell {confirm_update}{account_row}"
                     )
 
                     # save_workbook(wb, EXCEL_FILE_PATH)
-                    # logger.info(f"Saved excel log workboodk: {wb} filename: {EXCEL_FILE_PATH}")
-
+                    # logging.info(f"Saved excel log workboodk: {wb} filename: {EXCEL_FILE_PATH}")
+                    
                     # Remove error logs on success
                     identifier = f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
                     remove_error_from_log(ERROR_LOG_FILE, identifier)
@@ -676,7 +661,7 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
 
     # Save the workbook and close it after processing
     save_workbook(wb, EXCEL_FILE_PATH)
-    logger.info(f"Saved workbook {EXCEL_FILE_PATH}")
+    logging.info(f"Saved workbook {EXCEL_FILE_PATH}")
     delete_stale_backups(EXCEL_FILE_DIRECTORY, "archive", days_keep_backup)
     wb.close()
 
@@ -688,18 +673,16 @@ def record_error_message(error_message, order_details, error_log_file=ERROR_LOG_
         append_to_log(error_log_file, formatted_entry)
         log_error_order_details(formatted_entry)
     else:
-        logger.info(f"Error already exists in error log as details: {order_details}")
+        logging.info(f"Error already exists in error log as details: {order_details}")
 
 
 def log_error_order_details(order_details):
-    print(
-        "Deprecating function called log_error_order_details in excel_utils -- returning"
-    )
+    print("Deprecating function called log_error_order_details in excel_utils -- returning")
     return
-    """Log detailed order information for manual tracking."""
+    """Log detailed order information for manual tracking."""    
     # if not check_log_for_entry(ERROR_ORDER_DETAILS_FILE, order_details):
     #     append_to_log(ERROR_ORDER_DETAILS_FILE, order_details + "\n")
-    #     logger.info(f"Order details logged to {ERROR_ORDER_DETAILS_FILE}")
+    #     logging.info(f"Order details logged to {ERROR_ORDER_DETAILS_FILE}")
 
 
 def remove_error_from_log(file_path, identifier):
@@ -716,12 +699,12 @@ def remove_error_from_log(file_path, identifier):
 
                 if f"Order Details: {identifier}" in line.strip():
                     block_to_skip = True
-                    logger.info(f"Removing block with identifier: {identifier}")
+                    logging.info(f"Removing block with identifier: {identifier}")
 
                 if not block_to_skip:
                     file.write(line)
     except FileNotFoundError:
-        logger.info(f"{file_path} not found. No need to remove anything.")
+        logging.info(f"{file_path} not found. No need to remove anything.")
 
 
 def delete_stale_backups(
@@ -740,7 +723,7 @@ def delete_stale_backups(
 
     # Ensure the archive directory exists
     if not os.path.exists(archive_dir):
-        logger.warning(f"Archive directory does not exist: {archive_dir}")
+        logging.warning(f"Archive directory does not exist: {archive_dir}")
         return
 
     # Target the archive directory within the specified directory
@@ -748,7 +731,7 @@ def delete_stale_backups(
 
     # Ensure the archive directory exists
     if not os.path.exists(archive_dir):
-        logger.warning(f"Archive directory does not exist: {archive_dir}")
+        logging.warning(f"Archive directory does not exist: {archive_dir}")
         return
 
     # Iterate through files in the archive directory
@@ -767,16 +750,16 @@ def delete_stale_backups(
                 # Check if the file is older than the cutoff date
                 if file_date < cutoff:
                     file_path = os.path.join(archive_dir, str(filename))
-                    logger.info(f"Deleting old backup file: {filename}")
+                    logging.info(f"Deleting old backup file: {filename}")
                     os.remove(file_path)
-                    logger.info(f"Deleted old backup file: {filename}")
+                    logging.info(f"Deleted old backup file: {filename}")
 
             except ValueError:
-                logger.error(f"Failed to parse date from filename: {filename}")
+                logging.error(f"Failed to parse date from filename: {filename}")
                 continue
 
 
-# -- logger helpers
+# -- Logging helpers
 def validate_order_data(order_data):
     if isinstance(order_data, dict):
         # Convert single dictionary to a list for consistency
@@ -799,7 +782,7 @@ def get_or_create_sheet(wb, sheet_name):
         return wb[sheet_name]
     else:
         ws = wb.create_sheet(sheet_name)
-        logger.info(f"'{sheet_name}' sheet was missing, created a new one.")
+        logging.info(f"'{sheet_name}' sheet was missing, created a new one.")
         return ws
 
 
@@ -820,7 +803,7 @@ def locate_column_for_lookup(ws, in_row, search_value, start_col):
     for col in range(start_col, ws.max_column + 1, 2):
         if ws.cell(row=in_row, column=col).value == search_value:
             found = get_column_letter(col)
-            logger.info(f"Found {search_value} column {found}")
+            logging.info(f"Found {search_value} column {found}")
             return col
     return None
 
@@ -834,9 +817,9 @@ def save_workbook(wb, filename):
     # Save the workbook and handle any errors.
     try:
         wb.save(filename)
-        logger.info(f"Successfully saved the Excel log: {filename}")
+        logging.info(f"Successfully saved the Excel log: {filename}")
     except Exception as e:
-        logger.error(f"An error occurred while saving the Excel log: {str(e)}")
+        logging.error(f"An error occurred while saving the Excel log: {str(e)}")
 
 
 # -- Error handling helpers
@@ -852,10 +835,10 @@ def check_log_for_entry(log_file_path, entry):
 def append_to_log(log_file_path, message):
     """Append a message to the specified log file."""
     with open(log_file_path, "a") as log_file:
-        log_file.write(message)
-    logger.info(f"Appended to log: {log_file_path}")
+        log_file.write(message)  
+    logging.info(f"Appended to log: {log_file_path}")
 
 
 def format_error_entry(error_message, order_details):
-    """Format the error entry for consistent logger."""
+    """Format the error entry for consistent logging."""
     return f"--- Error at {datetime.now()} ---\nError Message: {error_message}\nOrder Details: {order_details}\n\n"
