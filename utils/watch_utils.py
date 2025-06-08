@@ -123,9 +123,7 @@ class WatchListManager:
                 except ValueError:
                     continue
             if not split_dt:
-                logging.error(
-                    f"Unable to parse split date '{split_str}' for {ticker}."
-                )
+                logging.error(f"Unable to parse split date '{split_str}' for {ticker}.")
                 continue
 
             if split_dt.date() < today:
@@ -168,9 +166,7 @@ class WatchListManager:
         """Get the current watch list."""
         return self.watch_list
 
-    async def watch_ticker(
-        self, ctx, ticker: str, split_date: str, split_ratio: str = None
-    ):
+    async def watch_ticker(self, ctx, ticker, split_date, split_ratio=None):
         """Add a stock ticker with a split date and optional split ratio to the watch list."""
         ticker = ticker.upper()
 
@@ -434,8 +430,7 @@ async def watch(ctx, *, text: str):
     """
     entries = parse_bulk_watchlist_message(text)
     if entries:
-      parse-message-format
-        count = await add_entries_from_message(text, ctx)       
+        count = await add_entries_from_message(text, ctx)
         await ctx.send(f"Added {count} tickers to watchlist.")
         return
 
@@ -452,7 +447,7 @@ async def watch(ctx, *, text: str):
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
 
 
-async def add_entries_from_message(content: str, ctx=None) -> int:
+async def add_entries_from_message(content: str, ctx=None):
     """Add multiple watchlist entries parsed from a message."""
     entries = parse_bulk_watchlist_message(content)
     for ticker, date, ratio in entries:
