@@ -87,7 +87,9 @@ async def handle_primary_channel(bot, message):
         logger.info("Parsing regular order message.")
         entries = parse_bulk_watchlist_message(message.content)
         if entries:
-            count = add_entries_from_message(message.content)
+            ctx = await bot.get_context(message)
+            count = await add_entries_from_message(message.content, ctx)
+
             await message.channel.send(f"Added {count} tickers to watchlist.")
             logger.info(f"Added {count} tickers from bulk watchlist message.")
             return

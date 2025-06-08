@@ -434,7 +434,8 @@ async def watch(ctx, *, text: str):
     """
     entries = parse_bulk_watchlist_message(text)
     if entries:
-        count = add_entries_from_message(text)
+        count = await add_entries_from_message(text, ctx)
+
         await ctx.send(f"Added {count} tickers to watchlist.")
         return
 
@@ -451,10 +452,14 @@ async def watch(ctx, *, text: str):
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
 
 
-def add_entries_from_message(content: str) -> int:
+async def add_entries_from_message(content: str, ctx=None) -> int:
     """Add multiple watchlist entries parsed from a message."""
     entries = parse_bulk_watchlist_message(content)
     for ticker, date, ratio in entries:
-        watch_list_manager.add_ticker(ticker, date, ratio)
+        if ctx is not None:
+            await watch_list_manager.watch_ticker(ctx, ticker, date, ratio)
+        else:
+            watch_list_manager.add_ticker(ticker, date, ratio)
+
     return len(entries)
 
