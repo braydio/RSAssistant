@@ -380,7 +380,7 @@ async def on_message(message):
     try:
         await handle_on_message(bot, message)
     except Exception as e:
-        logger.warning(f"No message context oa")
+        logger.warning(f"Error in bot.event(on_message): {e}")
 
 
 async def send_scheduled_reminder():
