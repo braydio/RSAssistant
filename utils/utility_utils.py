@@ -10,6 +10,7 @@ from pathlib import Path
 import discord
 import yaml
 import yfinance as yf
+from utils.yfinance_cache import get_price
 
 from utils.config_utils import (
     ACCOUNT_MAPPING,
@@ -380,17 +381,11 @@ async def all_brokers(ctx):
 
 # Retrieve Last Stock Price
 def get_last_stock_price(stock):
-    """Fetches the last price of a given stock using Yahoo Finance."""
-    try:
-        ticker = yf.Ticker(stock)
-        stock_info = ticker.history(period="1d")
-        if not stock_info.empty:
-            return round(stock_info["Close"].iloc[-1], 2)
+    """Fetches the last price of a given stock using Yahoo Finance with caching."""
+    price = get_price(stock)
+    if price is None:
         logging.warning(f"No stock data found for {stock}.")
-        return None
-    except Exception as e:
-        logging.error(f"Error fetching last price for {stock}: {e}")
-        return None
+    return price
 
 
 # -- Get Totals for Specific Broker

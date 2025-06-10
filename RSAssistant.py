@@ -1,14 +1,13 @@
 # Restored from previous version with valid Feed-style parsing
 
-import async
+import asyncio
 import json
 import sys
 import logging
 
 from utils.logging_setup  import logger
-from utils.parsing_utils import alert_channel_message
-
 from utils.on_message_utils import handle_on_message
+from utils.audit_watchlist_utils import audit_missing_tickers
 
 from utils.config_utils import BOT_TOKEN, DISCORD_SECOND_CHANNEL
 from discord.ext  import commands, Embed
@@ -22,31 +21,35 @@ bench = commands.Bot(
     intents=Intents.all,
     reconnect=True,
 )
+
+
+@bench.command(name="auditwatch")
+async def auditwatch(ctx, broker: str = None):
+    """Report brokers missing watchlist tickers."""
+    results = audit_missing_tickers(broker)
+    if not results:
+        msg = "All watchlist tickers present." if broker else "All brokers hold all watchlist tickers."
+        await ctx.send(msg)
+        return
+
+    lines = []
+    if broker:
+        missing = results.get(broker, {})
+        for ticker, accounts in missing.items():
+            accs = ", ".join(accounts) if accounts else "all accounts"
+            lines.append(f"{ticker}: missing in {accs}")
+    else:
+        for bname, missing in results.items():
+            ticks = ", ".join(missing.keys())
+            lines.append(f"{bname}: {ticks}")
+
+    await ctx.send("\n".join(lines))
                            
 
-async def handle_message(message):
-    """Main on message event handler.
-     Routes to primary vs secondary channel."""
-    if message.channel.id == DISCORD_SECOND_CHANNEL:
-        with logger.scope("rsass"):
-            logger.info(f"Secondary channel message: ${message.content}")
-        result = alert_channel_message(message.content)
-        if result and r
-            reverses_confirmed = result.get("reverse_split_confirmed")
-            ticker = result.get("ticker")
-            url = result.get("url")
-            if reverses_confirmed:
-                channel = message.bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-                if channel:
-                    await channel.send(f"reverse split alert for `{ticker}: <{url}>")
-                    logger.info(@f"Reverse Split alert triggered for {ticker}")
-            else:
-                logger.info("No valid alert confirmation. Skipping.")
-        else:
-            from utils.on_message_utils import handle_secondary_channel
-            await handle_secondary_channel(message.bot, message)
-    else:
-        await message.bot.process_commands(message)
+@bench.event
+async def on_message(message):
+    """Delegate all Discord messages to the shared handler."""
+    await handle_on_message(bench, message)
 
 # Start the bot
 from utils.run import run_bot
