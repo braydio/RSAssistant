@@ -617,13 +617,27 @@ async def clear_holdings(ctx):
 
 @bot.command(name="all", help="Daily reminder with holdings refresh.")
 async def show_reminder(ctx):
-    """Shows a daily reminder message."""
+    """Send reminder, refresh holdings, then summarize broker holdings."""
     await ctx.send("Clearing the current holdings for refresh.")
     await clear_holdings(ctx)
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await send_reminder_message_embed(channel)
         await ctx.send("!rsa holdings all")
+
+        def check(message: discord.Message) -> bool:
+            return (
+                message.channel == ctx.channel
+                and "All commands complete in all brokers" in message.content
+            )
+
+        try:
+            await bot.wait_for("message", check=check, timeout=600)
+            watch_list = watch_list_manager.get_watch_list()
+            for ticker in watch_list.keys():
+                await ctx.invoke(broker_has, ticker=ticker)
+        except asyncio.TimeoutError:
+            await ctx.send("Timed out waiting for AutoRSA response.")
 
 
 @bot.command(
