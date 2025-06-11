@@ -3,7 +3,6 @@ import csv
 import json
 import logging
 import os
-import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -80,17 +79,33 @@ class WatchListManager:
         else:
             logging.info("No sell list file found, starting fresh.")
 
-    def add_to_sell_list(self, ticker, broker, quantity, scheduled_time):
-        """
-        Add a ticker with details to the sell list.
-        """
-        self.sell_list[ticker.upper()] = {
+    def add_to_sell_list(
+        ticker: str,
+        broker: str = "all",
+        quantity: float = 1.0,
+        scheduled_time: str = None,
+    ):
+        """Adds a ticker to the sell list if not already present."""
+        from datetime import datetime
+
+        ticker = ticker.upper()
+
+        if ticker in sell_list:
+            logger.info(f"{ticker} already exists in sell list. Skipping add.")
+            return False  # Already scheduled
+
+        if not scheduled_time:
+            scheduled_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        sell_list[ticker] = {
             "broker": broker,
             "quantity": quantity,
             "scheduled_time": scheduled_time,
-            "added_on": datetime.now().strftime("%Y-%m-%d"),
+            "added_on": scheduled_time,
         }
-        self.save_sell_list()
+        save_sell_list()
+        logger.info(f"Added {ticker} to sell list.")
+        return True
 
     def remove_from_sell_list(self, ticker):
         """Remove a ticker from the sell list."""
@@ -103,44 +118,6 @@ class WatchListManager:
     def get_sell_list(self):
         """Get the current sell list."""
         return self.sell_list
-
-    def move_expired_to_sell(self):
-        """Move tickers with past split dates to the sell list."""
-        today = datetime.now().date()
-        to_remove = []
-        for ticker, data in list(self.watch_list.items()):
-            split_str = data.get("split_date")
-            if not split_str:
-                continue
-            split_dt = None
-            # Try common date formats
-            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%d"):
-                try:
-                    split_dt = datetime.strptime(split_str, fmt)
-                    if fmt == "%m/%d":
-                        split_dt = split_dt.replace(year=today.year)
-                    break
-                except ValueError:
-                    continue
-            if not split_dt:
-                logging.error(f"Unable to parse split date '{split_str}' for {ticker}.")
-                continue
-
-            if split_dt.date() < today:
-                if ticker.upper() not in self.sell_list:
-                    self.add_to_sell_list(
-                        ticker=ticker,
-                        broker="all",
-                        quantity=0,
-                        scheduled_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    )
-                to_remove.append(ticker.upper())
-
-        for ticker in to_remove:
-            if ticker in self.watch_list:
-                del self.watch_list[ticker]
-        if to_remove:
-            self.save_watch_list()
 
     def add_ticker(self, ticker, split_date, split_ratio="N/A"):
         """Add or update a ticker in the watch list."""
@@ -166,7 +143,9 @@ class WatchListManager:
         """Get the current watch list."""
         return self.watch_list
 
-    async def watch_ticker(self, ctx, ticker, split_date, split_ratio=None):
+    async def watch_ticker(
+        self, ctx, ticker: str, split_date: str, split_ratio: str = None
+    ):
         """Add a stock ticker with a split date and optional split ratio to the watch list."""
         ticker = ticker.upper()
 
@@ -261,7 +240,6 @@ async def send_reminder_message_embed(ctx):
     # Create the embed message
     logging.info(f"Sending reminder message at {datetime.now()}")
     update_historical_holdings()
-    watch_list_manager.move_expired_to_sell()
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
@@ -270,6 +248,9 @@ async def send_reminder_message_embed(ctx):
 
     logging.info(f"Reminder message called for {datetime.now()}")
     update_historical_holdings()
+
+    await ctx.send("!rsa holdings all")
+    logging.info("Sent holdings refresh command as part of reminder task.")
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
@@ -297,7 +278,7 @@ async def send_reminder_message_embed(ctx):
             inline=False,
         )
 
-    embed.set_footer(text="Repeat this message with '..reminder'")
+    embed.set_footer(text="Repeat this message with '..all'")
 
     # Send the embed message to the context
     await ctx.send(embed=embed)
@@ -361,7 +342,6 @@ async def send_reminder_message(bot):
 
     logging.info(f"Automated reminder message for {datetime.now()}")
     update_historical_holdings()
-    watch_list_manager.move_expired_to_sell()
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
@@ -399,61 +379,3 @@ async def send_reminder_message(bot):
         await channel.send(embed=embed)
     else:
         logging.error("Channel not found.")
-
-
-def parse_bulk_watchlist_message(content: str):
-    """Parse lines of the form 'TICKER X-Y (purchase by mm/dd)'.
-
-    Returns a list of tuples: (ticker, date, ratio).
-    """
-    entries = []
-    pattern = re.compile(
-        r"^([A-Za-z]+)\s+(\d+-\d+)\s*\(purchase by\s+(\d{1,2}/\d{1,2})\)",
-        re.IGNORECASE,
-    )
-    for line in content.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        match = pattern.match(line)
-        if match:
-            ticker, ratio, date = match.groups()
-            entries.append((ticker.upper(), date, ratio))
-    return entries
-
-
-async def watch(ctx, *, text: str):
-    """Discord command handler for ``..watch``.
-
-    Supports the traditional format ``..watch TICKER mm/dd [ratio]`` or a
-    multi-line block of entries like ``TICKER 1-10 (purchase by 6/5)``.
-    """
-    entries = parse_bulk_watchlist_message(text)
-    if entries:
-        count = await add_entries_from_message(text, ctx)
-        await ctx.send(f"Added {count} tickers to watchlist.")
-        return
-
-    parts = text.split()
-    if len(parts) < 2:
-        await ctx.send(
-            "Usage: '..watch TICKER mm/dd [ratio]' or paste multiple lines in the new format."
-        )
-        return
-
-    ticker = parts[0]
-    split_date = parts[1]
-    split_ratio = parts[2] if len(parts) > 2 else None
-    await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
-
-
-async def add_entries_from_message(content: str, ctx=None) -> int:
-    """Add multiple watchlist entries parsed from a message."""
-    entries = parse_bulk_watchlist_message(content)
-    for ticker, date, ratio in entries:
-        if ctx is not None:
-            await watch_list_manager.watch_ticker(ctx, ticker, date, ratio)
-        else:
-            watch_list_manager.add_ticker(ticker, date, ratio)
-    return len(entries)
-

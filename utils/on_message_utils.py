@@ -58,6 +58,10 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
 
 async def handle_on_message(bot, message):
     """Main on_message event handler."""
+    if message.content.startswith(".."):
+        logger.info(f"Processing command {message}")
+        await bot.process_commands(message)
+        return
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
         await handle_primary_channel(bot, message)
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:

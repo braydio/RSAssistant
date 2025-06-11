@@ -5,12 +5,11 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta
 
-from utils.config_utils import SQL_DATABASE, load_config
-
-logger = logging.getLogger(__name__)
+from utils.config_utils import SQL_DATABASE, load_config, setup_logging
 
 # Config and setup
 config = load_config()
+setup_logging()
 
 SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 
@@ -18,7 +17,7 @@ SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/
 # Database connection helper
 def get_db_connection():
     """Helper function to get a database connection."""
-    logger.debug("Attempting to establish a database connection.")
+    logging.debug("Attempting to establish a database connection.")
     try:
         conn = sqlite3.connect(
             SQL_DATABASE, timeout=30
@@ -26,10 +25,10 @@ def get_db_connection():
         conn.execute(
             "PRAGMA journal_mode=WAL;"
         )  # Enable WAL mode for better concurrency
-        logger.debug("Database connection established successfully.")
+        logging.debug("Database connection established successfully.")
         return conn
     except sqlite3.Error as e:
-        logger.error(f"Error establishing database connection: {e}")
+        logging.error(f"Error establishing database connection: {e}")
         raise
 
 
@@ -39,7 +38,7 @@ def get_or_create_account_id(
     """
     Retrieves the account_id for a given broker and account number. If it doesn't exist, it creates a new entry.
     """
-    logger.info(
+    logging.info(
         f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}."
     )
     with get_db_connection() as conn:
@@ -57,7 +56,7 @@ def get_or_create_account_id(
             result = cursor.fetchone()
 
             if result:
-                logger.debug(f"Account ID found: {result[0]}.")
+                logging.debug(f"Account ID found: {result[0]}.")
                 return result[0]
 
             # Create the account if it doesn't exist
@@ -70,16 +69,16 @@ def get_or_create_account_id(
             )
             conn.commit()
             account_id = cursor.lastrowid
-            logger.info(f"New account created with ID: {account_id}.")
+            logging.info(f"New account created with ID: {account_id}.")
             return account_id
         except sqlite3.Error as e:
-            logger.error(f"Error retrieving or creating account_id: {e}")
+            logging.error(f"Error retrieving or creating account_id: {e}")
             raise
 
 
 def init_db():
     """Initializes the database tables with improvements."""
-    logger.info("Initializing database with required tables.")
+    logging.info("Initializing database with required tables.")
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -132,9 +131,9 @@ def init_db():
                 """
             )
             conn.commit()
-            logger.info("Database tables initialized successfully.")
+            logging.info("Database tables initialized successfully.")
         except sqlite3.Error as e:
-            logger.error(f"Error initializing database tables: {e}")
+            logging.error(f"Error initializing database tables: {e}")
             raise
 
 
@@ -142,7 +141,7 @@ def update_holdings_live(
     broker, broker_number, account_number, ticker, quantity, price
 ):
     """Updates or inserts a holding into HoldingsLive."""
-    logger.info(
+    logging.info(
         f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}."
     )
     account_id = get_or_create_account_id(broker, broker_number, account_number)
@@ -159,17 +158,17 @@ def update_holdings_live(
                 (account_id, ticker, quantity, price),
             )
 
-            logger.info(
+            logging.info(
                 f"Holdings updated successfully for ticker {ticker}, account {account_id}."
             )
         except sqlite3.Error as e:
-            logger.error(f"Error updating holdings: {e}")
+            logging.error(f"Error updating holdings: {e}")
             raise
 
 
 def update_historical_holdings():
     """Updates HistoricalHoldings by averaging daily data from HoldingsLive."""
-    logger.info("Updating historical holdings based on live data.")
+    logging.info("Updating historical holdings based on live data.")
     # Calculate yesterday's date as a string in 'YYYY-MM-DD' format.
     yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -192,9 +191,9 @@ def update_historical_holdings():
                 (yesterday_date,),
             )
             conn.commit()
-            logger.info("Historical holdings updated successfully.")
+            logging.info("Historical holdings updated successfully.")
         except sqlite3.Error as e:
-            logger.error(f"Error updating historical holdings: {e}")
+            logging.error(f"Error updating historical holdings: {e}")
             raise
 
 
@@ -240,7 +239,7 @@ def insert_order_history(order_data):
       4. Inserts into the OrderHistory table
     """
 
-    logger.info("Attempting to insert order into OrderHistory.")
+    logging.info("Attempting to insert order into OrderHistory.")
     mapped_order = {}
     mapped_order["broker_name"] = order_data.get("Broker Name", "")
     mapped_order["broker_number"] = order_data.get("Broker Number", "")
@@ -266,7 +265,7 @@ def insert_order_history(order_data):
     try:
         validate_order_data(mapped_order)
     except ValueError as ve:
-        logger.error(f"Validation error: {ve}")
+        logging.error(f"Validation error: {ve}")
         raise
 
     # ------------------------------------------------------
@@ -275,7 +274,7 @@ def insert_order_history(order_data):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            logger.debug(f"Inserting order: {mapped_order}")
+            logging.debug(f"Inserting order: {mapped_order}")
             cursor.execute(
                 """
                 INSERT INTO OrderHistory (
@@ -309,24 +308,24 @@ def insert_order_history(order_data):
                 ),
             )
             conn.commit()
-        logger.info(
+        logging.info(
             f"Order inserted successfully for ticker: {mapped_order['ticker']} "
             f"(Order ID: {mapped_order['order_id']})."
         )
     except sqlite3.Error as e:
-        logger.error(f"Error inserting order into OrderHistory: {e}")
+        logging.error(f"Error inserting order into OrderHistory: {e}")
         raise
 
 
 '''
 def insert_order_history(order_data):
     """Inserts a logged order into the OrderHistory table."""
-    logger.info("Attempting to insert order into OrderHistory.")
+    logging.info("Attempting to insert order into OrderHistory.")
     try:
 
         if "order_id" not in order_data or not order_data["order_id"]:
             order_data["order_id"] = str(uuid.uuid4())
-            logger.debug(f"Generated order_id: {order_data['order_id']}")
+            logging.debug(f"Generated order_id: {order_data['order_id']}")
 
         if "account_id" not in order_data or not order_data["account_id"]:
             broker = order_data["broker_name"]
@@ -337,12 +336,12 @@ def insert_order_history(order_data):
             order_data["account_id"] = get_or_create_account_id(broker, broker_number, account_number, account_nickname)
         order_id = order_data["order_id"]
         account_id = order_data["account_id"]
-        logger.info(f"Saving order with saved or generated OrderNo. {order_id} AccountNo. {account_id}")
+        logging.info(f"Saving order with saved or generated OrderNo. {order_id} AccountNo. {account_id}")
 
         validate_order_data(order_data)
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            logger.debug(f"Inserting order: {order_data}")
+            logging.debug(f"Inserting order: {order_data}")
             cursor.execute(
                 """
                 INSERT INTO OrderHistory (
@@ -358,19 +357,19 @@ def insert_order_history(order_data):
                 ),
             )
             conn.commit()
-            logger.info(f"Order inserted successfully for ticker: {order_data['ticker']}.")
+            logging.info(f"Order inserted successfully for ticker: {order_data['ticker']}.")
     except ValueError as ve:
-        logger.error(f"Validation error: {ve}")
+        logging.error(f"Validation error: {ve}")
         raise
     except sqlite3.Error as e:
-        logger.error(f"Error inserting order into OrderHistory: {e}")
+        logging.error(f"Error inserting order into OrderHistory: {e}")
         raise
 '''
 
 
 def bot_query_database(table_name, filters=None, order_by=None, limit=10):
     """Modular query function that handles errors and provides helpful feedback."""
-    logger.info(
+    logging.info(
         f"Querying table {table_name} with filters: {filters}, order_by: {order_by}, limit: {limit}."
     )
     with get_db_connection() as conn:
@@ -380,7 +379,7 @@ def bot_query_database(table_name, filters=None, order_by=None, limit=10):
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             valid_tables = [row[0] for row in cursor.fetchall()]
             if table_name not in valid_tables:
-                logger.error(
+                logging.error(
                     f"Invalid table: {table_name}. Available tables: {valid_tables}"
                 )
                 return {
@@ -402,7 +401,7 @@ def bot_query_database(table_name, filters=None, order_by=None, limit=10):
                         conditions.append(f"{key} = ?")
                         params.append(value)
                     else:
-                        logger.warning(
+                        logging.warning(
                             f"Invalid filter column: {key}. Available columns: {columns}"
                         )
                         return {
@@ -416,11 +415,11 @@ def bot_query_database(table_name, filters=None, order_by=None, limit=10):
             if limit:
                 query += f" LIMIT {limit}"
 
-            logger.debug(f"Executing query: {query} with params: {params}")
+            logging.debug(f"Executing query: {query} with params: {params}")
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            logger.info(f"Query executed successfully. Retrieved {len(rows)} rows.")
+            logging.info(f"Query executed successfully. Retrieved {len(rows)} rows.")
             return {"data": rows, "columns": columns}
         except sqlite3.Error as e:
-            logger.error(f"Database query error: {e}")
+            logging.error(f"Database query error: {e}")
             return {"error": str(e)}
