@@ -382,7 +382,6 @@ async def on_message(message):
         await bot.process_commands(message)
     else:
         await handle_on_message(bot, message)
-        logger.warning(f"Error in bot.event(on_message): {e}")
 
 
 async def send_scheduled_reminder():
