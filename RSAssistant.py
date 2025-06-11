@@ -377,9 +377,11 @@ async def batchclear(ctx, limit: int):
 
 @bot.event
 async def on_message(message):
-    try:
+    if message.content.startswith(".."):
+        logger.info(f"Handling command {message.content}")
+        await bot.process_commands(message)
+    else:
         await handle_on_message(bot, message)
-    except Exception as e:
         logger.warning(f"Error in bot.event(on_message): {e}")
 
 
@@ -622,6 +624,7 @@ async def show_reminder(ctx):
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await send_reminder_message_embed(channel)
+        await ctx.send("!rsa holdings all")
 
 
 @bot.command(
