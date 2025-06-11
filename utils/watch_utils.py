@@ -447,7 +447,7 @@ async def watch(ctx, *, text: str):
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
 
 
-async def add_entries_from_message(content: str, ctx=None):
+async def add_entries_from_message(content: str, ctx=None) -> int:
     """Add multiple watchlist entries parsed from a message."""
     entries = parse_bulk_watchlist_message(content)
     for ticker, date, ratio in entries:
@@ -455,3 +455,5 @@ async def add_entries_from_message(content: str, ctx=None):
             await watch_list_manager.watch_ticker(ctx, ticker, date, ratio)
         else:
             watch_list_manager.add_ticker(ticker, date, ratio)
+    return len(entries)
+

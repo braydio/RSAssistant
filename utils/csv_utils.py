@@ -7,7 +7,6 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 import discord
-import yfinance as yf
 from discord import Embed
 
 from utils.config_utils import HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, load_config
