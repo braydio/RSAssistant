@@ -1,6 +1,6 @@
-# Restored from previous version with valid Feed-style parsing
-
+# RSAssistant.py
 import asyncio
+import csv
 import json
 import os
 import shutil
@@ -10,9 +10,16 @@ import time
 import logging
 from datetime import datetime, timedelta
 
-from utils.logging_setup  import logger
-from utils.on_message_utils import handle_on_message
-from utils.audit_watchlist_utils import audit_missing_tickers
+# Third-party imports
+import discord
+import discord.gateway
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from discord import Embed
+from discord.ext import commands
+
+# Local utility imports
+from utils.logging_setup import setup_logging
 
 from utils.config_utils import (
     BOT_TOKEN,
@@ -24,34 +31,119 @@ from utils.config_utils import (
     ACCOUNT_MAPPING,
 )
 
+from utils.csv_utils import (
+    clear_holdings_log,
+    sell_all_position,
+    send_top_holdings_embed,
+)
+from utils.excel_utils import (
+    add_account_mappings,
+    clear_account_mappings,
+    index_account_details,
+    map_accounts_in_excel_log,
+)
+from utils.order_exec import process_sell_list, schedule_and_execute
+from utils.autobuy_utils import autobuy_ticker
+from utils.order_queue_manager import (
+    add_to_order_queue,
+    get_order_queue,
+    remove_order,
+    list_order_queue,
+)
+from utils.sql_utils import bot_query_database, get_db_connection, init_db
+from utils.policy_resolver import SplitPolicyResolver
+from utils.utility_utils import (
+    all_account_nicknames,
+    all_brokers,
+    generate_broker_summary_embed,
+    print_to_discord,
+    track_ticker_summary,
+)
+from utils.on_message_utils import handle_on_message, set_channels
+from utils.watch_utils import (
+    periodic_check,
+    send_reminder_message_embed,
+    watch_list_manager,
+)
 
-@bench.command(name="auditwatch")
-async def auditwatch(ctx, broker: str = None):
-    """Report brokers missing watchlist tickers."""
-    results = audit_missing_tickers(broker)
-    if not results:
-        msg = "All watchlist tickers present." if broker else "All brokers hold all watchlist tickers."
-        await ctx.send(msg)
-        return
+bot_info = (
+    "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
+)
+setup_logging()
 
-    lines = []
-    if broker:
-        missing = results.get(broker, {})
-        for ticker, accounts in missing.items():
-            accs = ", ".join(accounts) if accounts else "all accounts"
-            lines.append(f"{ticker}: missing in {accs}")
+logger = logging.getLogger(__name__)
+
+init_db()
+
+logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
+logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
+
+# Set up bot intents
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+intents.members = True
+
+
+discord.gateway.DiscordWebSocket.resume_timeout = 60  # seconds
+discord.gateway.DiscordWebSocket.gateway_timeout = 60  # seconds
+
+# Initialize bot
+bot = commands.Bot(
+    command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
+)
+
+periodic_task = None
+reminder_scheduler = None
+
+
+@bot.event
+async def on_ready():
+    """Triggered when the bot is ready."""
+    global periodic_task
+    now = datetime.now()
+
+    logger.info(
+        f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
+    )
+    logger.info(f"V3.1 | Running in CLI | Runtime Environment: Production")
+
+    # Fetch the primary channel
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+
+    # Prepare account setup message
+    account_setup_message = (
+        f"**(╯°□°）╯**\n\n"
+        f"Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n"
+        f"`{EXCEL_FILE_MAIN}`\n\n"
+        f"Then run: `..loadmap` and `..loadlog`."
+    )
+
+    try:
+        ready_message = (
+            account_setup_message
+            if not ACCOUNT_MAPPING
+            else "...watching for order activity...\n(✪‿✪)"
+        )
+    except (FileNotFoundError, json.JSONDecodeError):
+        ready_message = account_setup_message
+
+    # Send ready message to the primary channel
+    if channel:
+        await channel.send(
+            f"{ready_message}\nThe time is {now.strftime('%m-%d %H:%M')}"
+            f"Orders Log at {ORDERS_LOG_CSV}"
+            f"Holdings Log at {HOLDINGS_LOG_CSV}"
+        )
     else:
-        for bname, missing in results.items():
-            ticks = ", ".join(missing.keys())
-            lines.append(f"{bname}: {ticks}")
-
-    await ctx.send("\n".join(lines))
-                           
-
-@bench.event
-async def on_message(message):
-    """Delegate all Discord messages to the shared handler."""
-    await handle_on_message(bench, message)
+        logger.warning(
+            f"Target channel not found - ID: {DISCORD_PRIMARY_CHANNEL} on startup."
+        )
+    logger.info("Initializing Application in Production environment.")
+    logger.info(
+        f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
+    )
+    set_channels(DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL)
 
     # Check if the periodic task is already running, and start it if not
     if "periodic_task" not in globals() or periodic_task is None:
