@@ -118,6 +118,15 @@ async def handle_secondary_channel(bot, message):
         summary = build_policy_summary(alert_ticker, policy_info, alert_url)
         await post_policy_summary(bot, alert_ticker, summary)
 
+        body_text = policy_info.get("body_text")
+        if body_text:
+            prompt = (
+                "..ai Will the fractional shares of this reverse split be rounded up "
+                "to the nearest whole share or paid out cash in lieu? "
+            )
+            snippet = body_text[: 2000 - len(prompt)]
+            await message.channel.send(prompt + snippet)
+
         if policy_info.get("round_up_confirmed"):
             logger.info(f"Round-up confirmed for {alert_ticker}. Scheduling autobuy...")
             await attempt_autobuy(bot, message.channel, alert_ticker, quantity=1)
