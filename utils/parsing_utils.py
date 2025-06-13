@@ -1,3 +1,9 @@
+"""Utilities for parsing Discord messages into structured data.
+
+This module contains helpers for interpreting on-message events, including
+order parsing and holdings extraction from embed messages.
+"""
+
 import csv
 import json
 import logging
@@ -553,26 +559,31 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
 
 
 # Parse Holdings
-def parse_embed_message(embed):
-    """
-    Handles a new holdings message by parsing it and saving the holdings to CSV.
-    """
-    # Step 1: Parse the holdings from the embed message
-    parsed_holdings = main_embed_message([embed])
+def parse_embed_message(embeds):
+    """Parse one or more embed messages and return extracted holdings.
 
-    # Check if holdings were successfully parsed
+    Parameters
+    ----------
+    embeds : list[Embed] | Embed
+        The embed or list of embeds received from Discord.
+
+    Returns
+    -------
+    list[dict]
+        Parsed holdings entries. Each entry contains broker, group,
+        account, ticker, quantity, price and value.
+    """
+
+    if not isinstance(embeds, list):
+        embeds = [embeds]
+
+    parsed_holdings = main_embed_message(embeds)
+
     if not parsed_holdings:
         logging.error("No holdings were parsed from the embed message.")
-        return  # Exit if no holdings were parsed
+        return []
 
-    # Step 2: Save the parsed holdings to CSV
-    save_success = save_holdings_to_csv([parsed_holdings])
-
-    # Check if holdings were successfully saved
-    if save_success:
-        logging.info("Holdings have been successfully parsed and saved.")
-    else:
-        logging.error("Failed to save holdings to CSV.")
+    return parsed_holdings
 
 
 def main_embed_message(embed_list):

@@ -1,4 +1,4 @@
-# utils/on_message_utils.py
+"""Discord message handlers used by RSAssistant."""
 
 import re
 import asyncio
@@ -71,7 +71,6 @@ async def handle_primary_channel(bot, message):
         logger.info("Embed message detected.")
         try:
             embeds = message.embeds
-            # Inject Key into each holding inside embed
             parsed_holdings = parse_embed_message(embeds)
             for holding in parsed_holdings:
                 holding["Key"] = (
