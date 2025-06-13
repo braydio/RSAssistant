@@ -65,7 +65,8 @@ async def handle_on_message(bot, message):
         await handle_secondary_channel(bot, message)
 
 
-async def handle_primary_channel(message):
+<<<<<<< Updated upstream
+async def handle_primary_channel(bot, message):
     if message.content.lower().startswith("manual"):
         logger.warning(f"Manual order detected: {message.content}")
 
@@ -74,18 +75,20 @@ async def handle_primary_channel(message):
         try:
             embeds = message.embeds
             parsed_holdings = parse_embed_message(embeds)
-
-            if not parsed_holdings:
-                logger.error("Failed to parse embedded holdings")
-                return
-
             for holding in parsed_holdings:
                 holding["Key"] = (
                     f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
+=======
+async def handle_primary_channel(message):
+    if message.embeds:
+        for embed in message.embeds:
+            logger.info(f"Found {len(message.embeds)} embeds in message.")
+            for i, embed in enumerate(message.embeds):
+                logger.info(
+                    f"Embed {i}: title={embed.title}, description={embed.fields}"
+>>>>>>> Stashed changes
                 )
                 parse_embed_message(message)
-        except Exception as e:
-            logger.error(f"Error parsing embed message: {e}")
     else:
         logger.info("Parsing regular order message.")
         parse_order_message(message.content)
