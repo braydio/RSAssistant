@@ -11,6 +11,7 @@ from utils.parsing_utils import (
     parse_embed_message,
     parse_order_message,
 )
+from utils.csv_utils import save_holdings_to_csv
 from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
 from utils.sec_policy_fetcher import SECPolicyFetcher
@@ -20,15 +21,17 @@ from discord import Embed
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
+DISCORD_AI_CHANNEL = None
 
 
-def set_channels(primary_id, secondary_id):
+def set_channels(primary_id, secondary_id, tertiary_id):
     """Sets primary and secondary channel IDs for use in on_message handling."""
-    global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL
+    global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_AI_CHANNEL
     DISCORD_PRIMARY_CHANNEL = primary_id
     DISCORD_SECONDARY_CHANNEL = secondary_id
+    DISCORD_AI_CHANNEL = tertiary_id
     logger.info(
-        f"on_message_utils loaded with primary={primary_id}, secondary={secondary_id}"
+        f"on_message_utils loaded with primary={primary_id}, secondary={secondary_id}, tertiary={tertiary_id}"
     )
 
 
@@ -54,13 +57,12 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
 
 
 async def handle_on_message(bot, message):
+    logger.info(f"Received message: {message}")
     """Main on_message event handler."""
     if message.channel.id == DISCORD_PRIMARY_CHANNEL:
-        await handle_primary_channel(bot, message)
+        await handle_primary_channel(message)
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
         await handle_secondary_channel(bot, message)
-    else:
-        await bot.process_commands(message)
 
 
 async def handle_primary_channel(bot, message):
@@ -76,10 +78,7 @@ async def handle_primary_channel(bot, message):
                 holding["Key"] = (
                     f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
                 )
-            save_holdings_to_csv(parsed_holdings)
-        except Exception as e:
-            logger.error(f"Error parsing embed: {e}")
-
+                parse_embed_message(message)
     else:
         logger.info("Parsing regular order message.")
         parse_order_message(message.content)
@@ -124,6 +123,7 @@ async def handle_secondary_channel(bot, message):
                 "to the nearest whole share or paid out cash in lieu? "
             )
             snippet = body_text[: 2000 - len(prompt)]
+            logger.info(f"Appending body text to prompt {body_text}")
             await message.channel.send(prompt + snippet)
 
         if policy_info.get("round_up_confirmed"):
@@ -274,9 +274,9 @@ class SplitPolicyResolver:
 
             return {
                 "round_up": self.is_round_up_policy(text_content),
-                "cash_in_lieu": "cash in lieu" in text_content.lower()
-                or "paid in cash" in text_content.lower(),
-                "round_down": "rounded down" in text_content.lower(),
+                "cash_in_lieu": "cash in lieu" in text_content.lower(),
+                # or "paid in cash" in text_content.lower(),
+                # "round_down": "rounded down" in text_content.lower(),
             }
         except Exception as e:
             logger.error(f"Error analyzing SEC filing text: {e}")
@@ -438,3 +438,173 @@ class OnMessagePolicyResolver:
         except Exception as e:
             logger.error(f"Failed to retrieve SEC link from NASDAQ: {e}")
             return None
+
+
+# -------------------------
+# SplitPolicyResolver
+# -------------------------
+
+
+class SplitPolicyResolver:
+    BASE_URL = "https://efts.sec.gov/LATEST/search-index"
+    HEADERS = {"User-Agent": "MyApp/1.0 (my.email@example.com)"}
+    SEARCH_TERMS = [
+        "reverse stock split",
+        "no fractional shares",
+        "reverse split",
+        "in lieu",
+        "preserve round lot",
+    ]
+    NASDAQ_KEYWORDS = [
+        "cash in lieu",
+        "no fractional shares",
+        "rounded up",
+        "not issuing fractional shares",
+    ]
+    SEC_KEYWORDS = [
+        "cash in lieu",
+        "rounded up",
+        "rounded down",
+        "fractional shares will not be issued",
+        "paid in cash",
+    ]
+
+    def __init__(self, back_days=30):
+        self.start_date = (datetime.today() - timedelta(days=back_days)).strftime(
+            "%Y-%m-%d"
+        )
+        self.end_date = datetime.today().strftime("%Y-%m-%d")
+
+    def build_search_params(self, ticker):
+        return {
+            "q": f"{ticker} "
+            + " OR ".join([f'"{term}"' for term in self.SEARCH_TERMS]),
+            "dateRange": "custom",
+            "startdt": self.start_date,
+            "enddt": self.end_date,
+            "category": "full",
+            "start": 0,
+            "count": 10,
+        }
+
+    def search_sec_filings(self, ticker):
+        try:
+            logger.info(
+                f"Searching SEC filings for {ticker} from {self.start_date} to {self.end_date}"
+            )
+            params = self.build_search_params(ticker)
+            response = requests.get(
+                self.BASE_URL, params=params, headers=self.HEADERS, timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching SEC search results: {e}")
+            return None
+
+    def extract_policy_from_sec_filing(self, filing_url):
+        try:
+            logger.info(f"Fetching and analyzing SEC filing from {filing_url}")
+            response = requests.get(filing_url, headers=self.HEADERS, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+            text_content = soup.get_text(separator=" ")
+
+            return {
+                "round_up": self.is_round_up_policy(text_content),
+                "cash_in_lieu": "cash in lieu" in text_content.lower()
+                or "paid in cash" in text_content.lower(),
+                "round_down": "rounded down" in text_content.lower(),
+            }
+        except Exception as e:
+            logger.error(f"Error analyzing SEC filing text: {e}")
+            return None
+
+    def fetch_sec_policy(self, ticker):
+        search_data = self.search_sec_filings(ticker)
+        if not search_data or "hits" not in search_data.get("hits", {}):
+            logger.warning(f"No filings found for ticker {ticker}")
+            return None
+
+        filings = search_data["hits"]["hits"]
+        for filing in filings:
+            form_type = filing["_source"].get("form", "")
+            if form_type in ["8-K", "S-1", "S-3", "S-4", "14A", "10-K", "10-Q"]:
+                cik = filing["_source"].get("ciks", [""])[0]
+                accession_number = filing["_source"].get("adsh", "")
+                file_id = filing["_id"].split(":")[1]
+                filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_number.replace('-', '')}/{file_id}"
+
+                policy_info = self.extract_policy_from_sec_filing(filing_url)
+                if policy_info:
+                    logger.info(f"Policy info extracted for {ticker}: {policy_info}")
+                    return policy_info
+
+        logger.warning(f"No valid policy extracted for {ticker}")
+        return None
+
+    @staticmethod
+    def is_round_up_policy(text):
+        """
+        Determines if text confirms a round-up policy without disqualifying phrases.
+        """
+        if not text:
+            return False
+
+        text = text.lower()
+        cash_indicators = ["cash in lieu", "paid in cash", "payment for fractional"]
+
+        return (
+            "rounded up" in text
+            and all(term not in text for term in cash_indicators)
+            and "fractional share" in text
+        )
+
+    @staticmethod
+    def detect_policy_from_text(text, keywords):
+        for keyword in keywords:
+            if keyword in text:
+                logger.info(f"Detected policy keyword: {keyword}")
+                return keyword.capitalize()
+        logger.warning("No specific policy keywords detected.")
+        return "Policy not clearly stated."
+
+    @staticmethod
+    def fetch_text_from_url(url):
+        try:
+            headers = SplitPolicyResolver.HEADERS
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            if "html" in response.headers.get("Content-Type", ""):
+                soup = BeautifulSoup(response.text, "html.parser")
+                text = soup.get_text(separator=" ")
+            else:
+                text = response.text
+
+            text = " ".join(text.split())
+            with open("./Policy_Info.txt", "w", encoding="utf-8") as f:
+                f.write(text)
+                logger.info("Saved SEC filing text to ./Policy_Info.txt")
+            logger.info(f"Fetched SEC filing text ({len(text)} characters)")
+            return text
+        except Exception as e:
+            logger.error(f"Error fetching SEC filing text: {e}")
+            return None
+
+    @classmethod
+    def analyze_text(cls, text_source, keywords=None):
+        if not text_source:
+            return None
+
+        text = cls.fetch_text_from_url(text_source)
+        if not text:
+            return None
+
+        policy = cls.detect_policy_from_text(text, keywords or cls.SEC_KEYWORDS)
+        round_up = cls.is_round_up_policy(text)
+        return {
+            "policy": policy,
+            "round_up_confirmed": round_up,
+            "source_url": text_source,
+        }

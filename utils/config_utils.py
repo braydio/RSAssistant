@@ -45,9 +45,7 @@ load_env()
 VERSION = "development 0.1"
 DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL", 0))
 DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
-DISCORD_SUMMARY_CHANNEL = int(
-    os.getenv("DISCORD_SUMMARY_CHANNEL", 0)
-)  # Replace with fallback ID
+DISCORD_AI_CHANNEL = int(os.getenv("DISCORD_AI_CHANNEL", 0))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 # --- Logging setup ---

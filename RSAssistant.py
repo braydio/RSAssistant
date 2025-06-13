@@ -25,6 +25,7 @@ from utils.config_utils import (
     BOT_TOKEN,
     DISCORD_PRIMARY_CHANNEL,
     DISCORD_SECONDARY_CHANNEL,
+    DISCORD_AI_CHANNEL,
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
@@ -141,9 +142,9 @@ async def on_ready():
         )
     logger.info("Initializing Application in Production environment.")
     logger.info(
-        f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}"
+        f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}, | TERTIARY | {DISCORD_AI_CHANNEL}"
     )
-    set_channels(DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL)
+    set_channels(DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_AI_CHANNEL)
 
     # Check if the periodic task is already running, and start it if not
     if "periodic_task" not in globals() or periodic_task is None:

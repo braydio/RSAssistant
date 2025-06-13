@@ -6,10 +6,10 @@ order parsing and holdings extraction from embed messages.
 
 import csv
 import json
-import logging
 import re
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
+from utils.logging_setup import logger
+
 from typing import Match, Optional, Tuple
 
 from discord import embeds
@@ -89,7 +89,7 @@ def parse_order_message(content):
                     handle_verification(match, broker_name, broker_number)
                 return  # Exit once a match is found
 
-    logging.error(f"No match found for message: {content}")
+    logger.error(f"No match found for message: {content}")
 
 
 def parse_broker_data(
@@ -151,13 +151,13 @@ def parse_broker_data(
     positions = field_positions.get(order_type, {}).get(broker_key)
 
     if not positions:
-        logging.error(
+        logger.error(
             f"No field mapping defined for broker: {broker_name} ({broker_key}), order_type: {order_type}"
         )
         return None, None, None, None
 
     if not match:
-        logging.error(
+        logger.error(
             f"Regex match object is None for broker: {broker_name}, order_type: {order_type}"
         )
         return None, None, None, None
@@ -175,7 +175,7 @@ def parse_broker_data(
 
         return account_number, action, quantity, stock
     except IndexError as e:
-        logging.error(
+        logger.error(
             f"Field extraction failed for broker: {broker_name}, order_type: {order_type}, error: {e}"
         )
         return None, None, None, None
@@ -188,13 +188,13 @@ def handle_complete_order(match, broker_name, broker_number):
         account_number, action, quantity, stock = parse_broker_data(
             broker_name, match, "complete"
         )
-        logging.debug(f"Act No. {account_number}")
-        logging.debug(f"Quant: {quantity}")
-        logging.debug(f"B|S {action}")
-        logging.debug(f"TKCR {stock}")
+        logger.debug(f"Act No. {account_number}")
+        logger.debug(f"Quant: {quantity}")
+        logger.debug(f"B|S {action}")
+        logger.debug(f"TKCR {stock}")
 
         if not account_number or not action or not stock:
-            logging.error(
+            logger.error(
                 f"Failed to parse broker data for {broker_name}. Skipping order."
             )
             return
@@ -219,22 +219,22 @@ def handle_complete_order(match, broker_name, broker_number):
             "Price": price,
             "Date": date,
         }
-        logging.info(
+        logger.info(
             f"Processing complete order for {broker_name} {broker_number} to CSV"
         )
 
-        logging.info(
+        logger.info(
             f"Processing complete order for {broker_name} {broker_number} to CSV and database"
         )
         # Save the order data to CSV
         handoff_order_data(order_data, broker_name, broker_number, account_number)
 
-        logging.info(
+        logger.info(
             f"Normalized function handled for: {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
         )
 
     except Exception as e:
-        logging.error(
+        logger.error(
             f"Error handling complete order for {broker_name} {broker_number}: {e}",
             exc_info=True,
         )
@@ -285,7 +285,7 @@ def normalize_order_data(
     ):
         action = "buy"
         quantity = 1.0
-        logging.info(
+        logger.info(
             f"Webull Adjustment: Changed action to 'buy' and quantity to 1.0 for broker {broker_number}, account {account_number}."
         )
 
@@ -301,7 +301,7 @@ def normalize_order_data(
 
     quantity = float(quantity)
     if quantity <= 0:
-        logging.warning(f"Negative holdings detected: {quantity} for stock {stock}.")
+        logger.warning(f"Negative holdings detected: {quantity} for stock {stock}.")
         # Trigger the Discord alert asynchronously
 
         send_negative_holdings(
@@ -315,7 +315,7 @@ def normalize_order_data(
     elif quantity == 0.0:
         quantity = 0.0
 
-    logging.info(
+    logger.info(
         f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
     )
 
@@ -340,14 +340,14 @@ def handle_incomplete_order(match, broker_name, broker_number):
         "quantity": quantity,
         "ticker": ticker,
     }
-    logging.info(f"Temporary order created: {temporary_orders[broker_group]}")
+    logger.info(f"Temporary order created: {temporary_orders[broker_group]}")
 
     # Normalize data
     broker_name, broker_number, action, quantity, ticker, _ = normalize_order_data(
         broker_name, broker_number, action, quantity, ticker, None
     )
 
-    logging.info(
+    logger.info(
         f"Initializing temporary order for {broker_name} {broker_number}: {action} {quantity} of {ticker}"
     )
 
@@ -363,11 +363,11 @@ def handle_incomplete_order(match, broker_name, broker_number):
                 "quantity": quantity,
                 "stock": ticker,
             }
-            logging.info(
+            logger.info(
                 f"Temporary order created for {nickname} - Account ending {account}"
             )
     else:
-        logging.error(
+        logger.error(
             f"No accounts found for broker {broker_name} number {broker_number}"
         )
 
@@ -404,14 +404,14 @@ def handle_verification(match, broker_name, broker_number):
             broker_name, broker_number, action, 1, "", account_number
         )
 
-        logging.info(
+        logger.info(
             f"Verification received for {broker_name} {broker_number}, Account {account_number}"
         )
 
         # Check for matching incomplete orders and finalize them upon verification
         for key, order in list(incomplete_orders.items()):
             # Log order comparison details for debugging
-            logging.debug(
+            logger.debug(
                 f"Comparing: order_action={order['action']}, verification_action={action}"
             )
 
@@ -434,31 +434,31 @@ def handle_verification(match, broker_name, broker_number):
                     "quantity", 1
                 )  # Default quantity if missing
                 del incomplete_orders[key]
-                logging.info(
+                logger.info(
                     f"Verified and removed temporary order for Account {account_number}"
                 )
                 break
         else:
-            logging.error(
+            logger.error(
                 f"No matching temporary order found for {broker_name} {broker_number}, Account {account_number}"
             )
 
     except ValueError as ve:
-        logging.error(
+        logger.error(
             f"ValueError in handle_verification: {ve}. Broker: {broker_name}, Match: {match}"
         )
     except AttributeError as ae:
-        logging.error(
+        logger.error(
             f"AttributeError in handle_verification: {ae}. Match details: {match}"
         )
     except Exception as e:
-        logging.error(f"Unexpected error in handle_verification: {e}")
+        logger.error(f"Unexpected error in handle_verification: {e}")
 
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
     order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
     """Processes and finalizes a verified order by passing it to handle_complete_order."""
-    logging.info(
+    logger.info(
         f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
     )
     action = order["action"]
@@ -471,7 +471,7 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
             broker_name, broker_number, action, quantity, stock, account_number
         )
     )
-    logging.info(
+    logger.info(
         f"Matched order info for {broker_name} {broker_number} {action} {quantity} {stock} {account_number}"
     )
 
@@ -491,7 +491,7 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
         "Date": date,
     }
 
-    logging.info(
+    logger.info(
         f"Processing complete order for {broker_name} {broker_number} to CSV and database."
     )
     # Save the order data to CSV
@@ -510,14 +510,14 @@ def handle_failed_order(match, broker_name, broker_number):
 
         for item in to_remove:
             del incomplete_orders[item]
-            logging.info(f"Removed failed order for {broker_name} {account_number}")
+            logger.info(f"Removed failed order for {broker_name} {account_number}")
 
     except Exception as e:
-        logging.error(f"Error handling failed order: {e}")
+        logger.error(f"Error handling failed order: {e}")
 
 
 def handoff_order_data(order_data, broker_name, broker_number, account_number):
-    logging.info(
+    logger.info(
         f"Processing order for {broker_name} {broker_number} {account_number}. "
         "Passing to CSV, DB, and Excel log..."
     )
@@ -532,14 +532,14 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
             )
             if ticker and split_watch_utils.get_status(ticker):
                 split_watch_utils.mark_account_sold(ticker, account_name)
-                logging.info(
+                logger.info(
                     f"[Split Watch] Marked {account_name} as having sold {ticker}."
                 )
     except Exception as e:
-        logging.error(f"Error marking sell order for split watch: {e}")
+        logger.error(f"Error marking sell order for split watch: {e}")
 
     if order_debug:
-        logging.info(f"I think passed the order debug.")
+        logger.info(f"I think passed the order debug.")
 
     # Each key is a descriptive label; each value is the call that returns True/False.
     steps = {
@@ -551,11 +551,11 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
     # Log successes/warnings in a loop
     for step_label, result in steps.items():
         if result:
-            logging.info(f"{step_label} updated with order data.")
+            logger.info(f"{step_label} updated with order data.")
         else:
-            logging.warning(f"Order data not saved to {step_label}.")
+            logger.warning(f"Order data not saved to {step_label}.")
 
-    logging.info("Handoff of order data complete.")
+    logger.info("Handoff of order data complete.")
 
 
 # Parse Holdings
@@ -580,10 +580,16 @@ def parse_embed_message(embeds):
     parsed_holdings = main_embed_message(embeds)
 
     if not parsed_holdings:
-        logging.error("No holdings were parsed from the embed message.")
-        return []
+        logger.error("No holdings were parsed from the embed message.")
+        return
 
-    return parsed_holdings
+    save_success = save_holdings_to_csv([parsed_holdings])
+
+    # Check if holdings were successfully saved
+    if save_success:
+        logger.info("Holdings have been successfully parsed and saved.")
+    else:
+        logger.error("Failed to save holdings to CSV.")
 
 
 def main_embed_message(embed_list):
@@ -594,16 +600,19 @@ def main_embed_message(embed_list):
     all_holdings = []
     for embed in embed_list:
         if not hasattr(embed, "fields") or len(embed.fields) == 0:
-            logging.warning("Received embed with no fields. Skipping.")
+            logger.warning("Received embed with no fields. Skipping.")
             continue
 
         broker_name = embed.fields[0].name.split(" ")[0]
 
         if broker_name.lower() == "webull":
+            logger.debug(f"Parsing embeds for {broker_name} broker.")
             all_holdings.extend(parse_webull_embed_message(embed))
         elif broker_name.lower() == "fennel":
+            logger.debug(f"Parsing embeds for {broker_name} broker.")
             all_holdings.extend(parse_fennel_embed_message(embed))
         else:
+            logger.debug(f"Parsing embeds for {broker_name} broker.")
             all_holdings.extend(parse_general_embed_message(embed))
 
     return all_holdings
@@ -681,7 +690,7 @@ def parse_general_embed_message(embed):
             if ticker and split_watch_utils.get_status(ticker):
                 split_watch_utils.mark_account_bought(ticker, account_name)
 
-        logging.info(parsed_holdings)
+        logger.info(parsed_holdings)
 
     return parsed_holdings
 
@@ -765,7 +774,7 @@ def parse_fennel_embed_message(embed):
             )
 
             if not account_number:
-                logging.error(f"Unable to extract account number from: {name_field}")
+                logger.error(f"Unable to extract account number from: {name_field}")
                 continue
 
             account_nickname = (
@@ -809,11 +818,11 @@ def parse_fennel_embed_message(embed):
 
             parsed_holdings.extend(new_holdings)
 
-        logging.info(f"Parsed Fennel holdings: {parsed_holdings}")
+        logger.info(f"Parsed Fennel holdings: {parsed_holdings}")
         return parsed_holdings
 
     except Exception as e:
-        logging.error(f"Error parsing Fennel embed message: {e}")
+        logger.error(f"Error parsing Fennel embed message: {e}")
         return []
 
 
@@ -826,7 +835,7 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
         group_data = broker_data.get(str(group_number), {})
 
         if not isinstance(group_data, dict):
-            logging.error(
+            logger.error(
                 f"[Nickname Error] Expected dict for {broker_name} group {group_number}, got {type(group_data)}"
             )
             return f"{broker_name} {group_number} {account_number}"
@@ -835,7 +844,7 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
             str(account_number), f"{broker_name} {group_number} {account_number}"
         )
     except Exception as e:
-        logging.error(
+        logger.error(
             f"Error resolving nickname for {broker_name} {group_number} {account_number}: {e}"
         )
         return f"{broker_name} {group_number} {account_number}"
@@ -865,7 +874,7 @@ async def send_negative_holdings(
         # Fetch the target channel
         channel = DISCORD_SECONDARY_CHANNEL
         if not channel:
-            logging.error(
+            logger.error(
                 f"Channel ID {DISCORD_SECONDARY_CHANNEL} not found. Cannot send alert."
             )
             return
@@ -884,12 +893,12 @@ async def send_negative_holdings(
 
         # Send the alert to the channel
         await channel.send(embed=embed)
-        logging.info(
+        logger.info(
             f"Negative holdings alert sent for stock {stock}, account {account_number}."
         )
 
     except Exception as e:
-        logging.error(
+        logger.error(
             f"Error sending Discord alert for stock {stock}, account {account_number}: {e}"
         )
 
@@ -903,7 +912,7 @@ def alert_channel_message(content):
     url = url_match.group(0) if url_match else None
 
     if url:
-        logging.info(f"URL detected in alert message: {url}")
+        logger.info(f"URL detected in alert message: {url}")
 
     # Regex pattern to extract the ticker inside parentheses
     ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
@@ -911,13 +920,13 @@ def alert_channel_message(content):
     ticker = ticker_match.group(1) if ticker_match else None
 
     if ticker:
-        logging.info(f"Ticker detected in alert message: {ticker}")
+        logger.info(f"Ticker detected in alert message: {ticker}")
 
     # Case-insensitive check if "Reverse Stock Split" appears anywhere in the message
     reverse_split_confirm = (
         re.search(r"reverse stock split", content, re.IGNORECASE) is not None
     )
-    logging.info(
+    logger.info(
         f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}"
     )
 
