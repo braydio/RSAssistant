@@ -1,3 +1,10 @@
+"""Helper routines for reading and writing holdings and order CSV logs.
+
+This module centralizes CSV operations used throughout the project. Functions
+handle deduplication of holdings, archiving stale orders and creating embeds for
+Discord. Database interactions are performed via :func:`utils.sql_utils.update_holdings_live`.
+"""
+
 import asyncio
 import csv
 import logging
@@ -266,7 +273,9 @@ def save_holdings_to_csv(parsed_holdings):
     compatibility.
 
     Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
-    fields plus a ``Timestamp``.
+    fields plus a ``Timestamp``.  When loading an existing CSV the function
+    emits a warning if required columns such as ``Key`` or ``Timestamp`` are
+    missing.
     """
 
     # Generate the current timestamp
@@ -278,16 +287,27 @@ def save_holdings_to_csv(parsed_holdings):
         if os.path.exists(HOLDINGS_LOG_CSV):
             with open(HOLDINGS_LOG_CSV, mode="r", newline="") as file:
                 reader = csv.DictReader(file)
+                if reader.fieldnames:
+                    missing_columns = [
+                        col
+                        for col in ("Key", "Timestamp")
+                        if col not in reader.fieldnames
+                    ]
+                    if missing_columns:
+                        logger.warning(
+                            "Holdings CSV missing columns: %s",
+                            ", ".join(missing_columns),
+                        )
                 existing_holdings = list(reader)
 
         # Create a set of unique keys to track existing entries
         existing_keys = set(
             (
-                holding["Key"],
-                holding["Broker Name"],
-                holding["Broker Number"],
-                holding["Account Number"],
-                holding["Stock"],
+                holding.get("Key", ""),
+                holding.get("Broker Name", ""),
+                holding.get("Broker Number", ""),
+                holding.get("Account Number", ""),
+                holding.get("Stock", ""),
             )
             for holding in existing_holdings
         )
@@ -306,14 +326,19 @@ def save_holdings_to_csv(parsed_holdings):
                         "Key",
                         f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
                     ),
-                    "Broker Name": holding.get("broker") or holding.get("Broker Name", ""),
-                    "Broker Number": holding.get("group") or holding.get("Broker Number", ""),
-                    "Account Number": holding.get("account") or holding.get("Account Number", ""),
+                    "Broker Name": holding.get("broker")
+                    or holding.get("Broker Name", ""),
+                    "Broker Number": holding.get("group")
+                    or holding.get("Broker Number", ""),
+                    "Account Number": holding.get("account")
+                    or holding.get("Account Number", ""),
                     "Stock": holding.get("ticker") or holding.get("Stock", ""),
                     "Quantity": holding.get("quantity") or holding.get("Quantity", 0),
                     "Price": holding.get("price") or holding.get("Price", 0),
-                    "Position Value": holding.get("value") or holding.get("Position Value", 0),
-                    "Account Total": holding.get("account_total") or holding.get("Account Total", 0),
+                    "Position Value": holding.get("value")
+                    or holding.get("Position Value", 0),
+                    "Account Total": holding.get("account_total")
+                    or holding.get("Account Total", 0),
                 }
             else:
                 # Assume legacy list format
