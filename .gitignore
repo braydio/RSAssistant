@@ -1,7 +1,7 @@
 # environment stuff
 RSDashboard/*
 volumes/logs*
-*.txt
+heartbeat.txt
 
 .venv/*
 *.env
