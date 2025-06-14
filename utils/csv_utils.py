@@ -256,7 +256,18 @@ CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
 
 
 def save_holdings_to_csv(parsed_holdings):
-    """Saves holdings data to CSV, ensuring no duplicates are saved, quantities are valid floats, and a timestamp is added."""
+    """Save holdings data to CSV.
+
+    ``parsed_holdings`` may be a list of dictionaries or lists.  Dictionaries
+    should use keys such as ``broker``, ``group``, ``account`` and ``ticker`` to
+    represent the standard CSV columns (``Broker Name``, ``Broker Number``,
+    ``Account Number`` and ``Stock`` respectively).  Lists are treated as
+    positional data matching :data:`HOLDINGS_HEADERS` for backward
+    compatibility.
+
+    Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
+    fields plus a ``Timestamp``.
+    """
 
     # Generate the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -288,8 +299,25 @@ def save_holdings_to_csv(parsed_holdings):
         # Convert parsed_holdings into a list of dictionaries and filter out duplicates
         new_holdings = []
         for holding in parsed_holdings:
-            # Map the parsed holding to a dictionary based on the headers
-            holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
+            if isinstance(holding, dict):
+                # Map dictionary keys to standard CSV columns
+                holding_dict = {
+                    "Key": holding.get(
+                        "Key",
+                        f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
+                    ),
+                    "Broker Name": holding.get("broker") or holding.get("Broker Name", ""),
+                    "Broker Number": holding.get("group") or holding.get("Broker Number", ""),
+                    "Account Number": holding.get("account") or holding.get("Account Number", ""),
+                    "Stock": holding.get("ticker") or holding.get("Stock", ""),
+                    "Quantity": holding.get("quantity") or holding.get("Quantity", 0),
+                    "Price": holding.get("price") or holding.get("Price", 0),
+                    "Position Value": holding.get("value") or holding.get("Position Value", 0),
+                    "Account Total": holding.get("account_total") or holding.get("Account Total", 0),
+                }
+            else:
+                # Assume legacy list format
+                holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
