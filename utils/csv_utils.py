@@ -1,3 +1,10 @@
+"""Utility functions for working with holdings and orders CSV logs.
+
+This module provides helpers for reading and writing CSV files that track
+brokerage holdings and order history.  It also includes convenience
+functions for summarizing holdings and automating sell commands.
+"""
+
 import asyncio
 import csv
 import logging
@@ -256,17 +263,18 @@ CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
 
 
 def save_holdings_to_csv(parsed_holdings):
-    """Save holdings data to CSV.
+    """Save holdings data to the holdings CSV.
 
-    ``parsed_holdings`` may be a list of dictionaries or lists.  Dictionaries
-    should use keys such as ``broker``, ``group``, ``account`` and ``ticker`` to
-    represent the standard CSV columns (``Broker Name``, ``Broker Number``,
-    ``Account Number`` and ``Stock`` respectively).  Lists are treated as
-    positional data matching :data:`HOLDINGS_HEADERS` for backward
+    ``parsed_holdings`` may contain dictionaries or sequences.  Dictionary
+    entries should use keys such as ``broker``, ``group``, ``account`` and
+    ``ticker`` to represent the standard CSV columns (``Broker Name``, ``Broker
+    Number``, ``Account Number`` and ``Stock`` respectively).  Sequences are
+    interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
     compatibility.
 
-    Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
-    fields plus a ``Timestamp``.
+    Each resulting row is guaranteed to include all fields in
+    :data:`HOLDINGS_HEADERS`, and a fresh ``Timestamp`` will be added or
+    overwritten.
     """
 
     # Generate the current timestamp
@@ -306,18 +314,30 @@ def save_holdings_to_csv(parsed_holdings):
                         "Key",
                         f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
                     ),
-                    "Broker Name": holding.get("broker") or holding.get("Broker Name", ""),
-                    "Broker Number": holding.get("group") or holding.get("Broker Number", ""),
-                    "Account Number": holding.get("account") or holding.get("Account Number", ""),
+                    "Broker Name": holding.get("broker")
+                    or holding.get("Broker Name", ""),
+                    "Broker Number": holding.get("group")
+                    or holding.get("Broker Number", ""),
+                    "Account Number": holding.get("account")
+                    or holding.get("Account Number", ""),
                     "Stock": holding.get("ticker") or holding.get("Stock", ""),
                     "Quantity": holding.get("quantity") or holding.get("Quantity", 0),
                     "Price": holding.get("price") or holding.get("Price", 0),
-                    "Position Value": holding.get("value") or holding.get("Position Value", 0),
-                    "Account Total": holding.get("account_total") or holding.get("Account Total", 0),
+                    "Position Value": holding.get("value")
+                    or holding.get("Position Value", 0),
+                    "Account Total": holding.get("account_total")
+                    or holding.get("Account Total", 0),
                 }
-            else:
-                # Assume legacy list format
+            elif isinstance(holding, (list, tuple)):
+                # Assume legacy list/tuple format
                 holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
+            else:
+                logger.warning(f"Unsupported holding format: {type(holding).__name__}")
+                continue
+
+            # Ensure all expected keys exist
+            for column in HOLDINGS_HEADERS:
+                holding_dict.setdefault(column, "")
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
