@@ -1,3 +1,12 @@
+"""Utility helpers for reading and writing CSV trading logs.
+
+This module centralizes all CSV interactions for holdings and order data. It
+provides convenience wrappers for checking ticker activity, persisting parsed
+holdings or orders, and clearing log files.  The constants ``HOLDINGS_HEADERS``
+and ``ORDERS_HEADERS`` define the expected column order for their respective
+logs.
+"""
+
 import asyncio
 import csv
 import logging
@@ -280,9 +289,6 @@ def save_holdings_to_csv(parsed_holdings):
             for holding in existing_holdings
         )
 
-        # Ensure "Timestamp" is part of HOLDINGS_HEADERS
-        if "Timestamp" not in HOLDINGS_HEADERS:
-            HOLDINGS_HEADERS.append("Timestamp")
 
         # Convert parsed_holdings into a list of dictionaries and filter out duplicates
         new_holdings = []
