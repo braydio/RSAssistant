@@ -1,7 +1,8 @@
 """Utilities for parsing Discord messages into structured data.
 
 This module contains helpers for interpreting on-message events, including
-order parsing and holdings extraction from embed messages.
+order parsing and holdings extraction from embed messages. Account mappings
+are loaded once at import time for efficient lookups.
 """
 
 import csv
@@ -15,9 +16,8 @@ from typing import Match, Optional, Tuple
 from discord import embeds
 
 from utils.config_utils import (
-    ACCOUNT_MAPPING,
     DISCORD_PRIMARY_CHANNEL,
-    get_account_nickname,
+    load_account_mappings,
 )
 from utils.csv_utils import save_order_to_csv
 from utils.excel_utils import update_excel_log
@@ -26,7 +26,8 @@ from utils.utility_utils import debug_order_data, get_last_stock_price
 
 from utils import split_watch_utils
 
-account_mapping = ACCOUNT_MAPPING
+# Load account mappings once at import time
+account_mapping = load_account_mappings()
 
 # Store incomplete orders
 incomplete_orders = {}
@@ -821,11 +822,12 @@ def parse_fennel_embed_message(embed):
 
 
 def get_account_nickname_or_default(broker_name, group_number, account_number):
-    """
-    Returns the account nickname from ACCOUNT_MAPPING. Falls back to generic string if not found.
+    """Return an account nickname or a generic fallback.
+
+    The nickname is looked up from the preloaded :data:`account_mapping`.
     """
     try:
-        broker_data = ACCOUNT_MAPPING.get(broker_name, {})
+        broker_data = account_mapping.get(broker_name, {})
         group_data = broker_data.get(str(group_number), {})
 
         if not isinstance(group_data, dict):
