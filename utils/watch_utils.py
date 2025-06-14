@@ -1,3 +1,9 @@
+"""Utility helpers for managing watch and sell lists.
+
+This module relies on :func:`utils.config_utils.load_account_mappings` to load
+broker account information used across various watch list operations.
+"""
+
 import asyncio
 import csv
 import json
@@ -23,7 +29,7 @@ from utils.sql_utils import update_historical_holdings
 
 # Load configuration and paths from settings
 config = load_config()
-account_mapping = load_account_mappings
+account_mapping = load_account_mappings()
 
 
 # WatchList Manager
