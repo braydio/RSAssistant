@@ -74,11 +74,19 @@ async def handle_primary_channel(bot, message):
         try:
             embeds = message.embeds
             parsed_holdings = parse_embed_message(embeds)
+
+            if not parsed_holdings:
+                logger.error("Failed to parse embedded holdings")
+                return
+
             for holding in parsed_holdings:
                 holding["Key"] = (
                     f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
                 )
-                parse_embed_message(message)
+
+            save_holdings_to_csv(parsed_holdings)
+        except Exception as e:
+            logger.error(f"Failed to parse or save embedded holdings: {e}")
     else:
         logger.info("Parsing regular order message.")
         parse_order_message(message.content)

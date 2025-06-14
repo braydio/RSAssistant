@@ -19,7 +19,7 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     get_account_nickname,
 )
-from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
+from utils.csv_utils import save_order_to_csv
 from utils.excel_utils import update_excel_log
 from utils.sql_utils import insert_order_history
 from utils.utility_utils import debug_order_data, get_last_stock_price
@@ -581,15 +581,9 @@ def parse_embed_message(embeds):
 
     if not parsed_holdings:
         logger.error("No holdings were parsed from the embed message.")
-        return
+        return []
 
-    save_success = save_holdings_to_csv([parsed_holdings])
-
-    # Check if holdings were successfully saved
-    if save_success:
-        logger.info("Holdings have been successfully parsed and saved.")
-    else:
-        logger.error("Failed to save holdings to CSV.")
+    return parsed_holdings
 
 
 def main_embed_message(embed_list):
