@@ -395,31 +395,7 @@ async def send_scheduled_reminder():
             f"Could not find channel with ID: {DISCORD_PRIMARY_CHANNEL} to send reminder."
         )
 
-
-@bot.command(
-    name="tosell", help="Usage: `..addsell <ticker>` Add a ticker to the sell list. "
-)
-async def add_to_sell(ctx, ticker: str):
-    """Add a ticker to the sell list."""
-    ticker = ticker.upper()
-    watch_list_manager.add_to_sell_list(ticker)
-    await ctx.send(f"Added {ticker} to the sell list.")
-
-
-@bot.command(name="nosell", help="Remove a ticker from the sell list.")
-async def remove_sell(ctx, ticker: str):
-    ticker = ticker.upper()
-    if watch_list_manager.remove_from_sell_list(ticker):
-        logger.info(f"{ticker} removed from sell list by user.")
-        await ctx.send(f"Removed {ticker} from the sell list.")
-    else:
-        logger.info(
-            f"Attempted to remove {ticker} from sell list but it was not present."
-        )
-        await ctx.send(f"{ticker} was not in the sell list.")
-
-
-@bot.command(name="selling", help="View the current sell list.")
+@bot.command(name="selling", help="View the current sell queue.")
 async def view_sell_list(ctx):
     sell_list = watch_list_manager.get_sell_list()
     if not sell_list:
@@ -653,7 +629,7 @@ async def shutdown(ctx):
     shutdown_handler(signal.SIGTERM, None)  # Manually call the handler
 
 
-# Graceful shutdown handler
+# Shutdown handler
 def shutdown_handler(signal_received, frame):
     logger.info("RSAssistant - shutting down...")
     global periodic_check, reminder_scheduler
@@ -666,7 +642,6 @@ def shutdown_handler(signal_received, frame):
 
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
-
 
 # Start the bot with the token from the .env
 if __name__ == "__main__":

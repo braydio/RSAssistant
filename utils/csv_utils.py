@@ -265,17 +265,19 @@ CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
 
 
 def save_holdings_to_csv(parsed_holdings):
-    """Save holdings data to CSV.
+    """Save holdings data to the holdings CSV.
 
-    ``parsed_holdings`` may be a list of dictionaries or lists.  Dictionaries
-    should use keys such as ``broker``, ``group``, ``account`` and ``ticker`` to
-    represent the standard CSV columns (``Broker Name``, ``Broker Number``,
-    ``Account Number`` and ``Stock`` respectively).  Lists are treated as
-    positional data matching :data:`HOLDINGS_HEADERS` for backward
+    ``parsed_holdings`` may contain dictionaries or sequences.  Dictionary
+    entries should use keys such as ``broker``, ``group``, ``account`` and
+    ``ticker`` to represent the standard CSV columns (``Broker Name``, ``Broker
+    Number``, ``Account Number`` and ``Stock`` respectively).  Sequences are
+    interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
     compatibility.
 
     Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
-    fields plus a ``Timestamp``.
+    fields plus a ``Timestamp``.  When loading an existing CSV the function
+    emits a warning if required columns such as ``Key`` or ``Timestamp`` are
+    missing.
     """
 
     # Generate the current timestamp
@@ -287,16 +289,27 @@ def save_holdings_to_csv(parsed_holdings):
         if os.path.exists(HOLDINGS_LOG_CSV):
             with open(HOLDINGS_LOG_CSV, mode="r", newline="") as file:
                 reader = csv.DictReader(file)
+                if reader.fieldnames:
+                    missing_columns = [
+                        col
+                        for col in ("Key", "Timestamp")
+                        if col not in reader.fieldnames
+                    ]
+                    if missing_columns:
+                        logger.warning(
+                            "Holdings CSV missing columns: %s",
+                            ", ".join(missing_columns),
+                        )
                 existing_holdings = list(reader)
 
         # Create a set of unique keys to track existing entries
         existing_keys = set(
             (
-                holding["Key"],
-                holding["Broker Name"],
-                holding["Broker Number"],
-                holding["Account Number"],
-                holding["Stock"],
+                holding.get("Key", ""),
+                holding.get("Broker Name", ""),
+                holding.get("Broker Number", ""),
+                holding.get("Account Number", ""),
+                holding.get("Stock", ""),
             )
             for holding in existing_holdings
         )
@@ -312,18 +325,30 @@ def save_holdings_to_csv(parsed_holdings):
                         "Key",
                         f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
                     ),
-                    "Broker Name": holding.get("broker") or holding.get("Broker Name", ""),
-                    "Broker Number": holding.get("group") or holding.get("Broker Number", ""),
-                    "Account Number": holding.get("account") or holding.get("Account Number", ""),
+                    "Broker Name": holding.get("broker")
+                    or holding.get("Broker Name", ""),
+                    "Broker Number": holding.get("group")
+                    or holding.get("Broker Number", ""),
+                    "Account Number": holding.get("account")
+                    or holding.get("Account Number", ""),
                     "Stock": holding.get("ticker") or holding.get("Stock", ""),
                     "Quantity": holding.get("quantity") or holding.get("Quantity", 0),
                     "Price": holding.get("price") or holding.get("Price", 0),
-                    "Position Value": holding.get("value") or holding.get("Position Value", 0),
-                    "Account Total": holding.get("account_total") or holding.get("Account Total", 0),
+                    "Position Value": holding.get("value")
+                    or holding.get("Position Value", 0),
+                    "Account Total": holding.get("account_total")
+                    or holding.get("Account Total", 0),
                 }
-            else:
-                # Assume legacy list format
+            elif isinstance(holding, (list, tuple)):
+                # Assume legacy list/tuple format
                 holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
+            else:
+                logger.warning(f"Unsupported holding format: {type(holding).__name__}")
+                continue
+
+            # Ensure all expected keys exist
+            for column in HOLDINGS_HEADERS:
+                holding_dict.setdefault(column, "")
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
