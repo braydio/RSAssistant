@@ -12,6 +12,8 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.csv_utils import save_holdings_to_csv
+from utils.watch_utils import parse_bulk_watchlist_message, add_entries_from_message
+from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
 from utils.sec_policy_fetcher import SECPolicyFetcher
@@ -91,6 +93,23 @@ async def handle_primary_channel(message):
             logger.error(f"Error parsing embed message: {e}")
     else:
         logger.info("Parsing regular order message.")
+        lowered = message.content.lower().strip()
+        if lowered == "..updatebot":
+            await message.channel.send("Pulling latest code and restarting...")
+            update_and_restart()
+            return
+        if lowered == "..revertupdate":
+            await message.channel.send("Reverting last update and restarting...")
+            revert_and_restart()
+            return
+
+        entries = parse_bulk_watchlist_message(message.content)
+        if entries:
+            ctx = await bot.get_context(message)
+            count = await add_entries_from_message(message.content, ctx)
+            await message.channel.send(f"Added {count} tickers to watchlist.")
+            logger.info(f"Added {count} tickers from bulk watchlist message.")
+            return
         parse_order_message(message.content)
 
 
