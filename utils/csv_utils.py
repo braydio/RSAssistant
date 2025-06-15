@@ -1,8 +1,10 @@
-"""Helper routines for reading and writing holdings and order CSV logs.
+"""
+Utility functions for working with holdings and orders CSV logs.
 
-This module centralizes CSV operations used throughout the project. Functions
-handle deduplication of holdings, archiving stale orders and creating embeds for
-Discord. Database interactions are performed via :func:`utils.sql_utils.update_holdings_live`.
+This module provides helpers for reading and writing CSV files that track
+brokerage holdings and order history.  It also includes convenience
+functions for summarizing holdings and automating sell commands.
+
 """
 
 import asyncio
@@ -263,13 +265,13 @@ CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
 
 
 def save_holdings_to_csv(parsed_holdings):
-    """Save holdings data to CSV.
+    """Save holdings data to the holdings CSV.
 
-    ``parsed_holdings`` may be a list of dictionaries or lists.  Dictionaries
-    should use keys such as ``broker``, ``group``, ``account`` and ``ticker`` to
-    represent the standard CSV columns (``Broker Name``, ``Broker Number``,
-    ``Account Number`` and ``Stock`` respectively).  Lists are treated as
-    positional data matching :data:`HOLDINGS_HEADERS` for backward
+    ``parsed_holdings`` may contain dictionaries or sequences.  Dictionary
+    entries should use keys such as ``broker``, ``group``, ``account`` and
+    ``ticker`` to represent the standard CSV columns (``Broker Name``, ``Broker
+    Number``, ``Account Number`` and ``Stock`` respectively).  Sequences are
+    interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
     compatibility.
 
     Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
@@ -340,9 +342,16 @@ def save_holdings_to_csv(parsed_holdings):
                     "Account Total": holding.get("account_total")
                     or holding.get("Account Total", 0),
                 }
-            else:
-                # Assume legacy list format
+            elif isinstance(holding, (list, tuple)):
+                # Assume legacy list/tuple format
                 holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
+            else:
+                logger.warning(f"Unsupported holding format: {type(holding).__name__}")
+                continue
+
+            # Ensure all expected keys exist
+            for column in HOLDINGS_HEADERS:
+                holding_dict.setdefault(column, "")
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
