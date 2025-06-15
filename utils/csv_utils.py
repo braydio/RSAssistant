@@ -1,8 +1,10 @@
-"""Utility functions for working with holdings and orders CSV logs.
+"""
+Utility functions for working with holdings and orders CSV logs.
 
 This module provides helpers for reading and writing CSV files that track
 brokerage holdings and order history.  It also includes convenience
 functions for summarizing holdings and automating sell commands.
+
 """
 
 import asyncio
@@ -272,9 +274,10 @@ def save_holdings_to_csv(parsed_holdings):
     interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
     compatibility.
 
-    Each resulting row is guaranteed to include all fields in
-    :data:`HOLDINGS_HEADERS`, and a fresh ``Timestamp`` will be added or
-    overwritten.
+    Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
+    fields plus a ``Timestamp``.  When loading an existing CSV the function
+    emits a warning if required columns such as ``Key`` or ``Timestamp`` are
+    missing.
     """
 
     # Generate the current timestamp
@@ -286,16 +289,27 @@ def save_holdings_to_csv(parsed_holdings):
         if os.path.exists(HOLDINGS_LOG_CSV):
             with open(HOLDINGS_LOG_CSV, mode="r", newline="") as file:
                 reader = csv.DictReader(file)
+                if reader.fieldnames:
+                    missing_columns = [
+                        col
+                        for col in ("Key", "Timestamp")
+                        if col not in reader.fieldnames
+                    ]
+                    if missing_columns:
+                        logger.warning(
+                            "Holdings CSV missing columns: %s",
+                            ", ".join(missing_columns),
+                        )
                 existing_holdings = list(reader)
 
         # Create a set of unique keys to track existing entries
         existing_keys = set(
             (
-                holding["Key"],
-                holding["Broker Name"],
-                holding["Broker Number"],
-                holding["Account Number"],
-                holding["Stock"],
+                holding.get("Key", ""),
+                holding.get("Broker Name", ""),
+                holding.get("Broker Number", ""),
+                holding.get("Account Number", ""),
+                holding.get("Stock", ""),
             )
             for holding in existing_holdings
         )
