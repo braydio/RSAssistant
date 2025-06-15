@@ -1,10 +1,3 @@
-"""Utility functions for working with holdings and orders CSV logs.
-
-This module provides helpers for reading and writing CSV files that track
-brokerage holdings and order history.  It also includes convenience
-functions for summarizing holdings and automating sell commands.
-"""
-
 import asyncio
 import csv
 import logging
@@ -14,12 +7,11 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 import discord
+import yfinance as yf
 from discord import Embed
 
 from utils.config_utils import HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, load_config
 from utils.sql_utils import update_holdings_live
-
-logger = logging.getLogger(__name__)
 
 # Load configuration and mappings
 config = load_config()
@@ -186,7 +178,7 @@ def identify_latest_orders(orders, new_order):
     # Add or replace with the new order if it's the latest
     if new_order_key in latest_orders:
         if new_order["Timestamp"] > latest_orders[new_order_key]["Timestamp"]:
-            logger.info(f"Replacing older duplicate with new order: {new_order}")
+            logging.info(f"Replacing older duplicate with new order: {new_order}")
             latest_orders[new_order_key] = new_order
     else:
         latest_orders[new_order_key] = new_order
@@ -212,11 +204,11 @@ def alert_negative_quantity(order_data):
     try:
         quantity = float(order_data.get("Quantity", 0))
         if quantity < 0:
-            logger.warning(f"Negative Quantity detected in order: {order_data}")
+            logging.warning(f"Negative Quantity detected in order: {order_data}")
             # You can add additional alert mechanisms here (e.g., email, Discord message)
             print(f"ALERT: Negative Quantity detected in order: {order_data}")
     except ValueError:
-        logger.error(
+        logging.error(
             f"Invalid Quantity value in order: {order_data.get('Quantity')}, unable to check for negativity."
         )
 
@@ -224,10 +216,10 @@ def alert_negative_quantity(order_data):
 def save_order_to_csv(order_data):
     # Saves order, deletes duplicates and stale entries
     try:
-        logger.info(f"Processing order data: {order_data}")
+        logging.info(f"Processing order data: {order_data}")
 
         ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
-        logger.info(
+        logging.info(
             "Processing new order in csv_utils, checking for duplicates and stale entries."
         )
 
@@ -251,10 +243,10 @@ def save_order_to_csv(order_data):
 
         # Write updated orders back to the CSV
         write_orders_to_csv(updated_orders, ORDERS_LOG_CSV)
-        logger.info(f"Order saved to csv: {order_data}")
+        logging.info(f"Order saved to csv: {order_data}")
 
     except Exception as e:
-        logger.error(f"Error saving order to CSV: {e}")
+        logging.error(f"Error saving order to CSV: {e}")
 
 
 # ! --- Holdings Management ---
@@ -263,19 +255,7 @@ CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
 
 
 def save_holdings_to_csv(parsed_holdings):
-    """Save holdings data to the holdings CSV.
-
-    ``parsed_holdings`` may contain dictionaries or sequences.  Dictionary
-    entries should use keys such as ``broker``, ``group``, ``account`` and
-    ``ticker`` to represent the standard CSV columns (``Broker Name``, ``Broker
-    Number``, ``Account Number`` and ``Stock`` respectively).  Sequences are
-    interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
-    compatibility.
-
-    Each resulting row is guaranteed to include all fields in
-    :data:`HOLDINGS_HEADERS`, and a fresh ``Timestamp`` will be added or
-    overwritten.
-    """
+    """Saves holdings data to CSV, ensuring no duplicates are saved, quantities are valid floats, and a timestamp is added."""
 
     # Generate the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -307,37 +287,8 @@ def save_holdings_to_csv(parsed_holdings):
         # Convert parsed_holdings into a list of dictionaries and filter out duplicates
         new_holdings = []
         for holding in parsed_holdings:
-            if isinstance(holding, dict):
-                # Map dictionary keys to standard CSV columns
-                holding_dict = {
-                    "Key": holding.get(
-                        "Key",
-                        f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
-                    ),
-                    "Broker Name": holding.get("broker")
-                    or holding.get("Broker Name", ""),
-                    "Broker Number": holding.get("group")
-                    or holding.get("Broker Number", ""),
-                    "Account Number": holding.get("account")
-                    or holding.get("Account Number", ""),
-                    "Stock": holding.get("ticker") or holding.get("Stock", ""),
-                    "Quantity": holding.get("quantity") or holding.get("Quantity", 0),
-                    "Price": holding.get("price") or holding.get("Price", 0),
-                    "Position Value": holding.get("value")
-                    or holding.get("Position Value", 0),
-                    "Account Total": holding.get("account_total")
-                    or holding.get("Account Total", 0),
-                }
-            elif isinstance(holding, (list, tuple)):
-                # Assume legacy list/tuple format
-                holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
-            else:
-                logger.warning(f"Unsupported holding format: {type(holding).__name__}")
-                continue
-
-            # Ensure all expected keys exist
-            for column in HOLDINGS_HEADERS:
-                holding_dict.setdefault(column, "")
+            # Map the parsed holding to a dictionary based on the headers
+            holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
@@ -357,7 +308,7 @@ def save_holdings_to_csv(parsed_holdings):
                     holding_dict.get("Account Total", 0)
                 )  # Optional field
             except (ValueError, KeyError):
-                logger.warning(f"Invalid numeric value in holding: {holding_dict}")
+                logging.warning(f"Invalid numeric value in holding: {holding_dict}")
                 continue  # Skip invalid entries
 
             # Add timestamp
@@ -387,12 +338,12 @@ def save_holdings_to_csv(parsed_holdings):
                     existing_holdings + new_holdings
                 )  # Append new entries to existing ones
 
-            logger.info(f"Holdings saved, with {len(new_holdings)} new entries added.")
+            logging.info(f"Holdings saved, with {len(new_holdings)} new entries added.")
         else:
-            logger.info("No new holdings to add.")
+            logging.info("No new holdings to add.")
 
     except Exception as e:
-        logger.error(f"Error saving holdings: {e}")
+        logging.error(f"Error saving holdings: {e}")
 
 
 def clear_holdings_log(filename):
@@ -473,7 +424,7 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
         for ticker, quantity in tickers.items():
             sell_command = f"!rsa sell {quantity} {ticker} {broker} {live_mode}"
             await ctx.send(sell_command)
-            logger.info(f"Executed: {sell_command}")
+            logging.info(f"Executed: {sell_command}")
 
             # Wait 30 seconds before the next stock
             await asyncio.sleep(30)
@@ -481,10 +432,10 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
         await ctx.send(
             f"Liquidation completed for brokerage: {broker} in {'live' if live_mode == 'true' else 'dry'} mode."
         )
-        logger.info(f"Liquidation completed for brokerage: {broker}.")
+        logging.info(f"Liquidation completed for brokerage: {broker}.")
 
     except Exception as e:
-        logger.error(f"Error during liquidation: {e}")
+        logging.error(f"Error during liquidation: {e}")
         await ctx.send(f"An error occurred: {str(e)}")
 
 
@@ -501,7 +452,7 @@ def get_top_holdings(range=3):
     Returns:
         dict: Top distinct holdings grouped by broker, latest timestamp.
     """
-    logger.info(f"Starting aggregation of top holdings for range: {range}")
+    logging.info(f"Starting aggregation of top holdings for range: {range}")
 
     broker_data = defaultdict(list)
     latest_timestamp = None
@@ -523,12 +474,14 @@ def get_top_holdings(range=3):
                         if not latest_timestamp or parsed_timestamp > latest_timestamp:
                             latest_timestamp = parsed_timestamp
             except ValueError:
-                logger.warning(
+                logging.warning(
                     f"Skipping invalid Quantity value: {holding.get('Quantity')} in holding: {holding}"
                 )
                 continue
 
-        logger.debug(f"Filtered {len(filtered_holdings)} holdings where Quantity <= 1.")
+        logging.debug(
+            f"Filtered {len(filtered_holdings)} holdings where Quantity <= 1."
+        )
 
         # Group by broker while ensuring distinct tickers
         for holding in filtered_holdings:
@@ -541,7 +494,7 @@ def get_top_holdings(range=3):
                 existing_tickers = {h.get("Stock") for h in broker_data[broker_name]}
                 if stock_ticker not in existing_tickers:
                     broker_data[broker_name].append(holding)
-                    logger.debug(
+                    logging.debug(
                         f"Added distinct holding for broker '{broker_name}': {holding}"
                     )
                     print(
@@ -557,15 +510,15 @@ def get_top_holdings(range=3):
                 reverse=True,
             )[:range]
             top_range[broker] = sorted_holdings
-            logger.info(
+            logging.info(
                 f"Top {range} distinct holdings for broker '{broker}': {sorted_holdings}"
             )
 
-        logger.info("Completed aggregation of top holdings.")
+        logging.info("Completed aggregation of top holdings.")
         return top_range, latest_timestamp
 
     except Exception as e:
-        logger.error(f"Error in get_top_holdings: {e}", exc_info=True)
+        logging.error(f"Error in get_top_holdings: {e}", exc_info=True)
         return {}
 
 
@@ -578,13 +531,13 @@ async def send_top_holdings_embed(ctx, range):
         range (int): Number of holdings displayed per broker.
     """
     try:
-        logger.info(f"Preparing to send top holdings embed for range: {range}")
+        logging.info(f"Preparing to send top holdings embed for range: {range}")
 
         # Get top holdings and latest timestamp
         top_holdings, latest_timestamp = get_top_holdings(range)
 
         if not top_holdings:
-            logger.warning("No holdings found to display.")
+            logging.warning("No holdings found to display.")
             await ctx.send("No holdings found.")
             return
 
@@ -608,18 +561,18 @@ async def send_top_holdings_embed(ctx, range):
                     for holding in holdings
                 )
                 embed.add_field(name=broker, value=holding_details, inline=True)
-                logger.debug(f"Added broker '{broker}' to embed.")
+                logging.debug(f"Added broker '{broker}' to embed.")
             else:
                 embed.add_field(name=broker, value="No holdings found.", inline=True)
-                logger.debug(f"No holdings found for broker '{broker}'.")
+                logging.debug(f"No holdings found for broker '{broker}'.")
 
         # Add footer with the latest timestamp
         embed.set_footer(text=f"< - - <-> - - > \nData as of {formatted_timestamp}")
 
         # Send embed
         await ctx.send(embed=embed)
-        logger.info("Embed message sent successfully.")
+        logging.info("Embed message sent successfully.")
 
     except Exception as e:
-        logger.error(f"Error in send_top_holdings_embed: {e}", exc_info=True)
+        logging.error(f"Error in send_top_holdings_embed: {e}", exc_info=True)
         await ctx.send(f"An error occurred while preparing the embed: {e}")

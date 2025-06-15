@@ -4,9 +4,7 @@ from pathlib import Path
 
 import dotenv
 
-import logging
-
-logger = logging.getLogger(__name__)
+from utils.logging_setup import setup_logging, logger
 
 # --- Directories ---
 UTILS_DIR = Path(__file__).resolve().parent
@@ -25,10 +23,6 @@ ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
 SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
 
-ALPACA_API_SECRET = os.getenv("ALPACA_SECRET_KEY")  # Paper Account
-ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")  # Paper Account
-BASE_URL = "https://paper-api.alpaca.markets/v2"  # Paper Account
-
 
 # --- Load .env ---
 def load_env():
@@ -45,10 +39,11 @@ load_env()
 VERSION = "development 0.1"
 DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL", 0))
 DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
-DISCORD_AI_CHANNEL = int(os.getenv("DISCORD_AI_CHANNEL", 0))
+DISCORD_SUMMARY_CHANNEL = int(os.getenv("DISCORD_SUMMARY_CHANNEL", 0))  # Replace with fallback ID
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 # --- Logging setup ---
+setup_logging()
 
 # --- Logging resolved paths ---
 logger.info(f"Loaded BOT_TOKEN: {'Set' if BOT_TOKEN else 'Missing'}")
@@ -60,8 +55,6 @@ logger.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
 logger.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
 logger.info(f"Resolved SELLING_FILE: {SELL_FILE}")
 
-ENABLE_TICKER_CLI = os.getenv("ENABLE_TICKER", False)
-logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 
 # === Account Mapping Functions ===
 

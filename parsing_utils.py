@@ -1,8 +1,7 @@
 """Utilities for parsing Discord messages into structured data.
 
 This module contains helpers for interpreting on-message events, including
-order parsing and holdings extraction from embed messages. Account mappings
-are loaded once at import time for efficient lookups.
+order parsing and holdings extraction from embed messages.
 """
 
 import csv
@@ -16,18 +15,18 @@ from typing import Match, Optional, Tuple
 from discord import embeds
 
 from utils.config_utils import (
+    ACCOUNT_MAPPING,
     DISCORD_PRIMARY_CHANNEL,
-    load_account_mappings,
+    get_account_nickname,
 )
-from utils.csv_utils import save_order_to_csv
+from utils.csv_utils import save_holdings_to_csv, save_order_to_csv
 from utils.excel_utils import update_excel_log
 from utils.sql_utils import insert_order_history
 from utils.utility_utils import debug_order_data, get_last_stock_price
 
 from utils import split_watch_utils
 
-# Load account mappings once at import time
-account_mapping = load_account_mappings()
+account_mapping = ACCOUNT_MAPPING
 
 # Store incomplete orders
 incomplete_orders = {}
@@ -581,10 +580,23 @@ def parse_embed_message(embeds):
     parsed_holdings = main_embed_message(embeds)
 
     if not parsed_holdings:
-        logger.error("No holdings were parsed from the embed message.")
+<<<<<<< Updated upstream
+        logging.error("No holdings were parsed from the embed message.")
         return []
 
     return parsed_holdings
+=======
+        logger.error("No holdings were parsed from the embed message.")
+        return
+
+    save_success = save_holdings_to_csv([parsed_holdings])
+
+    # Check if holdings were successfully saved
+    if save_success:
+        logger.info("Holdings have been successfully parsed and saved.")
+    else:
+        logger.error("Failed to save holdings to CSV.")
+>>>>>>> Stashed changes
 
 
 def main_embed_message(embed_list):
@@ -822,12 +834,11 @@ def parse_fennel_embed_message(embed):
 
 
 def get_account_nickname_or_default(broker_name, group_number, account_number):
-    """Return an account nickname or a generic fallback.
-
-    The nickname is looked up from the preloaded :data:`account_mapping`.
+    """
+    Returns the account nickname from ACCOUNT_MAPPING. Falls back to generic string if not found.
     """
     try:
-        broker_data = account_mapping.get(broker_name, {})
+        broker_data = ACCOUNT_MAPPING.get(broker_name, {})
         group_data = broker_data.get(str(group_number), {})
 
         if not isinstance(group_data, dict):

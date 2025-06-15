@@ -1,7 +1,5 @@
 # utils/policy_resolver.py
-"""Utilities for fetching and analyzing reverse split policy sources."""
 
-import os
 import requests
 import re
 from bs4 import BeautifulSoup
@@ -108,38 +106,6 @@ class SplitPolicyResolver:
         except Exception as e:
             logger.error(f"Error fetching SEC filing text: {e}")
             return None
-
-    @staticmethod
-    def fetch_body_text(url):
-        """Retrieve cleaned body text from a webpage."""
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, "html.parser")
-            body = soup.body or soup
-            for tag in body(["script", "style"]):
-                tag.decompose()
-            text = body.get_text(separator=" ", strip=True)
-            text = " ".join(text.split())
-            logger.info(f"Fetched body text ({len(text)} characters) from {url}")
-            return text
-        except Exception as e:
-            logger.error(f"Error fetching body text from {url}: {e}")
-            return None
-
-    @staticmethod
-    def log_full_return(url, text, log_file="volumes/logs/source_return.log"):
-        """Append fetched text to a log file for reference."""
-        try:
-            os.makedirs(os.path.dirname(log_file), exist_ok=True)
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"URL: {url}\n{text}\n\n")
-        except Exception as e:
-            logger.error(f"Failed to write full return to {log_file}: {e}")
 
     @staticmethod
     def analyze_fractional_share_policy(text):
@@ -276,17 +242,6 @@ class SplitPolicyResolver:
                         nasdaq_result["round_up_confirmed"] = cls.is_round_up_policy(
                             policy_text
                         )
-
-            source_url = nasdaq_result.get("press_url") or nasdaq_result.get("sec_url")
-            if source_url:
-                body_text = cls.fetch_body_text(source_url)
-                if body_text:
-                    cls.log_full_return(source_url, body_text)
-                    nasdaq_result["body_text"] = body_text
-                else:
-                    logger.warning(f"Failed to fetch body text from {source_url}")
-            else:
-                logger.warning("No press or SEC URL found for body text retrieval.")
 
             logger.info(f"Completed full_analysis for: {nasdaq_url}")
             return nasdaq_result
