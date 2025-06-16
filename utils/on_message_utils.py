@@ -70,7 +70,14 @@ async def handle_on_message(bot, message):
         await handle_secondary_channel(bot, message)
 
 
-async def handle_primary_channel(message):
+async def handle_primary_channel(bot, message):
+    """Process messages received in the primary channel.
+
+    Embed messages are treated as holdings updates and persisted to the
+    holdings CSV log. All other messages are routed to order parsing or
+    maintenance commands.
+    """
+
     if message.content.lower().startswith("manual"):
         logger.warning(f"Manual order detected: {message.content}")
 
@@ -88,7 +95,8 @@ async def handle_primary_channel(message):
                 holding["Key"] = (
                     f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
                 )
-                parse_embed_message(message)
+
+            save_holdings_to_csv(parsed_holdings)
         except Exception as e:
             logger.error(f"Error parsing embed message: {e}")
     else:
