@@ -64,7 +64,11 @@ order_patterns = {
 
 # Complete Orders Main
 def parse_order_message(content):
-    """Parses incoming messages and routes them to the correct handler based on type."""
+    """Parse an order message and route it to the appropriate handler.
+
+    The handlers themselves perform database persistence and any split watch
+    adjustments. This function simply determines which handler to invoke.
+    """
     for order_type, patterns in order_patterns.items():
         for broker_name, pattern in patterns.items():
             match = re.match(pattern, content, re.IGNORECASE)
@@ -75,13 +79,6 @@ def parse_order_message(content):
                 # Route to the correct handler based on the type
                 if order_type == "complete":
                     handle_complete_order(match, broker_name, broker_number)
-                    if (
-                        action == "sell"
-                        and ticker
-                        and split_watch_utils.get_status(ticker)
-                    ):
-                        split_watch_utils.mark_account_sold(ticker, account_name)
-                        logger.info(f"Marked {account_name} as having sold {ticker}.")
 
                 elif order_type == "incomplete":
                     handle_incomplete_order(match, broker_name, broker_number)
