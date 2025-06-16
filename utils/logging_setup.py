@@ -1,4 +1,8 @@
-# === logging_setup.py (with Docker heartbeat and reconnect resilience) ===
+"""Centralized logging configuration for RSAssistant.
+
+Provides colored console output, file logging with rotation, and a
+heartbeat writer for Docker health checks.
+"""
 import logging
 import os
 import sys
@@ -58,7 +62,7 @@ def setup_logging(config=None, verbose=False):
         else:
             console_handler.stream = open(1, "w", encoding="utf-8", closefd=False)
     except Exception as e:
-        print(f"Failed to set UTF-8 encoding for console: {e}")
+        logging.warning(f"Failed to set UTF-8 encoding for console: {e}")
 
     filter_invalid_chars = ReplaceInvalidCharactersFilter()
     for h in [handler, console_handler]:
@@ -131,12 +135,14 @@ def setup_logging(config=None, verbose=False):
             return super().format(record)
 
     console_handler.setFormatter(
-        ColorFormatter("%(asctime)s - %(levelname)s - %(message)s")
+        ColorFormatter(
+            "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+        )
     )
 
     logging.basicConfig(
         level=getattr(logging, log_level, logging.INFO),
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s",
         handlers=[handler, console_handler],
     )
 

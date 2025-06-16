@@ -1,7 +1,11 @@
+"""Utility helpers for account mapping and Discord interactions."""
+
 import asyncio
 import csv
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 import os
 import warnings
 from datetime import datetime, timedelta
@@ -52,7 +56,7 @@ def debug_insert_order_history(order_data):
 
 def debug_order_data(order_data):
     debug_data = debug_insert_order_history(order_data)
-    print(f"Order data being passed to SQL: {debug_data}")
+    logger.debug(f"Order data being passed to SQL: {debug_data}")
 
 
 HOLDINGS_TIMESTAMP = check_holdings_timestamp(HOLDINGS_LOG_CSV)
@@ -198,12 +202,12 @@ async def get_detailed_broker_view(
     - Accounts not holding the position.
     """
     broker_name = specific_broker.capitalize()
-    print(f"looking up {broker_name} in mapping")
+    logger.debug(f"looking up {broker_name} in mapping")
 
     if specific_broker.upper() == "BBAE":
         broker_name = "BBAE"  # Ensures 'BBAE' is always in all caps for the lookup
 
-    print(f"looking up{broker_name}")
+    logger.debug(f"looking up{broker_name}")
 
     accounts_with_position = []
     accounts_without_position = []
@@ -568,10 +572,10 @@ def all_brokers_summary_by_owner(specific_broker=None):
     group_titles = config.get("account_owners", {})
     brokers_summary = {}
 
-    # Debug: Print the structure of account_mapping
-    print("\nAccount Mapping Structure:")
+    # Debug: log the structure of account_mapping
+    logger.debug("\nAccount Mapping Structure:")
     for broker, broker_data in ACCOUNT_MAPPING.items():
-        print(f"{broker}: {broker_data}")
+        logger.debug(f"{broker}: {broker_data}")
 
     processed_accounts = set()  # Track processed accounts to avoid duplicates
 
@@ -596,7 +600,7 @@ def all_brokers_summary_by_owner(specific_broker=None):
             try:
                 total = float(total_str) if total_str else 0.0
             except ValueError:
-                print(f"Skipping invalid total in row: {row}")
+                logger.debug(f"Skipping invalid total in row: {row}")
                 continue
 
             # Mark this account as processed
@@ -614,10 +618,10 @@ def all_brokers_summary_by_owner(specific_broker=None):
                         nickname = accounts[account_number]
                         break
 
-            print(f"Fetched Nickname: '{nickname}'")
+            logger.debug(f"Fetched Nickname: '{nickname}'")
 
             if not nickname:
-                print(
+                logger.debug(
                     f"No nickname found for Broker: {broker_name}, Account Number: {account_number}"
                 )
 
@@ -626,11 +630,13 @@ def all_brokers_summary_by_owner(specific_broker=None):
 
             # Match the owner based on account_owners' indicators in the nickname
             for indicator, owner_name in group_titles.items():
-                print(f"Checking if '{indicator}' in nickname '{nickname}'...")
+                logger.debug(f"Checking if '{indicator}' in nickname '{nickname}'...")
                 if indicator in nickname:
                     owner = owner_name
                     matched = True
-                    print(f"Match found! Indicator: '{indicator}' -> Owner: {owner}")
+                    logger.debug(
+                        f"Match found! Indicator: '{indicator}' -> Owner: {owner}"
+                    )
                     break
                 # else:
                 # print(
@@ -646,7 +652,7 @@ def all_brokers_summary_by_owner(specific_broker=None):
 
             # Accumulate the total for the owner
             brokers_summary[broker_name][owner] += total
-            print(f"Added ${total:,.2f} to {owner} under {broker_name}")
+            logger.debug(f"Added ${total:,.2f} to {owner} under {broker_name}")
 
     return brokers_summary
 
@@ -763,7 +769,7 @@ async def print_to_discord(ctx, file_path="todiscord.txt", delay=1):
 
 
 async def send_large_message_chunks(ctx, message):
-    print("This function depraced, move it to config boy.")
+    logger.warning("send_large_message_chunks is deprecated.")
 
     # Discord messages have a max character limit of 2000
     max_length = 2000
@@ -794,7 +800,7 @@ async def send_large_message_chunks(ctx, message):
 def get_order_details(broker, account_number, ticker):
     """# Search orders_log.csv for matching broker, account, and stock ticker.
     try:
-        print(broker, ticker, account_number)
+        logger.debug(f"Querying orders for {broker} {account_number} {ticker}")
         with open(ORDERS_CSV_FILE, mode='r') as file:
             csv_reader = csv.DictReader(file)
             for row in csv_reader:

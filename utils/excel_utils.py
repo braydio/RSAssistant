@@ -1,3 +1,5 @@
+"""Excel workbook helpers for account and order management."""
+
 import json
 import logging
 import os
@@ -692,7 +694,7 @@ def record_error_message(error_message, order_details, error_log_file=ERROR_LOG_
 
 
 def log_error_order_details(order_details):
-    print(
+    logger.info(
         "Deprecating function called log_error_order_details in excel_utils -- returning"
     )
     return

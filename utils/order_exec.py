@@ -1,5 +1,9 @@
+"""Async order execution helpers for autoRSA interactions."""
+
 import asyncio
 import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 
 from utils.watch_utils import watch_list_manager
@@ -14,7 +18,7 @@ async def processTasks(message):
     Args:
         message (str): The message to be sent to Discord.
     """
-    print(f"Sending message to Discord: {message}")
+    logger.info(f"Sending message to Discord: {message}")
     # Simulate sending a message to Discord here
     await asyncio.sleep(0.1)  # Mock delay for sending the message
 
@@ -26,7 +30,7 @@ def printAndDiscord(message, loop=None):
         message (str): The message to send to Discord.
         loop (asyncio.AbstractEventLoop): The event loop for task queue processing.
     """
-    print(message)  # Log to console
+    logger.info(message)
     if loop:
         loop.call_soon_threadsafe(task_queue.put_nowait, message)
         if task_queue.qsize() == 1:  # Start processing if the queue is not empty
@@ -52,11 +56,11 @@ async def send_sell_command(ctx, command: str, loop=None):
     """
     try:
         # Send the command using the helperAPI
-        logging.info(f"Preparing to send command: {command}")
+        logger.info(f"Preparing to send command: {command}")
         await ctx.send(command)
-        logging.info(f"Sent command: {command} to channel {ctx.channel.id}")
+        logger.info(f"Sent command: {command} to channel {ctx.channel.id}")
     except Exception as e:
-        logging.error(f"Error sending sell command: {e}")
+        logger.error(f"Error sending sell command: {e}")
         await ctx.send(command)
 
 
@@ -74,10 +78,10 @@ async def process_sell_list():
                     # Remove the executed order from the sell list
                     del watch_list_manager.sell_list[ticker]
                     watch_list_manager.save_sell_list()
-                    logging.info(f"Executed and removed {ticker} from sell list.")
+                    logger.info(f"Executed and removed {ticker} from sell list.")
             await asyncio.sleep(60)  # Check every minute
         except Exception as e:
-            logging.error(f"Error processing sell list: {e}")
+            logger.error(f"Error processing sell list: {e}")
 
 
 
@@ -107,7 +111,7 @@ async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, b
         delay = (execution_time - now).total_seconds()
 
         if delay > 0:
-            logging.info(f"Waiting {delay} seconds to execute {action} command.")
+            logger.info(f"Waiting {delay} seconds to execute {action} command.")
             await asyncio.sleep(delay)
 
         # Construct the command
@@ -117,4 +121,4 @@ async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, b
         await send_sell_command(ctx, command, loop=asyncio.get_event_loop())
 
     except Exception as e:
-        logging.error(f"Error in scheduled {action} order execution: {e}")
+        logger.error(f"Error in scheduled {action} order execution: {e}")

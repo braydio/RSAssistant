@@ -214,9 +214,13 @@ def alert_negative_quantity(order_data):
     try:
         quantity = float(order_data.get("Quantity", 0))
         if quantity < 0:
-            logger.warning(f"Negative Quantity detected in order: {order_data}")
+            logger.warning(
+                f"Negative Quantity detected in order: {order_data}"
+            )
             # You can add additional alert mechanisms here (e.g., email, Discord message)
-            print(f"ALERT: Negative Quantity detected in order: {order_data}")
+            logger.warning(
+                f"ALERT: Negative Quantity detected in order: {order_data}"
+            )
     except ValueError:
         logger.error(
             f"Invalid Quantity value in order: {order_data.get('Quantity')}, unable to check for negativity."
@@ -553,9 +557,6 @@ def get_top_holdings(range=3):
                 if stock_ticker not in existing_tickers:
                     broker_data[broker_name].append(holding)
                     logger.debug(
-                        f"Added distinct holding for broker '{broker_name}': {holding}"
-                    )
-                    print(
                         f"Added distinct holding for broker '{broker_name}': {holding}"
                     )
 
