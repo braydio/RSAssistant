@@ -52,7 +52,9 @@ order_patterns = {
         "Schwab": r"(Schwab)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
         "Vanguard": r"(Vanguard)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(market|limit)",
         "Chase": r"(Chase)\s(\d+)\s(buying|selling)\s(\d+\.?\d*)\s(\w+)\s@\s(LIMIT|MARKET)",
-        "Public": r"(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxxx|xxxx)?(\d{4}):\s(Success|Failed)",
+        # Matches order notifications that lack account numbers or status lines.
+        # Example: "Public 4: selling 0.5 of ABC".
+        "Public": r"(Public)\s(\d+):\s(selling|buying)\s(\d+\.?\d*)\sof\s(\w+)",
     },
     "verification": {
         "Schwab": r"(Schwab)\s(\d+)\saccount\sxxxx(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
@@ -116,7 +118,9 @@ def parse_broker_data(
         "complete": {
             "BBAE": (6, 3, 4, 5),
             "Fennel": (6, 3, 4, 5),
-            "Public": (None, 1, 2, 3),
+            # Public messages do not include account numbers in the initial
+            # notification. Groups are: broker, group, action, quantity, ticker.
+            "Public": (None, 3, 4, 5),
             "Robinhood": (6, 3, 4, 5),
             "WELLSFARGO": (3, 4, 5, 6),
             "Fidelity": (3, 4, 5, 6),
@@ -130,7 +134,8 @@ def parse_broker_data(
             "Vanguard": (None, 3, 4, 5),
             "Chase": (None, 3, 4, 5),
             "Tradier": (None, 3, 4, 5),
-            "Public": (2, 3, 4, 5),
+            # Same group layout as the complete pattern but without account data
+            "Public": (None, 3, 4, 5),
         },
         "verification": {
             "Schwab": (3, None, None, None),
