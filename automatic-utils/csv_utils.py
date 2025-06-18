@@ -260,7 +260,8 @@ def save_order_to_csv(order_data):
 
 # ! --- Holdings Management ---
 
-CURRENT_HOLDINGS = load_csv_log(HOLDINGS_LOG_CSV)
+# ``get_top_holdings`` loads holdings from :data:`HOLDINGS_LOG_CSV` on each
+# invocation, so no module-level cache is maintained.
 
 
 def save_holdings_to_csv(parsed_holdings):
@@ -480,9 +481,12 @@ def get_top_holdings(range=3):
     latest_timestamp = None
 
     try:
+        # Reload holdings from disk each call
+        current_holdings = load_csv_log(HOLDINGS_LOG_CSV)
+
         # Filter holdings where Quantity <= 1 and group by broker
         filtered_holdings = []
-        for holding in CURRENT_HOLDINGS:
+        for holding in current_holdings:
             try:
                 quantity = float(holding.get("Quantity", 0))
                 if quantity <= 1:
