@@ -2,14 +2,16 @@
 
 import asyncio
 import logging
-
-logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 
 from utils.watch_utils import watch_list_manager
+from utils.order_queue_manager import add_to_order_queue, remove_order
+
+logger = logging.getLogger(__name__)
 
 # Task queue for handling messages
 task_queue = asyncio.Queue()
+
 
 async def processTasks(message):
     """
@@ -21,6 +23,7 @@ async def processTasks(message):
     logger.info(f"Sending message to Discord: {message}")
     # Simulate sending a message to Discord here
     await asyncio.sleep(0.1)  # Mock delay for sending the message
+
 
 def printAndDiscord(message, loop=None):
     """
@@ -36,6 +39,7 @@ def printAndDiscord(message, loop=None):
         if task_queue.qsize() == 1:  # Start processing if the queue is not empty
             asyncio.run_coroutine_threadsafe(processQueue(), loop)
 
+
 async def processQueue():
     """
     Processes all tasks in the queue and sends them to Discord.
@@ -45,23 +49,18 @@ async def processQueue():
         await processTasks(message)
         task_queue.task_done()
 
-async def send_sell_command(ctx, command: str, loop=None):
-    """
-    Sends the `!rsa sell` command to the specified Discord channel using helperAPI.
 
-    Args:
-        ctx (discord.ext.commands.Context): The Discord context object.
-        command (str): The command to send.
-        loop (asyncio.AbstractEventLoop): The event loop for task queue processing.
-    """
+async def send_sell_command(target, command: str, loop=None):
+    """Send an order command to a Discord context or channel."""
+
     try:
-        # Send the command using the helperAPI
         logger.info(f"Preparing to send command: {command}")
-        await ctx.send(command)
-        logger.info(f"Sent command: {command} to channel {ctx.channel.id}")
+        await target.send(command)
+        channel = getattr(target, "channel", target)
+        channel_id = getattr(channel, "id", "unknown")
+        logger.info(f"Sent command: {command} to channel {channel_id}")
     except Exception as e:
         logger.error(f"Error sending sell command: {e}")
-        await ctx.send(command)
 
 
 async def process_sell_list():
@@ -69,7 +68,9 @@ async def process_sell_list():
         try:
             now = datetime.now()
             for ticker, details in list(watch_list_manager.sell_list.items()):
-                scheduled_time = datetime.strptime(details["scheduled_time"], "%Y-%m-%d %H:%M:%S")
+                scheduled_time = datetime.strptime(
+                    details["scheduled_time"], "%Y-%m-%d %H:%M:%S"
+                )
                 if now >= scheduled_time:
                     # Execute the sell command
                     command = f"test command {details['quantity']} {ticker} {details['broker']} false"
@@ -84,41 +85,56 @@ async def process_sell_list():
             logger.error(f"Error processing sell list: {e}")
 
 
+async def schedule_and_execute(
+    ctx,
+    action: str,
+    ticker: str,
+    quantity: float,
+    broker: str,
+    execution_time: datetime,
+    *,
+    order_id: str | None = None,
+    add_to_queue: bool = True,
+):
+    """Schedule and execute an order at ``execution_time``."""
 
-async def schedule_and_execute(ctx, action: str, ticker: str, quantity: float, broker: str, execution_time: datetime):
-    """
-    Schedules and executes a sell order by sending a command to the target bot using helperAPI.
-
-    Args:
-        ctx (discord.ext.commands.Context): The Discord context object.
-        action (str): Order type - buy|sell
-        ticker (str): The stock ticker symbol.
-        quantity (float): Quantity of stock to sell.
-        broker (str): Broker to execute the sell order. Use 'all' for all brokers.
-        execution_time (datetime): The time to execute the sell order.
-    """
     try:
-        # Add order to the sell list
-        watch_list_manager.add_to_sell_list(
-            ticker=ticker,
-            broker=broker,
-            quantity=quantity,
-            scheduled_time=execution_time.strftime("%Y-%m-%d %H:%M:%S"),
-        )
+        if order_id is None:
+            order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_{action.lower()}"
 
-        # Calculate delay until execution
+        if add_to_queue:
+            add_to_order_queue(
+                order_id,
+                {
+                    "action": action,
+                    "ticker": ticker.upper(),
+                    "quantity": quantity,
+                    "broker": broker,
+                    "time": execution_time.strftime("%Y-%m-%d %H:%M:%S"),
+                },
+            )
+
+        if action.lower() == "sell":
+            watch_list_manager.add_to_sell_list(
+                ticker=ticker,
+                broker=broker,
+                quantity=quantity,
+                scheduled_time=execution_time.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+
         now = datetime.now()
-        delay = (execution_time - now).total_seconds()
-
+        delay = max((execution_time - now).total_seconds(), 0)
         if delay > 0:
             logger.info(f"Waiting {delay} seconds to execute {action} command.")
             await asyncio.sleep(delay)
 
-        # Construct the command
         command = f"!rsa {action} {quantity} {ticker.upper()} {broker} false"
-
-        # Execute the command
         await send_sell_command(ctx, command, loop=asyncio.get_event_loop())
+
+        if action.lower() == "sell":
+            watch_list_manager.remove_from_sell_list(ticker)
+
+        remove_order(order_id)
 
     except Exception as e:
         logger.error(f"Error in scheduled {action} order execution: {e}")
