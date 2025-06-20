@@ -64,57 +64,73 @@ async def track_ticker_summary(
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
 
-    # Load account mappings 
+    # Load account mappings
     mapped_accounts = load_account_mappings()
 
     try:
-        # Read holdings log
+        # Read holdings log and keep only the latest row per account
+        latest_rows = {}
         with open(holding_logs_file, mode="r") as file:
             csv_reader = csv.DictReader(file)
 
             for row in csv_reader:
-                account_key = row["Key"]  # "Broker Name + Nickname"
-                stock = row["Stock"].upper().strip()  # Standardize stock symbol
-
-                # Parse quantity, price, and account total
-                try:
-                    quantity = float(row["Quantity"])
-                    price = float(row["Price"])
-                    account_total = float(row["Account Total"])
-                except ValueError:
-                    continue  # Skip rows where Quantity, Price, or Account Total are invalid
-
                 broker_name = row["Broker Name"]
+                account_key = row["Key"]  # "Broker Name + Nickname"
 
-                # Initialize broker in holdings if not present
-                if broker_name not in holdings:
-                    holdings[broker_name] = {}
+                timestamp_str = row.get("Timestamp", "")
+                try:
+                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    timestamp = datetime.min
 
-                # Store detailed data in a dictionary
-                if stock == ticker and quantity > 0:
-                    holdings[broker_name][account_key] = {
-                        "status": "✅",
-                        "Quantity": quantity,
-                        "Price": price,
-                        "Account Total": account_total,
-                    }
-                else:
-                    # Only set to "❌" if not already marked as holding, to avoid overwriting
-                    if account_key not in holdings[broker_name]:
-                        holdings[broker_name][account_key] = {
-                            "status": "❌",
-                            "Quantity": "N/A",
-                            "Price": "N/A",
-                            "Account Total": "N/A",
-                        }
+                key = (broker_name, account_key)
+                if key not in latest_rows or timestamp > latest_rows[key]["_ts"]:
+                    row["_ts"] = timestamp
+                    latest_rows[key] = row
+
+        # Build holdings dict from latest rows
+        for (broker_name, account_key), row in latest_rows.items():
+            stock = row["Stock"].upper().strip()
+
+            try:
+                quantity = float(row["Quantity"])
+                price = float(row["Price"])
+                account_total = float(row["Account Total"])
+            except ValueError:
+                continue
+
+            if broker_name not in holdings:
+                holdings[broker_name] = {}
+
+            if stock == ticker and quantity > 0:
+                holdings[broker_name][account_key] = {
+                    "status": "✅",
+                    "Quantity": quantity,
+                    "Price": price,
+                    "Account Total": account_total,
+                }
+            else:
+                holdings[broker_name][account_key] = {
+                    "status": "❌",
+                    "Quantity": "N/A",
+                    "Price": "N/A",
+                    "Account Total": "N/A",
+                }
+
+        latest_timestamp = (
+            max(row["_ts"] for row in latest_rows.values()) if latest_rows else None
+        )
+        timestamp_str = (
+            latest_timestamp.strftime("%Y-%m-%d %H:%M:%S") if latest_timestamp else ""
+        )
 
         # Decide which view to show based on the specific_broker argument
         if specific_broker:
             await get_detailed_broker_view(
-                ctx, ticker, specific_broker, holdings, mapped_accounts
+                ctx, ticker, specific_broker, holdings, mapped_accounts, timestamp_str
             )
         else:
-            await get_aggregated_broker_summary(ctx, ticker, holdings, mapped_accounts)
+            await get_aggregated_broker_summary(ctx, ticker, holdings, mapped_accounts, timestamp_str)
 
     except FileNotFoundError:
         await ctx.send(
@@ -125,7 +141,7 @@ async def track_ticker_summary(
     except Exception as e:
         await ctx.send(f"Error: {e}")
 
-async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping):
+async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping, timestamp_str=""):
     """
     Generates an aggregated summary of positions across all brokers for a given ticker.
     """
@@ -174,12 +190,12 @@ async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping):
 
     # Add footer with timestamp
     embed.set_footer(
-        text=f"Try: '..brokerwith {ticker} <broker>' for details. • {HOLDINGS_TIMESTAMP}"
+        text=f"Try: '..brokerwith {ticker} <broker>' for details. • {timestamp_str}"
     )
     await ctx.send(embed=embed)
 
 async def get_detailed_broker_view(
-    ctx, ticker, specific_broker, holdings, account_mapping
+    ctx, ticker, specific_broker, holdings, account_mapping, timestamp_str=""
 ):
     """
     Organizes the detailed view for a specific broker, calling separate functions to display:
@@ -234,16 +250,16 @@ async def get_detailed_broker_view(
 
         # Send embeds for accounts with and without position
         await send_accounts_with_position_embed(
-            ctx, broker_name, ticker, accounts_with_position
+            ctx, broker_name, ticker, accounts_with_position, timestamp_str
         )
         await send_accounts_without_position_embed(
-            ctx, broker_name, ticker, accounts_without_position
+            ctx, broker_name, ticker, accounts_without_position, timestamp_str
         )
     else:
         await ctx.send(f"No broker found for {broker_name}.")
 
 async def send_accounts_with_position_embed(
-    ctx, broker_name, ticker, accounts_with_position
+    ctx, broker_name, ticker, accounts_with_position, timestamp_str=""
 ):
     """
     Creates and sends an embed for accounts that hold the ticker position.
@@ -274,7 +290,7 @@ async def send_accounts_with_position_embed(
             )
         # Add footer with the timestamp from HOLDINGS_TIMESTAMP
         embed_with_position.set_footer(
-            text=f"Detailed holdings for {ticker} • {HOLDINGS_TIMESTAMP}"
+            text=f"Detailed holdings for {ticker} • {timestamp_str}"
         )
         await ctx.send(embed=embed_with_position)
     else:
@@ -284,11 +300,11 @@ async def send_accounts_with_position_embed(
             description="No accounts hold this position",
             color=discord.Color.red(),
         )
-        embed_with_position.set_footer(text=HOLDINGS_TIMESTAMP)
+        embed_with_position.set_footer(text=timestamp_str)
         await ctx.send(embed=embed_with_position)
 
 async def send_accounts_without_position_embed(
-    ctx, broker_name, ticker, accounts_without_position
+    ctx, broker_name, ticker, accounts_without_position, timestamp_str=""
 ):
     """
     Creates and sends an embed for accounts that do not hold the ticker position.
@@ -308,7 +324,7 @@ async def send_accounts_without_position_embed(
             )
         # Add footer with the timestamp from HOLDINGS_TIMESTAMP
         embed_without_position.set_footer(
-            text=f"Accounts without holdings for {ticker} • {HOLDINGS_TIMESTAMP}"
+            text=f"Accounts without holdings for {ticker} • {timestamp_str}"
         )
         await ctx.send(embed=embed_without_position)
     else:
@@ -318,7 +334,7 @@ async def send_accounts_without_position_embed(
             description="All accounts hold this position",
             color=discord.Color.green(),
         )
-        embed_without_position.set_footer(text=HOLDINGS_TIMESTAMP)
+        embed_without_position.set_footer(text=timestamp_str)
         await ctx.send(embed=embed_without_position)
 
 async def all_brokers(ctx):
