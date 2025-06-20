@@ -57,8 +57,16 @@ class SplitPolicyResolver:
             links = [
                 link["href"]
                 for link in soup.find_all("a", href=True)
-                if "sec.gov" in link["href"]
+                if any(
+                    domain in link["href"].lower()
+                    for domain in ["sec.gov", "quotemedia.com"]
+                )
             ]
+
+            if not links:
+                text_link = soup.find("a", string=re.compile("SEC Filing", re.I))
+                if text_link and text_link.get("href"):
+                    links.append(text_link["href"])
 
             if not links:
                 logger.warning("No SEC Filing links found on NASDAQ page.")
@@ -77,8 +85,11 @@ class SplitPolicyResolver:
                     filtered_links.append(link)
 
             if filtered_links:
-                logger.info(f"SEC Filing link selected: {filtered_links[0]}")
-                return filtered_links[0]
+                sec_link = filtered_links[0]
+                if sec_link.startswith("/"):
+                    sec_link = "https://www.nasdaqtrader.com" + sec_link
+                logger.info(f"SEC Filing link selected: {sec_link}")
+                return sec_link
 
             logger.warning("No valid SEC Filing link after filtering.")
             return None
@@ -130,6 +141,24 @@ class SplitPolicyResolver:
         except Exception as e:
             logger.error(f"Error fetching body text from {url}: {e}")
             return None
+
+    @staticmethod
+    def extract_round_up_snippet(text, window=5):
+        """Return a short phrase around any round-up mention."""
+        phrases = [
+            "rounded up",
+            "round up",
+            "rounded to the nearest",
+        ]
+        for phrase in phrases:
+            pattern = re.compile(
+                rf'(?:\S+\s+){{0,{window}}}{re.escape(phrase)}(?:\s+\S+){{0,{window}}}',
+                re.IGNORECASE,
+            )
+            match = pattern.search(text)
+            if match:
+                return match.group(0).strip()
+        return None
 
     @staticmethod
     def log_full_return(url, text, log_file="volumes/logs/source_return.log"):
@@ -196,9 +225,12 @@ class SplitPolicyResolver:
             filing_text = cls.fetch_sec_filing_text(sec_url)
             if filing_text:
                 sec_policy = cls.analyze_fractional_share_policy(filing_text)
+                snippet = cls.extract_round_up_snippet(filing_text)
                 return {
                     "sec_policy": sec_policy,
                     "sec_url": sec_url,
+                    "snippet": snippet,
+                    "round_up_confirmed": bool(snippet),
                 }
             else:
                 return {
