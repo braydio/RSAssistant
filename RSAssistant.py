@@ -1,4 +1,9 @@
 # RSAssistant.py
+"""Discord bot for monitoring reverse splits and scheduling trades.
+
+This module initializes the Discord bot, registers command handlers, and
+manages scheduled orders using a persistent queue.
+"""
 import asyncio
 import csv
 import json
@@ -161,12 +166,11 @@ async def on_ready():
     except (FileNotFoundError, json.JSONDecodeError):
         ready_message = account_setup_message
 
-    # Send ready message to the primary channel
+    # Send ready message with current time and queue size
     if channel:
+        queued = len(get_order_queue())
         await channel.send(
-            f"{ready_message}\nThe time is {now.strftime('%m-%d %H:%M')}"
-            f"Orders Log at {ORDERS_LOG_CSV}"
-            f"Holdings Log at {HOLDINGS_LOG_CSV}"
+            f"{ready_message}\nTime: {now.strftime('%Y-%m-%d %H:%M:%S')} | Queued orders: {queued}"
         )
     else:
         logger.warning(
