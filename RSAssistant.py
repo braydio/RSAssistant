@@ -1,4 +1,9 @@
 # RSAssistant.py
+"""Discord bot for monitoring reverse splits and scheduling trades.
+
+This module initializes the Discord bot, registers command handlers, and
+manages scheduled orders using a persistent queue.
+"""
 import asyncio
 import csv
 import json
@@ -99,6 +104,38 @@ periodic_task = None
 reminder_scheduler = None
 
 
+async def reschedule_queued_orders():
+    """Reschedule any persisted orders from previous runs."""
+    queue = get_order_queue()
+    if not queue:
+        logger.info("No queued orders to reschedule.")
+        return
+
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    if not channel:
+        logger.error("Primary channel not found for rescheduling orders.")
+        return
+
+    for order_id, data in queue.items():
+        try:
+            execution_time = datetime.strptime(data["time"], "%Y-%m-%d %H:%M:%S")
+            bot.loop.create_task(
+                schedule_and_execute(
+                    channel,
+                    action=data["action"],
+                    ticker=data["ticker"],
+                    quantity=data["quantity"],
+                    broker=data["broker"],
+                    execution_time=execution_time,
+                    order_id=order_id,
+                    add_to_queue=False,
+                )
+            )
+            logger.info(f"Rescheduled queued order {order_id}")
+        except Exception as exc:
+            logger.error(f"Failed to reschedule order {order_id}: {exc}")
+
+
 @bot.event
 async def on_ready():
     """Triggered when the bot is ready."""
@@ -130,12 +167,11 @@ async def on_ready():
     except (FileNotFoundError, json.JSONDecodeError):
         ready_message = account_setup_message
 
-    # Send ready message to the primary channel
+    # Send ready message with current time and queue size
     if channel:
+        queued = len(get_order_queue())
         await channel.send(
-            f"{ready_message}\nThe time is {now.strftime('%m-%d %H:%M')}"
-            f"Orders Log at {ORDERS_LOG_CSV}"
-            f"Holdings Log at {HOLDINGS_LOG_CSV}"
+            f"{ready_message}\nTime: {now.strftime('%Y-%m-%d %H:%M:%S')} | Queued orders: {queued}"
         )
     else:
         logger.warning(
@@ -170,6 +206,8 @@ async def on_ready():
         logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     else:
         logger.info("Reminder scheduler already running.")
+
+    await reschedule_queued_orders()
 
 
 async def process_sell_list(bot):
@@ -229,31 +267,19 @@ async def process_order(
         market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
         market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
 
-        if market_open <= now <= market_close:
-            execution_time = now
-            logger.info(
-                f"Executing order {action.upper()} {ticker.upper()} now, market is open"
-            )
-            await ctx.send(
-                f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
-            )
-        else:
-            # Market closed, schedule next open
-            execution_time = now
-            if now >= market_close:
-                execution_time = (now + timedelta(days=1)).replace(
+        def next_open(base: datetime) -> datetime:
+            t = base
+            if t >= market_close:
+                t = (t + timedelta(days=1)).replace(
                     hour=9, minute=30, second=0, microsecond=0
                 )
-            elif now < market_open:
-                execution_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            elif t < market_open:
+                t = t.replace(hour=9, minute=30, second=0, microsecond=0)
+            while t.weekday() >= 5:
+                t += timedelta(days=1)
+            return t
 
-            # ⏩ SKIP to Monday if Saturday or Sunday
-            while execution_time.weekday() >= 5:
-                execution_time += timedelta(days=1)
-
-            await ctx.send(
-                f"Market closed. Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}."
-            )
+        if time:
             try:
                 if "/" in time:
                     if " " in time:
@@ -286,11 +312,6 @@ async def process_order(
 
                 if execution_time < now:
                     execution_time += timedelta(days=1)
-
-                # ⏩ Also skip weekends if custom-scheduled
-                while execution_time.weekday() >= 5:
-                    execution_time += timedelta(days=1)
-
             except ValueError as ve:
                 logger.error(
                     f"Invalid time format provided by user: {time}. Error: {ve}"
@@ -299,15 +320,33 @@ async def process_order(
                     "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
                 )
                 return
+            execution_time = next_open(execution_time)
+        else:
+            if market_open <= now <= market_close and now.weekday() < 5:
+                execution_time = now
+            else:
+                execution_time = next_open(now)
 
-        # Now actually schedule the order
-        await schedule_and_execute(
-            ctx,
-            action=action,
-            ticker=ticker,
-            quantity=quantity,
-            broker=broker,
-            execution_time=execution_time,
+        if execution_time == now:
+            await ctx.send(
+                f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
+            )
+        else:
+            await ctx.send(
+                f"Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}"
+            )
+
+        order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_{action.lower()}"
+        bot.loop.create_task(
+            schedule_and_execute(
+                ctx,
+                action=action,
+                ticker=ticker,
+                quantity=quantity,
+                broker=broker,
+                execution_time=execution_time,
+                order_id=order_id,
+            )
         )
         logger.info(
             f"Order scheduled: {action.upper()} {ticker.upper()} {quantity} {broker} at {execution_time}."

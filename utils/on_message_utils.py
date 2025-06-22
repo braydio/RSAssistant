@@ -201,13 +201,17 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
             hour=9, minute=30, second=0, microsecond=0
         )
 
-    await schedule_and_execute(
-        ctx=channel,
-        action="buy",
-        ticker=ticker,
-        quantity=quantity,
-        broker="all",
-        execution_time=execution_time,
+    order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_buy"
+    bot.loop.create_task(
+        schedule_and_execute(
+            ctx=channel,
+            action="buy",
+            ticker=ticker,
+            quantity=quantity,
+            broker="all",
+            execution_time=execution_time,
+            order_id=order_id,
+        )
     )
 
     confirmation = f"✅ Autobuy for `{ticker}` scheduled at {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
@@ -226,6 +230,10 @@ def build_policy_summary(ticker, policy_info, fallback_url):
 
     policy_text = policy_info.get("sec_policy") or policy_info.get("policy")
     summary += f" **Fractional Share Policy:** {policy_text}"
+
+    snippet = policy_info.get("snippet")
+    if snippet:
+        summary += f"\n> {snippet}"
 
     return summary
 
@@ -388,6 +396,24 @@ class SplitPolicyResolver:
             logger.error(f"Error fetching SEC filing text: {e}")
             return None
 
+    @staticmethod
+    def extract_round_up_snippet(text, window=5):
+        """Return a short excerpt around any round-up mention."""
+        phrases = [
+            "rounded up",
+            "round up",
+            "rounded to the nearest",
+        ]
+        for phrase in phrases:
+            pattern = re.compile(
+                rf'(?:\S+\s+){{0,{window}}}{re.escape(phrase)}(?:\s+\S+){{0,{window}}}',
+                re.IGNORECASE,
+            )
+            match = pattern.search(text)
+            if match:
+                return match.group(0).strip()
+        return None
+
     @classmethod
     def analyze_text(cls, text_source, keywords=None):
         if not text_source:
@@ -399,10 +425,12 @@ class SplitPolicyResolver:
 
         policy = cls.detect_policy_from_text(text, keywords or cls.SEC_KEYWORDS)
         round_up = cls.is_round_up_policy(text)
+        snippet = cls.extract_round_up_snippet(text)
         return {
             "policy": policy,
-            "round_up_confirmed": round_up,
+            "round_up_confirmed": bool(snippet) or round_up,
             "source_url": text_source,
+            "snippet": snippet,
         }
 
 
@@ -452,8 +480,16 @@ class OnMessagePolicyResolver:
             links = [
                 link["href"]
                 for link in soup.find_all("a", href=True)
-                if "sec.gov" in link["href"]
+                if any(
+                    domain in link["href"].lower()
+                    for domain in ["sec.gov", "quotemedia.com"]
+                )
             ]
+
+            if not links:
+                text_link = soup.find("a", string=re.compile("SEC Filing", re.I))
+                if text_link and text_link.get("href"):
+                    links.append(text_link["href"])
 
             filtered_links = [
                 link
@@ -467,8 +503,11 @@ class OnMessagePolicyResolver:
             ]
 
             if filtered_links:
-                logger.info(f"SEC Filing link selected: {filtered_links[0]}")
-                return filtered_links[0]
+                sec_link = filtered_links[0]
+                if sec_link.startswith("/"):
+                    sec_link = "https://www.nasdaqtrader.com" + sec_link
+                logger.info(f"SEC Filing link selected: {sec_link}")
+                return sec_link
 
             logger.warning("No valid SEC link found.")
             return None
@@ -640,8 +679,10 @@ class SplitPolicyResolver:
 
         policy = cls.detect_policy_from_text(text, keywords or cls.SEC_KEYWORDS)
         round_up = cls.is_round_up_policy(text)
+        snippet = cls.extract_round_up_snippet(text)
         return {
             "policy": policy,
-            "round_up_confirmed": round_up,
+            "round_up_confirmed": bool(snippet) or round_up,
             "source_url": text_source,
+            "snippet": snippet,
         }

@@ -5,7 +5,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import utility_utils
 
-
 def test_aggregate_owner_totals(monkeypatch):
     sample = {
         "Broker1": {"OwnerA": 100.0, "OwnerB": 50.0},
