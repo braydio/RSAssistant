@@ -673,74 +673,70 @@ def all_brokers_summary_by_owner(specific_broker=None):
     return brokers_summary
 
 
-def generate_broker_summary_embed(ctx, specific_broker=None):
-    """
-    Generates a Discord embed for account owner summaries.
+def generate_broker_summary_embed(specific_broker=None):
+    """Return a Discord embed summarizing holdings by owner for each broker."""
 
-    Parameters:
-        broker_name (str, optional): If provided, only show summary for this broker.
+    brokers_summary = all_brokers_summary_by_owner(specific_broker)
+    broker_label = (
+        specific_broker.upper()
+        if specific_broker and specific_broker.lower() in ["bbae", "dspac"]
+        else specific_broker.capitalize() if specific_broker else "All Active Brokers"
+    )
 
-    Returns:
-        discord.Embed: The generated embed with summaries by account owner.
-    """
-    brokers_summary = all_brokers_summary_by_owner(specific_broker=None)
-    if specific_broker:
-        broker = (
-            specific_broker.upper()
-            if specific_broker.lower() in ["bbae", "dspac"]
-            else specific_broker.capitalize()
-        )
-    else:
-        broker = "All Active Brokers"
+    embed = discord.Embed(
+        title=f"**{broker_label} Summary**", color=discord.Color.blue()
+    )
 
-    embed_title = f"**{broker} Summary**"
-    embed = discord.Embed(title=embed_title, color=discord.Color.blue())
-
-    for broker, owner_totals in brokers_summary.items():
-        # Calculate the total number of accounts for the broker
+    for broker_name, owner_totals in brokers_summary.items():
         account_owner_count = sum(
             len(accounts)
-            for broker_number, accounts in ACCOUNT_MAPPING.get(broker, {}).items()
+            for _group, accounts in ACCOUNT_MAPPING.get(broker_name, {}).items()
         )
+        broker_total = sum(owner_totals.values())
 
-        broker_total = sum(
-            owner_totals.values()
-        )  # Calculate the total holdings for the broker
+        filtered_totals = {o: t for o, t in owner_totals.items() if t != 0}
+        if not filtered_totals:
+            continue
 
-        # Include broker total in the summary header
         broker_summary = (
             f"({account_owner_count} Owner groups, Total: ${broker_total:,.2f})\n"
         )
+        for owner, total in filtered_totals.items():
+            broker_summary += f"{owner}: ${total:,.2f}\n"
 
-        for account_owner, account_totals in owner_totals.items():
-            broker_summary += f"{account_owner}: ${account_totals:,.2f}\n"
+        formatted_name = (
+            broker_name.upper()
+            if broker_name.lower() in ["bbae", "dspac"]
+            else broker_name.capitalize()
+        )
+        embed.add_field(name=formatted_name, value=broker_summary.strip(), inline=True)
 
-        # Filter out zero-balance owners
-        filtered_totals = {
-            owner: total for owner, total in owner_totals.items() if total != 0
-        }
+        if specific_broker:
+            break
 
-        # Only add the broker field if there are owners with non-zero balances
-        if filtered_totals:
-            for owner, total in filtered_totals.items():
-                broker_summary += f"{owner}: ${total:,.2f}\n"
+    return embed
 
-            # Capitalize or adjust broker name if needed
-            formatted_broker_name = (
-                broker.upper()
-                if broker.lower() in ["bbae", "dspac"]
-                else broker.capitalize()
-            )
-            embed.add_field(
-                name=formatted_broker_name,
-                value=broker_summary.strip(),  # Remove trailing newline
-                inline=True,
-            )
 
-            # Only show one broker if a specific one was requested
-            if specific_broker:
-                break
+def aggregate_owner_totals():
+    """Return total holdings aggregated by owner across all brokers."""
 
+    summary = all_brokers_summary_by_owner()
+    owner_totals = {}
+    for broker_totals in summary.values():
+        for owner, total in broker_totals.items():
+            owner_totals[owner] = owner_totals.get(owner, 0.0) + total
+    return owner_totals
+
+
+def generate_owner_totals_embed():
+    """Create a Discord embed showing aggregated holdings by owner."""
+
+    owner_totals = aggregate_owner_totals()
+    embed = discord.Embed(
+        title="**Owner Totals Across Brokers**", color=discord.Color.blue()
+    )
+    for owner, total in sorted(owner_totals.items(), key=lambda x: x[1], reverse=True):
+        embed.add_field(name=owner, value=f"${total:,.2f}", inline=True)
     return embed
 
 
