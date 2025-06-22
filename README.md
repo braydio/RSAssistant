@@ -15,6 +15,8 @@ Features
 	•	Dynamic scheduling: handles market open/close, weekends, and holidays.
 	•	Professional-grade logging for full traceability and debugging.
 	•	Seamless Discord integration for alerts, updates, and order confirmations.
+        •       Summarize holdings by broker and owner via `..grouplist` command.
+        •       Aggregated owner holdings across brokers via `..ownersummary` command.
 
 ⸻
 
