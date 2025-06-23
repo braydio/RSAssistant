@@ -1,10 +1,14 @@
 # utils/order_queue_manager.py
 
+"""Persistent order queue utilities."""
+
 import json
 import os
-from datetime import datetime
 
-QUEUE_FILE = "data/order_queue.json"
+from utils.config_utils import VOLUMES_DIR
+
+QUEUE_FILE = VOLUMES_DIR / "db" / "order_queue.json"
+QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _load_queue():

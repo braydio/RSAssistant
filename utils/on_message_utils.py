@@ -1,7 +1,6 @@
 """Discord message handlers used by RSAssistant."""
 
 import re
-import asyncio
 from datetime import datetime, timedelta
 import requests
 
@@ -12,14 +11,16 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.csv_utils import save_holdings_to_csv
-from utils.watch_utils import parse_bulk_watchlist_message, add_entries_from_message
+from utils.watch_utils import (
+    parse_bulk_watchlist_message,
+    add_entries_from_message,
+    account_mapping,
+)
 from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
-from utils.sec_policy_fetcher import SECPolicyFetcher
 
 from bs4 import BeautifulSoup
-from discord import Embed
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
@@ -201,13 +202,17 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
             hour=9, minute=30, second=0, microsecond=0
         )
 
-    await schedule_and_execute(
-        ctx=channel,
-        action="buy",
-        ticker=ticker,
-        quantity=quantity,
-        broker="all",
-        execution_time=execution_time,
+    order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_buy"
+    bot.loop.create_task(
+        schedule_and_execute(
+            ctx=channel,
+            action="buy",
+            ticker=ticker,
+            quantity=quantity,
+            broker="all",
+            execution_time=execution_time,
+            order_id=order_id,
+        )
     )
 
     confirmation = f"✅ Autobuy for `{ticker}` scheduled at {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."

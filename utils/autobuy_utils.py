@@ -1,5 +1,7 @@
-import asyncio
+"""Helper for auto-buying tickers with market-hours awareness."""
+
 from datetime import datetime, timedelta
+
 from utils.logging_setup import logger
 from utils.order_exec import schedule_and_execute
 
@@ -37,13 +39,17 @@ async def autobuy_ticker(bot, ctx, ticker, quantity=1, broker="all"):
                 f"Market CLOSED - scheduling autobuy for {ticker} at {execution_time}."
             )
 
-        await schedule_and_execute(
-            ctx=ctx,
-            action="buy",
-            ticker=ticker,
-            quantity=quantity,
-            broker=broker,
-            execution_time=execution_time,
+        order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_buy"
+        bot.loop.create_task(
+            schedule_and_execute(
+                ctx=ctx,
+                action="buy",
+                ticker=ticker,
+                quantity=quantity,
+                broker=broker,
+                execution_time=execution_time,
+                order_id=order_id,
+            )
         )
 
         confirmation = f"✅ Auto-buy for `{ticker}` scheduled at {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
