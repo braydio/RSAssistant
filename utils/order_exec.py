@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from utils.watch_utils import watch_list_manager
 from utils.order_queue_manager import add_to_order_queue, remove_order

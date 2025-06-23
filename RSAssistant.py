@@ -5,13 +5,10 @@ This module initializes the Discord bot, registers command handlers, and
 manages scheduled orders using a persistent queue.
 """
 import asyncio
-import csv
 import json
 import os
-import shutil
 import signal
 import sys
-import time
 import logging
 from datetime import datetime, timedelta
 
@@ -20,7 +17,6 @@ import discord
 import discord.gateway
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from discord import Embed
 from discord.ext import commands
 
 # Local utility imports
@@ -48,16 +44,12 @@ from utils.excel_utils import (
     index_account_details,
     map_accounts_in_excel_log,
 )
-from utils.order_exec import process_sell_list, schedule_and_execute
-from utils.autobuy_utils import autobuy_ticker
+from utils.order_exec import schedule_and_execute
 from utils.order_queue_manager import (
-    add_to_order_queue,
     get_order_queue,
-    remove_order,
     list_order_queue,
 )
-from utils.sql_utils import bot_query_database, get_db_connection, init_db
-from utils.policy_resolver import SplitPolicyResolver
+from utils.sql_utils import init_db
 from utils.utility_utils import (
     all_account_nicknames,
     all_brokers,
@@ -143,9 +135,9 @@ async def on_ready():
     now = datetime.now()
 
     logger.info(
-        f"RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
+        "RSAssistant by @braydio - GitHub: https://github.com/braydio/RSAssistant"
     )
-    logger.info(f"V3.1 | Running in CLI | Runtime Environment: Production")
+    logger.info("V3.1 | Running in CLI | Runtime Environment: Production")
 
     # Fetch the primary channel
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)

@@ -1,5 +1,7 @@
-import asyncio
+"""Helper for auto-buying tickers with market-hours awareness."""
+
 from datetime import datetime, timedelta
+
 from utils.logging_setup import logger
 from utils.order_exec import schedule_and_execute
 

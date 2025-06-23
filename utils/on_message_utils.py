@@ -1,7 +1,6 @@
 """Discord message handlers used by RSAssistant."""
 
 import re
-import asyncio
 from datetime import datetime, timedelta
 import requests
 
@@ -12,14 +11,16 @@ from utils.parsing_utils import (
     parse_order_message,
 )
 from utils.csv_utils import save_holdings_to_csv
-from utils.watch_utils import parse_bulk_watchlist_message, add_entries_from_message
+from utils.watch_utils import (
+    parse_bulk_watchlist_message,
+    add_entries_from_message,
+    account_mapping,
+)
 from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
-from utils.sec_policy_fetcher import SECPolicyFetcher
 
 from bs4 import BeautifulSoup
-from discord import Embed
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
