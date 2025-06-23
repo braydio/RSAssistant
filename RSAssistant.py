@@ -54,6 +54,7 @@ from utils.utility_utils import (
     all_account_nicknames,
     all_brokers,
     generate_broker_summary_embed,
+    generate_owner_totals_embed,
     print_to_discord,
     track_ticker_summary,
 )
@@ -476,12 +477,22 @@ async def brokers_groups(ctx, broker: str = None):
     """
     Displays account owner summary for a specific broker or all brokers if no broker is specified.
     """
-    embed = generate_broker_summary_embed(ctx, broker)
+    embed = generate_broker_summary_embed(broker)
     await ctx.send(
         embed=(
             embed if embed else "An error occurred while generating the broker summary."
         )
     )
+
+
+@bot.command(
+    name="ownersummary",
+    help="Shows total holdings for each owner across all brokers.",
+)
+async def owner_summary(ctx):
+    """Display aggregated owner holdings across all brokers."""
+    embed = generate_owner_totals_embed()
+    await ctx.send(embed=embed)
 
 
 # Discord bot command
