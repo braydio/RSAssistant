@@ -124,6 +124,7 @@ async def handle_primary_channel(bot, message):
 
 
 async def handle_secondary_channel(bot, message):
+    """Handle NASDAQ alerts posted in the secondary channel."""
     logger.info(f"Received message on secondary channel: {message.content}")
 
     result = alert_channel_message(message.content)
@@ -157,13 +158,10 @@ async def handle_secondary_channel(bot, message):
 
         body_text = policy_info.get("body_text")
         if body_text:
-            prompt = (
-                "..ai Will the fractional shares of this reverse split be rounded up "
-                "to the nearest whole share or paid out cash in lieu? "
-            )
-            snippet = body_text[: 2000 - len(prompt)]
-            logger.info(f"Appending body text to prompt {body_text}")
-            await message.channel.send(prompt + snippet)
+            context = f"Round-up snippet from {alert_url}: "
+            snippet = body_text[: 2000 - len(context)]
+            logger.info(f"Posting body text snippet for {alert_ticker}")
+            await message.channel.send(context + snippet)
 
         if policy_info.get("round_up_confirmed"):
             logger.info(f"Round-up confirmed for {alert_ticker}. Scheduling autobuy...")
