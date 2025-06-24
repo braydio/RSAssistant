@@ -21,6 +21,7 @@ from utils.order_exec import schedule_and_execute
 from utils import split_watch_utils
 
 from bs4 import BeautifulSoup
+from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
@@ -93,9 +94,9 @@ async def handle_primary_channel(bot, message):
                 return
 
             for holding in parsed_holdings:
-                holding["Key"] = (
-                    f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
-                )
+                holding[
+                    "Key"
+                ] = f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
 
             save_holdings_to_csv(parsed_holdings)
         except Exception as e:
@@ -407,7 +408,7 @@ class SplitPolicyResolver:
         ]
         for phrase in phrases:
             pattern = re.compile(
-                rf'(?:\S+\s+){{0,{window}}}{re.escape(phrase)}(?:\s+\S+){{0,{window}}}',
+                rf"(?:\S+\s+){{0,{window}}}{re.escape(phrase)}(?:\s+\S+){{0,{window}}}",
                 re.IGNORECASE,
             )
             match = pattern.search(text)
@@ -441,79 +442,18 @@ class SplitPolicyResolver:
 
 
 class OnMessagePolicyResolver:
-    resolver = SplitPolicyResolver()
+    """Wrapper around :class:`utils.policy_resolver.SplitPolicyResolver`."""
+
+    resolver = PolicyResolver()
 
     @classmethod
     def full_analysis(cls, nasdaq_url):
+        """Perform complete policy analysis for a NASDAQ notice URL."""
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
-            ticker = cls.extract_ticker_from_url(nasdaq_url)
-
-            notice = cls.resolver.analyze_text(
-                nasdaq_url, SplitPolicyResolver.NASDAQ_KEYWORDS
-            )
-            if not notice:
-                logger.warning("NASDAQ notice analysis failed.")
-                return None
-
-            sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker)
-            if sec_url:
-                sec_result = cls.resolver.analyze_text(sec_url)
-                notice.update(sec_result or {})
-
-            return notice
+            return cls.resolver.full_analysis(nasdaq_url)
         except Exception as e:
             logger.error(f"Critical failure during full_analysis: {e}")
-            return None
-
-    @staticmethod
-    def extract_ticker_from_url(url):
-        match = re.search(r"\((.*?)\)", url)
-        return match.group(1) if match else None
-
-    @staticmethod
-    def get_sec_link_from_nasdaq(nasdaq_url, ticker=None):
-        try:
-            headers = SplitPolicyResolver.HEADERS
-            response = requests.get(nasdaq_url, headers=headers, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
-            links = [
-                link["href"]
-                for link in soup.find_all("a", href=True)
-                if any(
-                    domain in link["href"].lower()
-                    for domain in ["sec.gov", "quotemedia.com"]
-                )
-            ]
-
-            if not links:
-                text_link = soup.find("a", string=re.compile("SEC Filing", re.I))
-                if text_link and text_link.get("href"):
-                    links.append(text_link["href"])
-
-            filtered_links = [
-                link
-                for link in links
-                if "/rules/sro/" not in link
-                and (
-                    ticker
-                    and ticker.lower() in link.lower()
-                    or re.search(r"/20\d{2}/", link)
-                )
-            ]
-
-            if filtered_links:
-                sec_link = filtered_links[0]
-                if sec_link.startswith("/"):
-                    sec_link = "https://www.nasdaqtrader.com" + sec_link
-                logger.info(f"SEC Filing link selected: {sec_link}")
-                return sec_link
-
-            logger.warning("No valid SEC link found.")
-            return None
-        except Exception as e:
-            logger.error(f"Failed to retrieve SEC link from NASDAQ: {e}")
             return None
 
 
