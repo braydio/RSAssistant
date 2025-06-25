@@ -186,11 +186,11 @@ def parse_broker_data(
 
 
 def handle_complete_order(match, broker_name, broker_number):
-    """Process a completed buy/sell order.
+    """Process a complete order and persist it.
 
-    The order is normalized and saved via :func:`handoff_order_data`. If the
-    stock price cannot be retrieved, the order is logged with
-    :func:`record_error_message` and skipped.
+    Fetches the latest price for the order stock and writes the order to the CSV
+    and database. If the price lookup fails, an error entry is recorded and the
+    order is skipped.
     """
     try:
         # Parse broker-specific data
@@ -217,11 +217,18 @@ def handle_complete_order(match, broker_name, broker_number):
 
         price = get_last_stock_price(stock)
         if price is None:
+<<<<<<< handle-missing-price-and-log-errors2025-06-25
+            record_error_message(
+                "Price fetch failed",
+                f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
+            )
+=======
             error_details = (
                 f"{broker_name} {broker_number} {account_number} {action} {stock} {quantity}"
             )
             record_error_message("Price fetch failed", error_details)
             logger.error(f"Price fetch failed for {stock}. Skipping order save.")
+>>>>>>> main
             return
 
         date = datetime.now().strftime("%Y-%m-%d")
@@ -474,11 +481,19 @@ def handle_verification(match, broker_name, broker_number):
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
     order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
+<<<<<<< handle-missing-price-and-log-errors2025-06-25
+    """Finalize a verified order and persist it.
+
+    After normalization, the latest stock price is retrieved. If the price cannot
+    be fetched, the order details are logged as an error and no persistence is
+    attempted.
+=======
     """Finalize an order confirmed via verification.
 
     Normalizes the order and delegates to :func:`handoff_order_data`. If the
     latest stock price cannot be determined, the order details are logged via
     :func:`record_error_message` and processing stops.
+>>>>>>> main
     """
     logger.info(
         f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
@@ -500,11 +515,18 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
     # Get price and current date
     price = get_last_stock_price(stock)
     if price is None:
+<<<<<<< handle-missing-price-and-log-errors2025-06-25
+        record_error_message(
+            "Price fetch failed",
+            f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
+        )
+=======
         error_details = (
             f"{broker_name} {broker_number} {account_number} {action} {stock} {quantity}"
         )
         record_error_message("Price fetch failed", error_details)
         logger.error(f"Price fetch failed for {stock}. Skipping order save.")
+>>>>>>> main
         return
 
     date = datetime.now().strftime("%Y-%m-%d")
