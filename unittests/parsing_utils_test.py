@@ -23,3 +23,38 @@ def test_public_incomplete_message(monkeypatch):
     assert order["broker_number"] == "4"
     assert order["action"] == "sell"
     assert pytest.approx(order["quantity"]) == 0.10937
+
+
+def test_complete_order_price_fetch_failure(monkeypatch):
+    """Orders should not be saved when price lookup fails."""
+
+    calls = []
+    monkeypatch.setattr(parsing_utils, "get_last_stock_price", lambda stock: None)
+    monkeypatch.setattr(parsing_utils, "record_error_message", lambda *args: calls.append(args))
+    saved = []
+    monkeypatch.setattr(parsing_utils, "save_order_to_csv", lambda *a, **k: saved.append(True))
+
+    parsing_utils.parse_order_message("Robinhood 1: buy 1 of ABC in xxxx1234: Success")
+
+    assert calls, "record_error_message should be called"
+    assert not saved, "order should not be saved to CSV"
+
+
+def test_process_verified_orders_price_fetch_failure(monkeypatch):
+    """Verified orders skip saving when price lookup fails."""
+
+    calls = []
+    monkeypatch.setattr(parsing_utils, "get_last_stock_price", lambda stock: None)
+    monkeypatch.setattr(parsing_utils, "record_error_message", lambda *args: calls.append(args))
+    saved = []
+    monkeypatch.setattr(parsing_utils, "save_order_to_csv", lambda *a, **k: saved.append(True))
+
+    parsing_utils.process_verified_orders(
+        "Robinhood",
+        "1",
+        "1234",
+        {"action": "buy", "quantity": 1, "stock": "ABC"},
+    )
+
+    assert calls, "record_error_message should be called"
+    assert not saved, "order should not be saved to CSV"
