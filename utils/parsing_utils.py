@@ -217,18 +217,10 @@ def handle_complete_order(match, broker_name, broker_number):
 
         price = get_last_stock_price(stock)
         if price is None:
-<<<<<<< handle-missing-price-and-log-errors2025-06-25
             record_error_message(
                 "Price fetch failed",
                 f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
             )
-=======
-            error_details = (
-                f"{broker_name} {broker_number} {account_number} {action} {stock} {quantity}"
-            )
-            record_error_message("Price fetch failed", error_details)
-            logger.error(f"Price fetch failed for {stock}. Skipping order save.")
->>>>>>> main
             return
 
         date = datetime.now().strftime("%Y-%m-%d")
