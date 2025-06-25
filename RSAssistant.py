@@ -62,6 +62,7 @@ from utils.on_message_utils import handle_on_message, set_channels
 from utils.watch_utils import (
     periodic_check,
     send_reminder_message_embed,
+    send_reminder_message,
     watch_list_manager,
 )
 
@@ -187,11 +188,11 @@ async def on_ready():
     if reminder_scheduler is None:
         reminder_scheduler = BackgroundScheduler()
         reminder_scheduler.add_job(
-            lambda: bot.loop.create_task(send_reminder_message_embed(bot)),
+            lambda: bot.loop.create_task(send_reminder_message(bot)),
             CronTrigger(hour=8, minute=45),
         )
         reminder_scheduler.add_job(
-            lambda: bot.loop.create_task(send_reminder_message_embed(bot)),
+            lambda: bot.loop.create_task(send_reminder_message(bot)),
             CronTrigger(hour=15, minute=30),
         )
         reminder_scheduler.start()
