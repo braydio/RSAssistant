@@ -20,7 +20,7 @@ from utils.config_utils import (
     load_account_mappings,
 )
 from utils.csv_utils import save_order_to_csv
-from utils.excel_utils import update_excel_log
+from utils.excel_utils import update_excel_log, record_error_message
 from utils.sql_utils import insert_order_history
 from utils.utility_utils import debug_order_data, get_last_stock_price
 
@@ -186,7 +186,12 @@ def parse_broker_data(
 
 
 def handle_complete_order(match, broker_name, broker_number):
-    """Processes complete buy/sell orders after normalization and saves to CSV and database."""
+    """Process a complete order and persist it.
+
+    Fetches the latest price for the order stock and writes the order to the CSV
+    and database. If the price lookup fails, an error entry is recorded and the
+    order is skipped.
+    """
     try:
         # Parse broker-specific data
         account_number, action, quantity, stock = parse_broker_data(
@@ -211,6 +216,13 @@ def handle_complete_order(match, broker_name, broker_number):
         )
 
         price = get_last_stock_price(stock)
+        if price is None:
+            record_error_message(
+                "Price fetch failed",
+                f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
+            )
+            return
+
         date = datetime.now().strftime("%Y-%m-%d")
         # Prepare order data
         order_data = {
@@ -461,7 +473,12 @@ def handle_verification(match, broker_name, broker_number):
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
     order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
-    """Processes and finalizes a verified order by passing it to handle_complete_order."""
+    """Finalize a verified order and persist it.
+
+    After normalization, the latest stock price is retrieved. If the price cannot
+    be fetched, the order details are logged as an error and no persistence is
+    attempted.
+    """
     logger.info(
         f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
     )
@@ -481,6 +498,13 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
 
     # Get price and current date
     price = get_last_stock_price(stock)
+    if price is None:
+        record_error_message(
+            "Price fetch failed",
+            f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
+        )
+        return
+
     date = datetime.now().strftime("%Y-%m-%d")
 
     # Prepare order data
