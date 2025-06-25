@@ -473,19 +473,11 @@ def handle_verification(match, broker_name, broker_number):
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
     order["quantity"] = order.get("quantity", 1)  # Default quantity if missing
-<<<<<<< handle-missing-price-and-log-errors2025-06-25
     """Finalize a verified order and persist it.
 
     After normalization, the latest stock price is retrieved. If the price cannot
     be fetched, the order details are logged as an error and no persistence is
     attempted.
-=======
-    """Finalize an order confirmed via verification.
-
-    Normalizes the order and delegates to :func:`handoff_order_data`. If the
-    latest stock price cannot be determined, the order details are logged via
-    :func:`record_error_message` and processing stops.
->>>>>>> main
     """
     logger.info(
         f"Verified order processed for {broker_name} {broker_number}, Account {account_number}:"
