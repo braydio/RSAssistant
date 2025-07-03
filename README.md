@@ -57,6 +57,12 @@ Alternatively, build and run with Docker:
 docker compose up --build
 ```
 
+## Default Account Nicknames
+
+When an account has no nickname in `account_mapping.json`, RSAssistant falls
+back to the pattern `"{broker} {group} {account}"`. This ensures new accounts
+and orders are always logged with a deterministic identifier.
+
 ## Testing
 
 Run unit tests with:
