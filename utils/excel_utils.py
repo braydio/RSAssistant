@@ -17,7 +17,7 @@ from utils.config_utils import (
     ERROR_LOG_FILE,
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
-    get_account_nickname,
+    get_account_nickname_or_default,
     load_account_mappings,
     load_config,
 )
@@ -222,9 +222,9 @@ async def index_account_details(
                     )
 
             # Add or update the account details under the broker and group number
-            account_mappings[broker_name][group_number][account_number] = (
-                account_nickname
-            )
+            account_mappings[broker_name][group_number][
+                account_number
+            ] = account_nickname
 
     except Exception as e:
         await ctx.send(f"Error processing Excel rows: {e}")
@@ -618,7 +618,7 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
             # Log the extracted details
             logger.debug(f"Processing order: {order}")
 
-            account_nickname = get_account_nickname(
+            account_nickname = get_account_nickname_or_default(
                 broker_name, broker_number, account_number
             )
             excel_nickname = f"{broker_name} {account_nickname}"

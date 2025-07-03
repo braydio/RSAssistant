@@ -5,7 +5,11 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta
 
-from utils.config_utils import SQL_DATABASE, load_config
+from utils.config_utils import (
+    SQL_DATABASE,
+    load_config,
+    get_account_nickname_or_default,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +38,22 @@ def get_db_connection():
 
 
 def get_or_create_account_id(
-    broker, broker_number, account_number, account_nickname="AccountNotMapped"
+    broker, broker_number, account_number, account_nickname=None
 ):
     """
-    Retrieves the account_id for a given broker and account number. If it doesn't exist, it creates a new entry.
+    Retrieve or create an account entry.
+
+    If ``account_nickname`` is ``None`` the nickname is resolved using
+    :func:`utils.config_utils.get_account_nickname_or_default`.
     """
     logger.info(
         f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}."
     )
+    if account_nickname is None:
+        account_nickname = get_account_nickname_or_default(
+            broker, broker_number, account_number
+        )
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -220,7 +232,7 @@ def validate_order_data(order_data):
 
 def insert_order_history(order_data):
     """
-    Inserts a logged order into the OrderHistory table.
+    Inserts a logged order into the ``OrderHistory`` table.
 
     Expected input fields (via ORDERS_HEADERS):
       - 'Broker Name'
@@ -260,7 +272,7 @@ def insert_order_history(order_data):
         broker_num = mapped_order["broker_number"]
         acct_num = mapped_order["account_number"]
         mapped_order["account_id"] = get_or_create_account_id(
-            broker, broker_num, acct_num, "Account Not Mapped"
+            broker, broker_num, acct_num
         )
 
     try:
@@ -332,7 +344,9 @@ def insert_order_history(order_data):
             broker = order_data["broker_name"]
             broker_number = order_data["broker_number"]
             account_number = order_data["account_number"]
-            account_nickname = "Account Not Mapped"
+            account_nickname = get_account_nickname_or_default(
+                broker, broker_number, account_number
+            )
 
             order_data["account_id"] = get_or_create_account_id(broker, broker_number, account_number, account_nickname)
         order_id = order_data["order_id"]
