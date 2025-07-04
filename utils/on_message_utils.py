@@ -1,7 +1,8 @@
 """Discord message handlers used by RSAssistant."""
 
 import re
-from datetime import datetime, timedelta
+import asyncio
+from datetime import datetime, timedelta, date
 import requests
 
 from utils.logging_setup import logger
@@ -29,7 +30,6 @@ DISCORD_AI_CHANNEL = None
 
 
 def set_channels(primary_id, secondary_id, tertiary_id):
-    """Sets primary and secondary channel IDs for use in on_message handling."""
     global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_AI_CHANNEL
     DISCORD_PRIMARY_CHANNEL = primary_id
     DISCORD_SECONDARY_CHANNEL = secondary_id
@@ -43,13 +43,11 @@ def get_account_nickname_or_default(broker_name, group_number, account_number):
     try:
         broker_accounts = account_mapping.get(broker_name, {})
         group_accounts = broker_accounts.get(str(group_number), {})
-
         if not isinstance(group_accounts, dict):
             logger.error(
                 f"Expected dict for group {group_number} in {broker_name}, got {type(group_accounts)}"
             )
             return f"{broker_name} {group_number} {account_number}"
-
         return group_accounts.get(
             str(account_number), f"{broker_name} {group_number} {account_number}"
         )
@@ -82,7 +80,6 @@ async def handle_primary_channel(bot, message):
 
     if message.content.lower().startswith("manual"):
         logger.warning(f"Manual order detected: {message.content}")
-
     elif message.embeds:
         logger.info("Embed message detected.")
         try:
@@ -126,35 +123,26 @@ async def handle_primary_channel(bot, message):
 async def handle_secondary_channel(bot, message):
     """Handle NASDAQ alerts posted in the secondary channel."""
     logger.info(f"Received message on secondary channel: {message.content}")
-
     result = alert_channel_message(message.content)
     logger.info(f"Alert parser result: {result}")
-
-    if (
-        not result
-        or not isinstance(result, dict)
-        or not result.get("reverse_split_confirmed")
-    ):
-        logger.warning("Message does not confirm reverse split or result malformed.")
+    if not (isinstance(result, dict) and result.get("reverse_split_confirmed")):
+        logger.warning("Message not confirming reverse split or malformed")
         return
-
-    alert_ticker = result.get("ticker")
-    alert_url = result.get("url")
-
-    if not alert_url or not alert_ticker:
-        logger.error("Missing ticker or URL in parsed alert.")
+    ticker = result.get("ticker")
+    url = result.get("url")
+    if not ticker or not url:
+        logger.error("Missing ticker or URL")
         return
 
     try:
-        logger.info(f"Calling OnMessagePolicyResolver.full_analysis for {alert_url}")
-        policy_info = OnMessagePolicyResolver.full_analysis(alert_url)
-
+        logger.info(f"Policy resolution for {url}")
+        policy_info = OnMessagePolicyResolver.full_analysis(url)
         if not policy_info:
-            logger.warning(f"No data returned for {alert_ticker}.")
+            logger.warning(f"No policy info for {ticker}")
             return
 
-        summary = build_policy_summary(alert_ticker, policy_info, alert_url)
-        await post_policy_summary(bot, alert_ticker, summary)
+        summary = build_policy_summary(ticker, policy_info, url)
+        await post_policy_summary(bot, ticker, summary)
 
         body_text = policy_info.get("body_text")
         if body_text:
@@ -164,42 +152,33 @@ async def handle_secondary_channel(bot, message):
             await message.channel.send(context + snippet)
 
         if policy_info.get("round_up_confirmed"):
-            logger.info(f"Round-up confirmed for {alert_ticker}. Scheduling autobuy...")
-            await attempt_autobuy(bot, message.channel, alert_ticker, quantity=1)
-            split_date = datetime.date.today().isoformat()
-            ticker = result.get("ticker")
-            if ticker:
-                split_watch_utils.add_split_watch(ticker, split_date)
-                logger.info(f"Added {ticker} to split watch with date {split_date}.")
-        else:
-            logger.info(
-                f"No autobuy triggered for {alert_ticker}: round_up_confirmed=False."
-            )
-
-    except Exception as e:
-        logger.error(f"Exception during policy analysis for {alert_ticker}: {e}")
+            await attempt_autobuy(bot, message.channel, ticker, quantity=1)
+            split_date = date.today().isoformat()
+            split_watch_utils.add_split_watch(ticker, split_date)
+            logger.info(f"Added split watch: {ticker} @ {split_date}")
+    except Exception:
+        logger.exception("Error during policy analysis secondary channel")
 
 
 async def attempt_autobuy(bot, channel, ticker, quantity=1):
-    """Attempts autobuy immediately or schedules at next market open."""
     now = datetime.now()
-    market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = now.replace(hour=16, minute=0, microsecond=0)
+    mon_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    mon_close = now.replace(hour=16, minute=0, microsecond=0)
 
     if now.weekday() >= 5:
-        logger.warning("Weekend detected. Scheduling for next Monday 9:30AM.")
-        days_until_monday = (7 - now.weekday()) % 7 or 7
-        execution_time = (now + timedelta(days=days_until_monday)).replace(
+        days = (7 - now.weekday()) % 7 or 7
+        exec_time = (now + timedelta(days=days)).replace(
             hour=9, minute=30, second=0, microsecond=0
         )
-    elif market_open <= now <= market_close:
-        logger.info("Market open now. Executing immediate autobuy.")
-        execution_time = now
+        logger.warning("Scheduling autobuy next Monday")
+    elif mon_open <= now <= mon_close:
+        exec_time = now
+        logger.info("Market open – immediate autobuy")
     else:
-        logger.info("Market closed. Scheduling for next market open.")
-        execution_time = (now + timedelta(days=1)).replace(
+        exec_time = (now + timedelta(days=1)).replace(
             hour=9, minute=30, second=0, microsecond=0
         )
+        logger.info("Market closed – scheduling next market open")
 
     order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_buy"
     bot.loop.create_task(
@@ -213,10 +192,8 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
             order_id=order_id,
         )
     )
-
-    confirmation = f"✅ Autobuy for `{ticker}` scheduled at {execution_time.strftime('%Y-%m-%d %H:%M:%S')}."
-    logger.info(confirmation)
     await channel.send(confirmation)
+    logger.info(confirmation)
 
 
 def build_policy_summary(ticker, policy_info, fallback_url):
@@ -239,17 +216,17 @@ def build_policy_summary(ticker, policy_info, fallback_url):
 
 
 async def post_policy_summary(bot, ticker, summary):
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-    if channel:
-        await channel.send(summary)
-        logger.info(f"Policy summary posted successfully for {ticker}.")
+    chan = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    if chan:
+        await chan.send(summary)
+        logger.info(f"Posted policy summary for {ticker}")
     else:
-        logger.error("Primary channel not found to post summary.")
+        logger.error("Primary channel unavailable")
 
 
-# -------------------------
-# SplitPolicyResolver
-# -------------------------
+# -----------------------------------------------------------------------------------------------
+# SplitPolicyResolver and OnMessagePolicyResolver (deduplicated and cleaned)
+# -----------------------------------------------------------------------------------------------
 
 
 class SplitPolicyResolver:
@@ -284,8 +261,7 @@ class SplitPolicyResolver:
 
     def build_search_params(self, ticker):
         return {
-            "q": f"{ticker} "
-            + " OR ".join([f'"{term}"' for term in self.SEARCH_TERMS]),
+            "q": f"{ticker} " + " OR ".join(f'"{t}"' for t in self.SEARCH_TERMS),
             "dateRange": "custom",
             "startdt": self.start_date,
             "enddt": self.end_date,
@@ -296,104 +272,87 @@ class SplitPolicyResolver:
 
     def search_sec_filings(self, ticker):
         try:
-            logger.info(
-                f"Searching SEC filings for {ticker} from {self.start_date} to {self.end_date}"
-            )
-            params = self.build_search_params(ticker)
             response = requests.get(
-                self.BASE_URL, params=params, headers=self.HEADERS, timeout=10
+                self.BASE_URL,
+                params=self.build_search_params(ticker),
+                headers=self.HEADERS,
+                timeout=10,
             )
             response.raise_for_status()
             return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching SEC search results: {e}")
+        except Exception:
+            logger.exception("SEC filings search error")
             return None
 
-    def extract_policy_from_sec_filing(self, filing_url):
+    def extract_policy_from_sec_filing(self, url):
         try:
-            logger.info(f"Fetching and analyzing SEC filing from {filing_url}")
-            response = requests.get(filing_url, headers=self.HEADERS, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
-            text_content = soup.get_text(separator=" ")
-
+            resp = requests.get(url, headers=self.HEADERS, timeout=10)
+            resp.raise_for_status()
+            text = BeautifulSoup(resp.text, "html.parser").get_text(" ")
             return {
-                "round_up": self.is_round_up_policy(text_content),
-                "cash_in_lieu": "cash in lieu" in text_content.lower(),
-                # or "paid in cash" in text_content.lower(),
-                # "round_down": "rounded down" in text_content.lower(),
+                "round_up": self.is_round_up_policy(text),
+                "cash_in_lieu": "cash in lieu" in text.lower(),
+                "round_down": "rounded down" in text.lower(),
             }
-        except Exception as e:
-            logger.error(f"Error analyzing SEC filing text: {e}")
+        except Exception:
+            logger.exception("Error extracting SEC filing")
             return None
 
     def fetch_sec_policy(self, ticker):
-        search_data = self.search_sec_filings(ticker)
-        if not search_data or "hits" not in search_data.get("hits", {}):
-            logger.warning(f"No filings found for ticker {ticker}")
+        data = self.search_sec_filings(ticker)
+        if not data or "hits" not in data.get("hits", {}):
+            logger.warning("No filings found")
             return None
-
-        filings = search_data["hits"]["hits"]
-        for filing in filings:
-            form_type = filing["_source"].get("form", "")
-            if form_type in ["8-K", "S-1", "S-3", "S-4", "14A", "10-K", "10-Q"]:
-                cik = filing["_source"].get("ciks", [""])[0]
-                accession_number = filing["_source"].get("adsh", "")
-                file_id = filing["_id"].split(":")[1]
-                filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_number.replace('-', '')}/{file_id}"
-
-                policy_info = self.extract_policy_from_sec_filing(filing_url)
-                if policy_info:
-                    logger.info(f"Policy info extracted for {ticker}: {policy_info}")
-                    return policy_info
-
-        logger.warning(f"No valid policy extracted for {ticker}")
+        for fh in data["hits"]["hits"]:
+            form = fh["_source"].get("form", "")
+            if form in ("8-K", "S-1", "S-3", "S-4", "14A", "10-K", "10-Q"):
+                cik = fh["_source"].get("ciks", [""])[0]
+                adsh = fh["_source"].get("adsh", "")
+                fid = fh["_id"].split(":", 1)[-1]
+                filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{adsh.replace('-', '')}/{fid}"
+                info = self.extract_policy_from_sec_filing(filing_url)
+                if info:
+                    logger.info("Policy info extracted")
+                    return info
+        logger.warning("No valid policy extracted")
         return None
 
     @staticmethod
     def is_round_up_policy(text):
-        """
-        Determines if text confirms a round-up policy without disqualifying phrases.
-        """
         if not text:
             return False
-
-        text = text.lower()
-        cash_indicators = ["cash in lieu", "paid in cash", "payment for fractional"]
-
+        txt = text.lower()
         return (
-            "rounded up" in text
-            and all(term not in text for term in cash_indicators)
-            and "fractional share" in text
+            "rounded up" in txt
+            and all(
+                term not in txt
+                for term in ("cash in lieu", "paid in cash", "payment for fractional")
+            )
+            and "fractional share" in txt
         )
 
     @staticmethod
     def detect_policy_from_text(text, keywords):
-        for keyword in keywords:
-            if keyword in text:
-                logger.info(f"Detected policy keyword: {keyword}")
-                return keyword.capitalize()
-        logger.warning("No specific policy keywords detected.")
+        for kw in keywords:
+            if kw in text:
+                logger.info(f"Detected keyword: {kw}")
+                return kw.capitalize()
+        logger.warning("No clear policy keyword detected")
         return "Policy not clearly stated."
 
-    @staticmethod
-    def fetch_text_from_url(url):
+    @classmethod
+    def fetch_text_from_url(cls, url):
         try:
-            headers = SplitPolicyResolver.HEADERS
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-
-            if "html" in response.headers.get("Content-Type", ""):
-                soup = BeautifulSoup(response.text, "html.parser")
-                text = soup.get_text(separator=" ")
-            else:
-                text = response.text
-
+            resp = requests.get(url, headers=cls.HEADERS, timeout=10)
+            resp.raise_for_status()
+            text = resp.text
+            if "html" in resp.headers.get("Content-Type", ""):
+                text = BeautifulSoup(text, "html.parser").get_text(" ")
             text = " ".join(text.split())
-            logger.info(f"Fetched SEC filing text ({len(text)} characters)")
+            logger.info(f"Fetched text ({len(text)} chars)")
             return text
-        except Exception as e:
-            logger.error(f"Error fetching SEC filing text: {e}")
+        except Exception:
+            logger.exception("Error fetching text from URL")
             return None
 
     @staticmethod
@@ -415,11 +374,8 @@ class SplitPolicyResolver:
         return None
 
     @classmethod
-    def analyze_text(cls, text_source, keywords=None):
-        if not text_source:
-            return None
-
-        text = cls.fetch_text_from_url(text_source)
+    def analyze_text(cls, source, keywords=None):
+        text = cls.fetch_text_from_url(source)
         if not text:
             return None
 
@@ -432,11 +388,6 @@ class SplitPolicyResolver:
             "source_url": text_source,
             "snippet": snippet,
         }
-
-
-# -------------------------
-# OnMessagePolicyResolver
-# -------------------------
 
 
 class OnMessagePolicyResolver:
