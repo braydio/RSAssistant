@@ -1,3 +1,11 @@
+"""Configuration helpers and account mapping utilities.
+
+This module loads environment variables, resolves file paths and provides
+helper functions for broker account lookups. When an account nickname is not
+found in the mapping JSON, :data:`DEFAULT_ACCOUNT_NICKNAME` is used to
+construct a fallback based on broker, group and account numbers.
+"""
+
 import json
 import os
 from pathlib import Path
@@ -28,6 +36,9 @@ ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
 ALPACA_API_SECRET = os.getenv("ALPACA_SECRET_KEY")  # Paper Account
 ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")  # Paper Account
 BASE_URL = "https://paper-api.alpaca.markets/v2"  # Paper Account
+
+# Default placeholder used when an account has no nickname in the mapping.
+DEFAULT_ACCOUNT_NICKNAME = "{broker} {group} {account}"
 
 
 # --- Load .env ---
@@ -113,12 +124,25 @@ def get_account_number(broker_name, broker_number):
 
 
 def get_account_nickname(broker_name, broker_number, account_number):
+    """Return the nickname for an account or the formatted default."""
+
     mappings = load_account_mappings()
-    return (
-        mappings.get(broker_name, {})
-        .get(str(broker_number), {})
-        .get(account_number, None)
+    nickname = (
+        mappings.get(broker_name, {}).get(str(broker_number), {}).get(account_number)
     )
+
+    if nickname:
+        return nickname
+
+    return DEFAULT_ACCOUNT_NICKNAME.format(
+        broker=broker_name, group=broker_number, account=account_number
+    )
+
+
+def get_account_nickname_or_default(broker_name, broker_number, account_number):
+    """Return nickname from mappings or the formatted default."""
+
+    return get_account_nickname(broker_name, broker_number, account_number)
 
 
 _config_cache = None
