@@ -44,5 +44,13 @@ services:
     ports:
       - "5432:5432"
 
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --schedule "0 0 * * *" --cleanup rsassistant
+
 volumes:
   db_data:

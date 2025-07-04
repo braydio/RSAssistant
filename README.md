@@ -57,6 +57,9 @@ Alternatively, build and run with Docker:
 docker compose up --build
 ```
 
+The compose setup also includes a `watchtower` container which checks for new
+images daily and automatically updates the running `rsassistant` service.
+
 ## Default Account Nicknames
 
 When an account has no nickname in `account_mapping.json`, RSAssistant falls
