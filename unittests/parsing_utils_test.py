@@ -25,7 +25,6 @@ def test_public_incomplete_message(monkeypatch):
     assert pytest.approx(order["quantity"]) == 0.10937
 
 
-<<<<<<< handle-missing-price-and-log-errors2025-06-25
 def _setup_price_none(monkeypatch, call_tracker):
     """Helper to patch dependencies when price lookup returns None."""
 
@@ -67,7 +66,8 @@ def test_process_verified_orders_price_none(monkeypatch):
 
     assert calls.get("record", 0) == 1
     assert calls.get("csv") is None
-=======
+
+
 def test_complete_order_price_fetch_failure(monkeypatch):
     """Orders should not be saved when price lookup fails."""
 
@@ -101,4 +101,3 @@ def test_process_verified_orders_price_fetch_failure(monkeypatch):
 
     assert calls, "record_error_message should be called"
     assert not saved, "order should not be saved to CSV"
->>>>>>> main
