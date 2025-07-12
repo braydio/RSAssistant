@@ -6,12 +6,12 @@ services:
     container_name: RSAssistant
     restart: unless-stopped
     env_file:
-      - ./config/.env  # config/ is in the root directory
+      - ./volumes/config/.env
     volumes:
       - ./volumes/logs:/app/volumes/logs   # Persist logs
       - ./volumes/db:/app/volumes/db       # Persist database
       - ./volumes/excel:/app/volumes/excel # Persist Excel
-      - ./volumes/config:/app/config       # Shared config files
+      - ./volumes/config:/app/volumes/config
       - ./utils:/app/utils
     environment:
       ENVIRONMENT: production

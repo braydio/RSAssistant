@@ -39,8 +39,8 @@ pip install -r requirements.txt
 2. Copy the example configuration and update your Discord credentials:
 
 ```bash
-cp config/example.env config/.env
-cp config/example.settings.yaml config/settings.yml
+cp config/example.env volumes/config/.env
+cp config/example.settings.yaml volumes/config/settings.yml
 ```
 
 3. Launch the bot:

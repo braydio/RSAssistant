@@ -12,7 +12,7 @@ if [ "$ENVIRONMENT" = "development" ]; then
 fi
 
 # Check for required directories in volumes and create them if they don't exist
-REQUIRED_DIRECTORIES="/app/volumes/logs /app/volumes/excel /app/volumes/db"
+REQUIRED_DIRECTORIES="/app/volumes/logs /app/volumes/excel /app/volumes/db /app/volumes/config"
 
 for DIR in $REQUIRED_DIRECTORIES; do
     if [ ! -d "$DIR" ]; then
