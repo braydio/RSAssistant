@@ -8,6 +8,8 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
 - Parses filings and press releases for fractional share policies.
 - Maintains watch and sell lists with automatic reminders.
 - Schedules buy or sell orders and executes them via autoRSA.
+- The `..all` command refreshes holdings, audits them against the watchlist,
+  and posts a summary of any missing tickers.
 - Stores logs and a SQLite database under `volumes/` for persistence.
 
 ## Directory Overview
@@ -48,6 +50,9 @@ cp config/example.settings.yaml volumes/config/settings.yml
 ```bash
 python RSAssistant.py
 ```
+
+The bot's `..all` command now audits your holdings against the watchlist and
+summarizes any tickers that are missing from your accounts.
 
 ### Docker
 
