@@ -2,7 +2,9 @@
 """Discord bot for monitoring reverse splits and scheduling trades.
 
 This module initializes the Discord bot, registers command handlers, and
-manages scheduled orders using a persistent queue.
+manages scheduled orders using a persistent queue. Commands are grouped by
+category and served through a custom help formatter so ``..help`` displays
+usage details.
 """
 import asyncio
 import json
@@ -11,6 +13,7 @@ import signal
 import sys
 import logging
 from datetime import datetime, timedelta
+import itertools
 
 # Third-party imports
 import discord
@@ -78,6 +81,36 @@ init_db()
 logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
 logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
 
+
+class CategoryHelpCommand(commands.MinimalHelpCommand):
+    """Custom help command grouping commands by category."""
+
+    def get_category(self, command: commands.Command) -> str:
+        return command.extras.get("category", self.no_category)
+
+    async def send_bot_help(self, mapping):
+        """Show grouped help for all commands."""
+        bot = self.context.bot
+        note = self.get_opening_note()
+        if note:
+            self.paginator.add_line(note, empty=True)
+
+        filtered = await self.filter_commands(bot.commands, sort=True, key=self.get_category)
+        for category, commands_iter in itertools.groupby(filtered, key=self.get_category):
+            self.paginator.add_line(f"__**{category}**__")
+            for command in commands_iter:
+                self.add_command_formatting(command)
+            self.paginator.add_line()
+
+        await self.send_pages()
+
+    async def send_command_help(self, command):
+        """Show detailed help for a single command."""
+        category = self.get_category(command)
+        self.paginator.add_line(f"__**Category:** {category}__", empty=True)
+        self.add_command_formatting(command)
+        await self.send_pages()
+
 # Set up bot intents
 intents = discord.Intents.default()
 intents.message_content = True
@@ -92,6 +125,7 @@ discord.gateway.DiscordWebSocket.gateway_timeout = 60  # seconds
 bot = commands.Bot(
     command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
 )
+bot.help_command = CategoryHelpCommand()
 
 periodic_task = None
 reminder_scheduler = None
@@ -233,7 +267,12 @@ async def process_sell_list(bot):
         logger.error(f"Error processing sell list: {e}")
 
 
-@bot.command(name="queue", help="View all scheduled orders.")
+@bot.command(
+    name="queue",
+    help="View all scheduled orders.",
+    usage="",
+    extras={"category": "Orders"},
+)
 async def show_order_queue(ctx):
     queue = list_order_queue()
     if not queue:
@@ -245,7 +284,9 @@ async def show_order_queue(ctx):
 
 @bot.command(
     name="ord",
-    help="Schedule a buy or sell order. Usage: `..ord <buy/sell> <ticker> <broker> [quantity] <time>`",
+    help="Schedule a buy or sell order.",
+    usage="<buy/sell> <ticker> [broker] [quantity] [time]",
+    extras={"category": "Orders"},
 )
 async def process_order(
     ctx,
@@ -352,7 +393,9 @@ async def process_order(
 
 @bot.command(
     name="liquidate",
-    help="Liquidate holdings for a brokerage. Usage: `..liquidate <broker> [test_mode=false]`",
+    help="Liquidate holdings for a brokerage.",
+    usage="<broker> [test_mode]",
+    extras={"category": "Orders"},
 )
 async def liquidate(ctx, broker: str, test_mode: str = "false"):
     """
@@ -374,7 +417,7 @@ async def liquidate(ctx, broker: str, test_mode: str = "false"):
         await ctx.send(f"An error occurred: {str(e)}")
 
 
-@bot.command(name="restart")
+@bot.command(name="restart", extras={"category": "Admin"})
 async def restart(ctx):
     """Restarts the bot."""
     await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
@@ -392,7 +435,12 @@ async def restart(ctx):
         await ctx.send("An error occurred while attempting to restart the bot.")
 
 
-@bot.command(name="clear", help="Batch clears excess messages.")
+@bot.command(
+    name="clear",
+    help="Batch clears excess messages.",
+    usage="<limit>",
+    extras={"category": "Admin"},
+)
 @commands.has_permissions(manage_messages=True)
 async def batchclear(ctx, limit: int):
     if limit > 10000:
@@ -429,7 +477,12 @@ async def send_scheduled_reminder():
         )
 
 
-@bot.command(name="selling", help="View the current sell queue.")
+@bot.command(
+    name="selling",
+    help="View the current sell queue.",
+    usage="",
+    extras={"category": "Watchlist"},
+)
 async def view_sell_list(ctx):
     sell_list = watch_list_manager.get_sell_list()
     if not sell_list:
@@ -447,7 +500,12 @@ async def view_sell_list(ctx):
         await ctx.send(embed=embed)
 
 
-@bot.command(name="brokerlist", help="List all active brokers. Optional arg: Broker")
+@bot.command(
+    name="brokerlist",
+    help="List all active brokers or accounts for a broker.",
+    usage="[broker]",
+    extras={"category": "Accounts"},
+)
 async def brokerlist(ctx, broker: str = None):
     """Lists all brokers or accounts for a specific broker."""
     try:
@@ -461,7 +519,9 @@ async def brokerlist(ctx, broker: str = None):
 
 @bot.command(
     name="bw",
-    help="Broker-With <ticker> (details) | All brokers with specified ticker, opt details=specific broker",
+    help="Show which brokers hold a given ticker.",
+    usage="<ticker> [broker]",
+    extras={"category": "Reporting"},
 )
 async def broker_has(ctx, ticker: str, *args):
     """Shows broker-level summary for a specific ticker."""
@@ -472,7 +532,10 @@ async def broker_has(ctx, ticker: str, *args):
 
 
 @bot.command(
-    name="grouplist", help="Summary by account owner. Optional: specify a broker."
+    name="grouplist",
+    help="Summary by account owner.",
+    usage="[broker]",
+    extras={"category": "Reporting"},
 )
 async def brokers_groups(ctx, broker: str = None):
     """
@@ -489,6 +552,7 @@ async def brokers_groups(ctx, broker: str = None):
 @bot.command(
     name="ownersummary",
     help="Shows total holdings for each owner across all brokers.",
+    extras={"category": "Reporting"},
 )
 async def owner_summary(ctx):
     """Display aggregated owner holdings across all brokers."""
@@ -499,7 +563,9 @@ async def owner_summary(ctx):
 # Discord bot command
 @bot.command(
     name="top",
-    help="Displays the top holdings by dollar value (Quantity <= 1) grouped by broker.",
+    help="Displays the top holdings grouped by broker.",
+    usage="[range]",
+    extras={"category": "Reporting"},
 )
 async def top_holdings_command(ctx, range: int = 3):
     """
@@ -519,7 +585,9 @@ async def top_holdings_command(ctx, range: int = 3):
 
 @bot.command(
     name="watch",
-    help="Add ticker to watchlist. Args: split_date split_ratio format: 'mm/dd' 'r-r'",
+    help="Add ticker to the watchlist.",
+    usage="<ticker> <split_date> [split_ratio]",
+    extras={"category": "Watchlist"},
 )
 async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
     """Adds a ticker to the watchlist with an optional split date and split ratio."""
@@ -543,7 +611,9 @@ async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = Non
 
 @bot.command(
     name="addratio",
-    help="Adds or updates the split ratio for an existing ticker in the watchlist.",
+    help="Add or update the split ratio for a watched ticker.",
+    usage="<ticker> <split_ratio>",
+    extras={"category": "Watchlist"},
 )
 async def add_ratio(ctx, ticker: str, split_ratio: str):
     if not split_ratio:
@@ -553,19 +623,32 @@ async def add_ratio(ctx, ticker: str, split_ratio: str):
     await watch_list_manager.watch_ratio(ctx, ticker, split_ratio)
 
 
-@bot.command(name="watchlist", help="Lists all tickers currently being watched.")
+@bot.command(
+    name="watchlist",
+    help="List all tickers currently being watched.",
+    extras={"category": "Watchlist"},
+)
 async def allwatching(ctx):
     """Lists all tickers being watched."""
     await watch_list_manager.list_watched_tickers(ctx)
 
 
-@bot.command(name="ok", help="watched <ticker> | Removes a ticker from the watchlist.")
+@bot.command(
+    name="ok",
+    help="Remove a ticker from the watchlist.",
+    usage="<ticker>",
+    extras={"category": "Watchlist"},
+)
 async def watched_ticker(ctx, ticker: str):
     """Removes a ticker from the watchlist."""
     await watch_list_manager.stop_watching(ctx, ticker)
 
 
-@bot.command(name="todiscord", help="Prints text file one line at a time")
+@bot.command(
+    name="todiscord",
+    help="Print a text file to Discord one line at a time.",
+    extras={"category": "Utilities"},
+)
 async def print_by_line(ctx):
     """Prints contents of a file to Discord, one line at a time."""
     await print_to_discord(ctx)
@@ -573,7 +656,9 @@ async def print_by_line(ctx):
 
 @bot.command(
     name="addmap",
-    help="Usage: addmap <brokerage> <broker_no> <account (last 4)> <Account Nickname> | Adds mapping details for an account to the Account Mappings file.",
+    help="Add account mapping details.",
+    usage="<brokerage> <broker_no> <account> <nickname>",
+    extras={"category": "Accounts"},
 )
 async def add_account_mappings_command(
     ctx, brokerage: str, broker_no: str, account: str, nickname: str
@@ -591,7 +676,11 @@ async def add_account_mappings_command(
         logger.info(f"An error ocurred: {e}")
 
 
-@bot.command(name="loadmap", help="Maps accounts from Account Details excel sheet")
+@bot.command(
+    name="loadmap",
+    help="Map account details from Excel to JSON.",
+    extras={"category": "Accounts"},
+)
 async def load_account_mappings_command(ctx):
     """Maps account details from the Excel sheet to JSON."""
     try:
@@ -604,7 +693,11 @@ async def load_account_mappings_command(ctx):
         await ctx.send(f"An error occurred during update: {str(e)}")
 
 
-@bot.command(name="loadlog", help="Updates excel log with mapped accounts")
+@bot.command(
+    name="loadlog",
+    help="Update Excel log with mapped accounts.",
+    extras={"category": "Accounts"},
+)
 async def update_log_with_mappings(ctx):
     """Updates the Excel log with mapped accounts."""
     try:
@@ -617,7 +710,8 @@ async def update_log_with_mappings(ctx):
 
 @bot.command(
     name="clearmap",
-    help="Clears all account mappings from the account_mapping.json file",
+    help="Remove all saved account mappings.",
+    extras={"category": "Accounts"},
 )
 async def clear_mapping_command(ctx):
     """Clears all account mappings from the JSON file."""
@@ -629,14 +723,22 @@ async def clear_mapping_command(ctx):
         await ctx.send(f"An error occurred during the clearing process: {str(e)}")
 
 
-@bot.command(name="clearholdings", help="Clears entries in holdings_log.csv")
+@bot.command(
+    name="clearholdings",
+    help="Clear entries in holdings_log.csv",
+    extras={"category": "Admin"},
+)
 async def clear_holdings(ctx):
     """Clears all holdings from the CSV file."""
     success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
     await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
 
-@bot.command(name="all", help="Daily reminder with holdings refresh.")
+@bot.command(
+    name="all",
+    help="Daily reminder with holdings refresh.",
+    extras={"category": "Reporting"},
+)
 async def show_reminder(ctx):
     """Send reminder, refresh holdings, then summarize broker holdings."""
     await ctx.send("Clearing the current holdings for refresh.")
@@ -664,8 +766,7 @@ async def show_reminder(ctx):
 @bot.command(
     name="shutdown",
     help="Gracefully shuts down the bot.",
-    brief="Stop the bot",
-    category="Admin",
+    extras={"category": "Admin"},
 )
 async def shutdown(ctx):
     await ctx.send("no you")
