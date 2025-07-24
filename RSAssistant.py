@@ -58,7 +58,13 @@ from utils.utility_utils import (
     print_to_discord,
     track_ticker_summary,
 )
-from utils.on_message_utils import handle_on_message, set_channels
+from utils.on_message_utils import (
+    handle_on_message,
+    set_channels,
+    enable_audit,
+    disable_audit,
+    get_audit_summary,
+)
 from utils.watch_utils import (
     periodic_check,
     send_reminder_message_embed,
@@ -638,12 +644,20 @@ async def clear_holdings(ctx):
 
 @bot.command(name="all", help="Daily reminder with holdings refresh.")
 async def show_reminder(ctx):
-    """Send reminder, refresh holdings, then summarize broker holdings."""
+    """Refresh holdings and report watchlist gaps.
+
+    This command clears existing holdings, posts a watchlist reminder,
+    triggers a holdings refresh via AutoRSA, and audits each account's
+    holdings against the watchlist as the data is received. After all
+    brokers complete, a summary of missing tickers is posted before the
+    regular broker summary for each watchlist ticker.
+    """
     await ctx.send("Clearing the current holdings for refresh.")
     await clear_holdings(ctx)
     channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
     if channel:
         await send_reminder_message_embed(channel)
+        enable_audit()
         await ctx.send("!rsa holdings all")
 
         def check(message: discord.Message) -> bool:
@@ -654,10 +668,25 @@ async def show_reminder(ctx):
 
         try:
             await bot.wait_for("message", check=check, timeout=600)
+            summary = get_audit_summary()
+            disable_audit()
+            if summary:
+                embed = discord.Embed(
+                    title="Missing Watchlist Holdings",
+                    color=discord.Color.red(),
+                )
+                for account, tickers in summary.items():
+                    embed.add_field(
+                        name=account,
+                        value=", ".join(tickers),
+                        inline=False,
+                    )
+                await ctx.send(embed=embed)
             watch_list = watch_list_manager.get_watch_list()
             for ticker in watch_list.keys():
                 await ctx.invoke(broker_has, ticker=ticker)
         except asyncio.TimeoutError:
+            disable_audit()
             await ctx.send("Timed out waiting for AutoRSA response.")
 
 
