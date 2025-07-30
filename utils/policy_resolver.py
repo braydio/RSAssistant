@@ -4,9 +4,11 @@
 import os
 import requests
 import re
+from pathlib import Path
 from bs4 import BeautifulSoup
 from utils.logging_setup import logger
 from utils.sec_policy_fetcher import SECPolicyFetcher
+from utils.config_utils import VOLUMES_DIR
 
 
 class SplitPolicyResolver:
@@ -161,7 +163,11 @@ class SplitPolicyResolver:
         return None
 
     @staticmethod
-    def log_full_return(url, text, log_file="volumes/logs/source_return.log"):
+    def log_full_return(
+        url,
+        text,
+        log_file=str(VOLUMES_DIR / "logs" / "source_return.log"),
+    ):
         """Append fetched text to a log file for reference."""
         try:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)

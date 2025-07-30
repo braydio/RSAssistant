@@ -10,7 +10,9 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
 - Schedules buy or sell orders and executes them via autoRSA.
 - The `..all` command refreshes holdings, audits them against the watchlist,
   and posts a summary of any missing tickers.
-- Stores logs and a SQLite database under `volumes/` for persistence.
+- Stores logs and a SQLite database under `volumes/` for persistence. Set
+  the `VOLUMES_DIR` environment variable to use a different location (e.g.
+  `/mnt/netstorage/volumes`).
 
 ## Directory Overview
 
@@ -44,6 +46,9 @@ pip install -r requirements.txt
 cp config/example.env volumes/config/.env
 cp config/example.settings.yaml volumes/config/settings.yml
 ```
+
+If you want RSAssistant to store data in an external location, set the
+``VOLUMES_DIR`` variable in ``volumes/config/.env`` to your desired path.
 
 3. Launch the bot:
 
