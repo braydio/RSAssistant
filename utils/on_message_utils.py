@@ -3,6 +3,7 @@
 import re
 import asyncio
 from datetime import datetime, timedelta, date
+from collections import defaultdict
 import requests
 
 from utils.logging_setup import logger
@@ -16,6 +17,7 @@ from utils.watch_utils import (
     parse_bulk_watchlist_message,
     add_entries_from_message,
     account_mapping,
+    watch_list_manager,
 )
 from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute
@@ -27,6 +29,51 @@ from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
 DISCORD_AI_CHANNEL = None
+
+# Flag indicating the '..all' command is auditing watchlist holdings
+_audit_active = False
+# Accumulates missing tickers per account during an audit
+_missing_summary = defaultdict(set)
+
+
+def enable_audit():
+    """Activate watchlist auditing for the '..all' command."""
+    global _audit_active, _missing_summary
+    _audit_active = True
+    _missing_summary = defaultdict(set)
+
+
+def disable_audit():
+    """Deactivate auditing mode."""
+    global _audit_active
+    _audit_active = False
+
+
+def get_audit_summary():
+    """Return accumulated missing tickers per account."""
+    return {k: sorted(v) for k, v in _missing_summary.items()}
+
+
+def compute_account_missing_tickers(parsed_holdings):
+    """Return missing watchlist tickers per account from parsed holdings."""
+    watchlist = {t.upper() for t in watch_list_manager.get_watch_list().keys()}
+    account_holdings = defaultdict(set)
+    for h in parsed_holdings:
+        key = f"{h['broker']} {h['account_name']} ({h['account']})"
+        account_holdings[key].add(h["ticker"].upper())
+    results = {}
+    for account, held in account_holdings.items():
+        missing = watchlist - held
+        if missing:
+            results[account] = sorted(missing)
+    return results
+
+
+async def _audit_holdings(message, parsed_holdings):
+    missing = compute_account_missing_tickers(parsed_holdings)
+    for account, tickers in missing.items():
+        _missing_summary[account].update(tickers)
+        await message.channel.send(f"Missing in {account}: {', '.join(tickers)}")
 
 
 def set_channels(primary_id, secondary_id, tertiary_id):
@@ -91,11 +138,13 @@ async def handle_primary_channel(bot, message):
                 return
 
             for holding in parsed_holdings:
-                holding[
-                    "Key"
-                ] = f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
+                holding["Key"] = (
+                    f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
+                )
 
             save_holdings_to_csv(parsed_holdings)
+            if _audit_active:
+                await _audit_holdings(message, parsed_holdings)
         except Exception as e:
             logger.error(f"Error parsing embed message: {e}")
     else:
