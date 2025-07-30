@@ -4,6 +4,10 @@ This module loads environment variables, resolves file paths and provides
 helper functions for broker account lookups. When an account nickname is not
 found in the mapping JSON, :data:`DEFAULT_ACCOUNT_NICKNAME` is used to
 construct a fallback based on broker, group and account numbers.
+
+Set the ``VOLUMES_DIR`` environment variable to override the default
+``volumes/`` directory path. This allows running the bot against external
+storage mounts such as ``/mnt/netstorage/volumes``.
 """
 
 import json
@@ -19,7 +23,9 @@ logger = logging.getLogger(__name__)
 # --- Directories ---
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
-VOLUMES_DIR = BASE_DIR / "volumes"
+VOLUMES_DIR = Path(
+    os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))
+).resolve()
 CONFIG_DIR = VOLUMES_DIR / "config"
 
 # --- Config paths ---
@@ -165,7 +171,10 @@ def load_config():
         },
         "logging": {
             "level": os.getenv("LOG_LEVEL", "INFO"),
-            "file": os.getenv("LOG_FILE", "volumes/logs/rsassistant.log"),
+            "file": os.getenv(
+                "LOG_FILE",
+                str(VOLUMES_DIR / "logs" / "rsassistant.log"),
+            ),
             "backup_count": int(os.getenv("LOG_BACKUP_COUNT", 2)),
         },
         "environment": {
@@ -179,7 +188,10 @@ def load_config():
         },
         "heartbeat": {
             "enabled": os.getenv("HEARTBEAT_ENABLED", "true").lower() == "true",
-            "path": os.getenv("HEARTBEAT_PATH", "volumes/logs/heartbeat.txt"),
+            "path": os.getenv(
+                "HEARTBEAT_PATH",
+                str(VOLUMES_DIR / "logs" / "heartbeat.txt"),
+            ),
             "interval": int(os.getenv("HEARTBEAT_INTERVAL", 60)),
         },
     }

@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from threading import Thread
 from colorama import Fore, Style
+from utils.config_utils import VOLUMES_DIR
 
 
 class ReplaceInvalidCharactersFilter(logging.Filter):
@@ -19,7 +20,9 @@ class ReplaceInvalidCharactersFilter(logging.Filter):
         return True
 
 
-def start_heartbeat_writer(path="./volumes/logs/heartbeat.txt", interval=60):
+def start_heartbeat_writer(
+    path=str(VOLUMES_DIR / "logs" / "heartbeat.txt"), interval=60
+):
     def writer():
         while True:
             try:
@@ -41,9 +44,9 @@ def setup_logging(config=None, verbose=False):
         else "INFO"
     )
     log_file = (
-        config.get("logging", {}).get("file", "logs/app.log")
+        config.get("logging", {}).get("file", str(VOLUMES_DIR / "logs" / "app.log"))
         if config
-        else "volumes/logs/app.log"
+        else str(VOLUMES_DIR / "logs" / "app.log")
     )
     max_size = 10485760
     backup_count = config.get("logging", {}).get("backup_count", 2) if config else 2
