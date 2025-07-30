@@ -468,9 +468,14 @@ async def brokerlist(ctx, broker: str = None):
 @bot.command(
     name="bw",
     help="Broker-With <ticker> (details) | All brokers with specified ticker, opt details=specific broker",
+    aliases=["brokerwith"],
 )
 async def broker_has(ctx, ticker: str, *args):
-    """Shows broker-level summary for a specific ticker."""
+    """Shows broker-level summary for a specific ticker.
+
+    This command is available as ``..bw`` or ``..brokerwith`` and
+    optionally accepts a broker name to display account-level details.
+    """
     specific_broker = args[0] if args else None
     await track_ticker_summary(
         ctx, ticker, show_details=bool(specific_broker), specific_broker=specific_broker
