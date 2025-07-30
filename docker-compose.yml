@@ -13,6 +13,7 @@ services:
       - ./volumes/excel:/app/volumes/excel # Persist Excel
       - ./volumes/config:/app/volumes/config
     environment:
+      TZ: America/New_York
       ENVIRONMENT: production
     deploy:
       resources:
