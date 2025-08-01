@@ -1,4 +1,4 @@
-"""Simple Yahoo Finance price cache with optional on-disk persistence."""
+"""Simple price cache using OpenBB with optional on-disk persistence."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Dict, Tuple
 
-import yfinance as yf
+from openbb import obb
 
 from utils.config_utils import VOLUMES_DIR
 
@@ -18,7 +18,7 @@ _CACHE: Dict[str, Tuple[float, float]] = {}
 _FILE_CACHE_LOADED = False
 
 # cache stored under volumes/cache to survive bot restarts
-CACHE_FILE = VOLUMES_DIR / "cache" / "yf_price_cache.json"
+CACHE_FILE = VOLUMES_DIR / "cache" / "price_cache.json"
 TTL_SECONDS = 600  # 10 minutes
 
 
@@ -54,10 +54,10 @@ def _save_cache_to_file() -> None:
 
 
 def get_price(ticker: str) -> float | None:
-    """Return the latest closing price for ``ticker``.
+    """Return the latest closing price for ``ticker`` using OpenBB.
 
     The price is cached in-memory and persisted to :data:`CACHE_FILE`. Cached
-    values older than :data:`TTL_SECONDS` are refreshed from Yahoo Finance.
+    values older than :data:`TTL_SECONDS` are refreshed via ``openbb``.
     """
 
     ticker = ticker.upper().strip()
@@ -68,12 +68,14 @@ def get_price(ticker: str) -> float | None:
         if now - ts < TTL_SECONDS:
             return price
     try:
-        data = yf.Ticker(ticker).history(period="1d")
-        if not data.empty:
-            price = round(float(data["Close"].iloc[-1]), 2)
-            _CACHE[ticker] = (now, price)
-            _save_cache_to_file()
-            return price
+        result = obb.equity.price.quote(symbol=ticker)
+        if result.results:
+            price = result.results[0].close or result.results[0].last_price
+            if price is not None:
+                price = round(float(price), 2)
+                _CACHE[ticker] = (now, price)
+                _save_cache_to_file()
+                return price
         logger.warning("No data returned for %s", ticker)
     except Exception as e:
         logger.error("Failed to fetch price for %s: %s", ticker, e)

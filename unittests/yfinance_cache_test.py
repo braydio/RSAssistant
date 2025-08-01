@@ -3,8 +3,7 @@
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-
-import pandas as pd
+import types
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -27,11 +26,12 @@ def test_get_price_persists_and_loads(tmp_path, monkeypatch):
         SimpleNamespace(time=lambda: fake_time),
     )
 
-    class DummyTicker:
-        def history(self, period="1d"):
-            return pd.DataFrame({"Close": [10.0]})
-
-    monkeypatch.setattr(yfinance_cache.yf, "Ticker", lambda t: DummyTicker())
+    dummy_result = types.SimpleNamespace(results=[types.SimpleNamespace(close=10.0, last_price=None)])
+    monkeypatch.setattr(
+        yfinance_cache.obb.equity.price.__class__,
+        "quote",
+        lambda self, symbol=None, provider=None: dummy_result,
+    )
     price = yfinance_cache.get_price("ABC")
     assert price == 10.0
     assert cache_file.exists()
@@ -39,7 +39,11 @@ def test_get_price_persists_and_loads(tmp_path, monkeypatch):
     # Clear in-memory cache to force reload from disk
     monkeypatch.setattr(yfinance_cache, "_CACHE", {})
     monkeypatch.setattr(yfinance_cache, "_FILE_CACHE_LOADED", False)
-    monkeypatch.setattr(yfinance_cache.yf, "Ticker", lambda t: (_ for _ in ()).throw(AssertionError()))
+    monkeypatch.setattr(
+        yfinance_cache.obb.equity.price.__class__,
+        "quote",
+        lambda self, symbol=None, provider=None: (_ for _ in ()).throw(AssertionError()),
+    )
 
     price = yfinance_cache.get_price("ABC")
     assert price == 10.0
