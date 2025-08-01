@@ -13,7 +13,6 @@ from pathlib import Path
 
 import discord
 import yaml
-import yfinance as yf
 from utils.yfinance_cache import get_price
 
 from utils.config_utils import (

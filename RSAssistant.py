@@ -525,6 +525,7 @@ async def brokerlist(ctx, broker: str = None):
 
 @bot.command(
     name="bw",
+    aliases=["brokerwith"],
     help="Show which brokers hold a given ticker.",
     usage="<ticker> [broker]",
     extras={"category": "Reporting"},
