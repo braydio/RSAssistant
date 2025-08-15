@@ -70,9 +70,12 @@ async def track_ticker_summary(
     holding_logs_file=HOLDINGS_LOG_CSV,
     account_mapping_file=ACCOUNT_MAPPING,
 ):
-    """
-    Track accounts that hold the specified ticker, aggregating at the broker level.
-    Shows details at the account level if a specific broker is provided.
+    """Aggregate holdings by broker for the specified ``ticker``.
+
+    The function reads :data:`HOLDINGS_LOG_CSV` and resolves account nicknames
+    using :func:`utils.config_utils.get_account_nickname`.  If ``specific_broker``
+    is provided, a detailed view of each account under that broker is shown;
+    otherwise a summary across all brokers is sent.
     """
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
@@ -88,7 +91,12 @@ async def track_ticker_summary(
 
             for row in csv_reader:
                 broker_name = row["Broker Name"]
-                account_key = row["Key"]  # "Broker Name + Nickname"
+                broker_number = row["Broker Number"]
+                account_number = row["Account Number"]
+                nickname = get_account_nickname(
+                    broker_name, broker_number, account_number
+                )
+                account_key = f"{broker_name} {nickname}"
 
                 timestamp_str = row.get("Timestamp", "")
                 try:
@@ -143,7 +151,9 @@ async def track_ticker_summary(
                 ctx, ticker, specific_broker, holdings, mapped_accounts, timestamp_str
             )
         else:
-            await get_aggregated_broker_summary(ctx, ticker, holdings, mapped_accounts, timestamp_str)
+            await get_aggregated_broker_summary(
+                ctx, ticker, holdings, mapped_accounts, timestamp_str
+            )
 
     except FileNotFoundError:
         await ctx.send(
@@ -155,7 +165,9 @@ async def track_ticker_summary(
         await ctx.send(f"Error: {e}")
 
 
-async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping, timestamp_str=""):
+async def get_aggregated_broker_summary(
+    ctx, ticker, holdings, account_mapping, timestamp_str=""
+):
     """
     Generates an aggregated summary of positions across all brokers for a given ticker.
     """
@@ -680,7 +692,9 @@ def generate_broker_summary_embed(specific_broker=None):
     broker_label = (
         specific_broker.upper()
         if specific_broker and specific_broker.lower() in ["bbae", "dspac"]
-        else specific_broker.capitalize() if specific_broker else "All Active Brokers"
+        else specific_broker.capitalize()
+        if specific_broker
+        else "All Active Brokers"
     )
 
     embed = discord.Embed(
