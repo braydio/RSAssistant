@@ -69,10 +69,13 @@ async def track_ticker_summary(
     specific_broker=None,
     holding_logs_file=HOLDINGS_LOG_CSV,
     account_mapping_file=ACCOUNT_MAPPING,
+    collect=False,
 ):
     """
     Track accounts that hold the specified ticker, aggregating at the broker level.
-    Shows details at the account level if a specific broker is provided.
+    Shows details at the account level if a specific broker is provided. When
+    ``collect`` is True, broker-level status data is returned instead of being
+    sent to the Discord channel.
     """
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
@@ -137,13 +140,18 @@ async def track_ticker_summary(
             latest_timestamp.strftime("%Y-%m-%d %H:%M:%S") if latest_timestamp else ""
         )
 
+        statuses = compute_broker_statuses(holdings, mapped_accounts)
         # Decide which view to show based on the specific_broker argument
+        if collect and not specific_broker:
+            return statuses, timestamp_str
         if specific_broker:
             await get_detailed_broker_view(
                 ctx, ticker, specific_broker, holdings, mapped_accounts, timestamp_str
             )
         else:
-            await get_aggregated_broker_summary(ctx, ticker, holdings, mapped_accounts, timestamp_str)
+            await get_aggregated_broker_summary(
+                ctx, ticker, statuses, timestamp_str
+            )
 
     except FileNotFoundError:
         await ctx.send(
@@ -154,31 +162,27 @@ async def track_ticker_summary(
     except Exception as e:
         await ctx.send(f"Error: {e}")
 
+def compute_broker_statuses(holdings, account_mapping):
+    """Return held vs total account counts per broker.
 
-async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping, timestamp_str=""):
-    """
-    Generates an aggregated summary of positions across all brokers for a given ticker.
-    """
-    embed = discord.Embed(
-        title=f"**{ticker} Holdings Summary**",
-        description=f"All brokers summary, checking position for {ticker}.",
-        color=discord.Color.blue(),
-    )
+    Args:
+        holdings (dict): Parsed holdings keyed by broker and account key.
+        account_mapping (dict): Mapping of brokers to their accounts.
 
+    Returns:
+        dict[str, tuple[str, int, int]]: Mapping of broker name to a tuple of
+        (status_icon, held_accounts, total_accounts).
+    """
+    results = {}
     for broker_name, group_data in account_mapping.items():
         if isinstance(group_data, dict):
-            # Count the total accounts and held accounts for each broker
             total_accounts = 0
             held_accounts = 0
-
             for group_number, accounts in group_data.items():
                 if isinstance(accounts, dict):
-                    total_accounts += len(
-                        accounts
-                    )  # Add all accounts under the broker to total count
+                    total_accounts += len(accounts)
                     for account_number, account_nickname in accounts.items():
                         account_key = f"{broker_name} {account_nickname}"
-                        # Check if the account is marked as holding the ticker
                         if (
                             holdings.get(broker_name, {})
                             .get(account_key, {})
@@ -186,23 +190,31 @@ async def get_aggregated_broker_summary(ctx, ticker, holdings, account_mapping, 
                             == "✅"
                         ):
                             held_accounts += 1
-
-            # Determine status icon based on counts
             if held_accounts == total_accounts:
-                status_icon = "✅"  # All accounts hold the position
+                status_icon = "✅"
             elif held_accounts == 0:
-                status_icon = "❌"  # No accounts hold the position
+                status_icon = "❌"
             else:
-                status_icon = "🟡"  # Some accounts hold the position
+                status_icon = "🟡"
+            results[broker_name] = (status_icon, held_accounts, total_accounts)
+    return results
 
-            # Add broker summary field to the embed
-            embed.add_field(
-                name=f"{broker_name} {status_icon}",
-                value=f"Position in {held_accounts} of {total_accounts} accounts",
-                inline=True,
-            )
 
-    # Add footer with timestamp
+async def get_aggregated_broker_summary(ctx, ticker, statuses, timestamp_str=""):
+    """Send an aggregated summary embed for a given ticker."""
+    embed = discord.Embed(
+        title=f"**{ticker} Holdings Summary**",
+        description=f"All brokers summary, checking position for {ticker}.",
+        color=discord.Color.blue(),
+    )
+
+    for broker_name, (status_icon, held_accounts, total_accounts) in statuses.items():
+        embed.add_field(
+            name=f"{broker_name} {status_icon}",
+            value=f"Position in {held_accounts} of {total_accounts} accounts",
+            inline=True,
+        )
+
     embed.set_footer(
         text=f"Try: '..brokerwith {ticker} <broker>' for details. • {timestamp_str}"
     )

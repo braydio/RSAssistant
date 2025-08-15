@@ -9,7 +9,8 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
 - Maintains watch and sell lists with automatic reminders.
 - Schedules buy or sell orders and executes them via autoRSA.
 - The `..all` command refreshes holdings, audits them against the watchlist,
-  and posts a summary of any missing tickers.
+  and posts a summary of any missing tickers alongside a consolidated broker
+  holdings status embed.
 - Stores logs and a SQLite database under `volumes/` for persistence. Set
   the `VOLUMES_DIR` environment variable to use a different location (e.g.
   `/mnt/netstorage/volumes`).
@@ -56,8 +57,9 @@ If you want RSAssistant to store data in an external location, set the
 python RSAssistant.py
 ```
 
-The bot's `..all` command now audits your holdings against the watchlist and
-summarizes any tickers that are missing from your accounts.
+The bot's `..all` command now audits your holdings against the watchlist,
+summarizes any tickers that are missing from your accounts, and consolidates
+broker holdings status into a single embed.
 
 ### Docker
 
