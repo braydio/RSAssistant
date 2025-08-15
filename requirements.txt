@@ -14,3 +14,4 @@ rich==14.0.0
 selenium==4.31.0
 webdriver_manager==4.0.2
 yfinance==0.2.56
+openbb==4.4.5
