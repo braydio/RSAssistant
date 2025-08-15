@@ -769,9 +769,16 @@ async def show_reminder(ctx):
         await ctx.send("!rsa holdings all")
 
         def check(message: discord.Message) -> bool:
+            """Return True when AutoRSA signals holdings completion.
+
+            Accepts messages from bots as well as messages authored by
+            ``AutoRSA`` to support CLI environments where the AutoRSA
+            user may not be flagged as a bot.
+            """
+            author_ok = message.author.bot or message.author.name.lower() == "autorisa"
             return (
                 message.channel == ctx.channel
-                and message.author.bot
+                and author_ok
                 and "All commands complete in all brokers" in message.content
             )
 
