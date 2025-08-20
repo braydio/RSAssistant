@@ -101,8 +101,12 @@ class CategoryHelpCommand(commands.MinimalHelpCommand):
         if note:
             self.paginator.add_line(note, empty=True)
 
-        filtered = await self.filter_commands(bot.commands, sort=True, key=self.get_category)
-        for category, commands_iter in itertools.groupby(filtered, key=self.get_category):
+        filtered = await self.filter_commands(
+            bot.commands, sort=True, key=self.get_category
+        )
+        for category, commands_iter in itertools.groupby(
+            filtered, key=self.get_category
+        ):
             self.paginator.add_line(f"__**{category}**__")
             for command in commands_iter:
                 self.add_command_formatting(command)
@@ -116,6 +120,7 @@ class CategoryHelpCommand(commands.MinimalHelpCommand):
         self.paginator.add_line(f"__**Category:** {category}__", empty=True)
         self.add_command_formatting(command)
         await self.send_pages()
+
 
 # Set up bot intents
 intents = discord.Intents.default()
@@ -527,6 +532,7 @@ async def brokerlist(ctx, broker: str = None):
     name="bw",
     help="Show which brokers hold a given ticker.",
     usage="<ticker> [broker]",
+    aliases=["brokerwith"],
     extras={"category": "Reporting"},
 )
 async def broker_has(ctx, ticker: str, *args):
