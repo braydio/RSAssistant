@@ -3,7 +3,9 @@
 This module loads environment variables, resolves file paths and provides
 helper functions for broker account lookups. When an account nickname is not
 found in the mapping JSON, :data:`DEFAULT_ACCOUNT_NICKNAME` is used to
-construct a fallback based on broker, group and account numbers.
+construct a fallback based on broker, group and account numbers. Missing
+accounts are automatically persisted with this default mapping to keep
+brokerage tracking functional without manual setup.
 
 Set the ``VOLUMES_DIR`` environment variable to override the default
 ``volumes/`` directory path. This allows running the bot against external
@@ -23,9 +25,7 @@ logger = logging.getLogger(__name__)
 # --- Directories ---
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
-VOLUMES_DIR = Path(
-    os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))
-).resolve()
+VOLUMES_DIR = Path(os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))).resolve()
 CONFIG_DIR = VOLUMES_DIR / "config"
 
 # --- Config paths ---
@@ -130,19 +130,31 @@ def get_account_number(broker_name, broker_number):
 
 
 def get_account_nickname(broker_name, broker_number, account_number):
-    """Return the nickname for an account or the formatted default."""
+    """Return the nickname for an account, creating a default mapping if missing.
+
+    When an account is encountered without a user-defined nickname, a default
+    nickname is generated using :data:`DEFAULT_ACCOUNT_NICKNAME` and persisted to
+    :data:`ACCOUNT_MAPPING`. This ensures broker tracking commands function even
+    before explicit account setup.
+    """
 
     mappings = load_account_mappings()
-    nickname = (
-        mappings.get(broker_name, {}).get(str(broker_number), {}).get(account_number)
-    )
+    broker_str = str(broker_number)
+    account_str = str(account_number)
 
+    broker_dict = mappings.setdefault(broker_name, {})
+    group_dict = broker_dict.setdefault(broker_str, {})
+
+    nickname = group_dict.get(account_str)
     if nickname:
         return nickname
 
-    return DEFAULT_ACCOUNT_NICKNAME.format(
+    nickname = DEFAULT_ACCOUNT_NICKNAME.format(
         broker=broker_name, group=broker_number, account=account_number
     )
+    group_dict[account_str] = nickname
+    save_account_mappings(mappings)
+    return nickname
 
 
 def get_account_nickname_or_default(broker_name, broker_number, account_number):
