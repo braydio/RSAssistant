@@ -534,6 +534,7 @@ async def brokerlist(ctx, broker: str = None):
     usage="<ticker> [broker]",
     aliases=["brokerwith"],
     extras={"category": "Reporting"},
+    aliases=["brokerwith"],
 )
 async def broker_has(ctx, ticker: str, *args):
     """Shows broker-level summary for a specific ticker.
@@ -761,8 +762,9 @@ async def show_reminder(ctx):
     This command clears existing holdings, posts a watchlist reminder,
     triggers a holdings refresh via AutoRSA, and audits each account's
     holdings against the watchlist as the data is received. After all
-    brokers complete, a summary of missing tickers is posted before the
-    regular broker summary for each watchlist ticker.
+    brokers complete, a summary of missing tickers is posted followed by
+    a single embed consolidating broker holdings status for each
+    watchlist ticker.
     """
     await ctx.send("Clearing the current holdings for refresh.")
     await clear_holdings(ctx)
@@ -773,8 +775,16 @@ async def show_reminder(ctx):
         await ctx.send("!rsa holdings all")
 
         def check(message: discord.Message) -> bool:
+            """Return True when AutoRSA signals holdings completion.
+
+            Accepts messages from bots as well as messages authored by
+            ``AutoRSA`` to support CLI environments where the AutoRSA
+            user may not be flagged as a bot.
+            """
+            author_ok = message.author.bot or message.author.name.lower() == "autorisa"
             return (
                 message.channel == ctx.channel
+                and author_ok
                 and "All commands complete in all brokers" in message.content
             )
 
@@ -795,8 +805,28 @@ async def show_reminder(ctx):
                     )
                 await ctx.send(embed=embed)
             watch_list = watch_list_manager.get_watch_list()
+            results = []
+            last_timestamp = ""
             for ticker in watch_list.keys():
-                await ctx.invoke(broker_has, ticker=ticker)
+                statuses, ts = await track_ticker_summary(
+                    ctx, ticker, collect=True
+                )
+                results.append((ticker, statuses))
+                last_timestamp = ts
+            summary_embed = discord.Embed(
+                title="Broker Holdings Check", color=discord.Color.blue()
+            )
+            for ticker, statuses in results:
+                lines = [
+                    f"{broker} {icon} {held}/{total}"
+                    for broker, (icon, held, total) in statuses.items()
+                ]
+                summary_embed.add_field(
+                    name=ticker, value="\n".join(lines) or "No data", inline=False
+                )
+            if last_timestamp:
+                summary_embed.set_footer(text=f"Holdings snapshot • {last_timestamp}")
+            await ctx.send(embed=summary_embed)
         except asyncio.TimeoutError:
             disable_audit()
             await ctx.send("Timed out waiting for AutoRSA response.")
