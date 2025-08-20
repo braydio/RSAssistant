@@ -6,6 +6,7 @@ manages scheduled orders using a persistent queue. Commands are grouped by
 category and served through a custom help formatter so ``..help`` displays
 usage details.
 """
+
 import asyncio
 import json
 import os
@@ -532,7 +533,6 @@ async def brokerlist(ctx, broker: str = None):
     name="bw",
     help="Show which brokers hold a given ticker.",
     usage="<ticker> [broker]",
-    aliases=["brokerwith"],
     extras={"category": "Reporting"},
     aliases=["brokerwith"],
 )
@@ -808,9 +808,7 @@ async def show_reminder(ctx):
             results = []
             last_timestamp = ""
             for ticker in watch_list.keys():
-                statuses, ts = await track_ticker_summary(
-                    ctx, ticker, collect=True
-                )
+                statuses, ts = await track_ticker_summary(ctx, ticker, collect=True)
                 results.append((ticker, statuses))
                 last_timestamp = ts
             summary_embed = discord.Embed(
