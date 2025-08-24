@@ -30,11 +30,12 @@ from utils.config_utils import (
     BOT_TOKEN,
     DISCORD_PRIMARY_CHANNEL,
     DISCORD_SECONDARY_CHANNEL,
-    DISCORD_AI_CHANNEL,
+    DISCORD_TERTIARY_CHANNEL,
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
     ACCOUNT_MAPPING,
+    BOT_PREFIX,
 )
 
 from utils.csv_utils import (
@@ -135,7 +136,7 @@ discord.gateway.DiscordWebSocket.gateway_timeout = 60  # seconds
 
 # Initialize bot
 bot = commands.Bot(
-    command_prefix="..", case_insensitive=True, intents=intents, reconnect=True
+    command_prefix=BOT_PREFIX, case_insensitive=True, intents=intents, reconnect=True
 )
 bot.help_command = CategoryHelpCommand()
 
@@ -201,7 +202,7 @@ async def on_ready():
         ready_message = (
             account_setup_message
             if not ACCOUNT_MAPPING
-            else "Watching for order activity (✪‿✪)"
+            else "Watching for order activity o.O"
         )
     except (FileNotFoundError, json.JSONDecodeError):
         ready_message = account_setup_message
@@ -218,9 +219,11 @@ async def on_ready():
         )
     logger.info("Initializing Application in Production environment.")
     logger.info(
-        f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}, | TERTIARY | {DISCORD_AI_CHANNEL}"
+        f"{bot.user} has connected to Discord! PRIMARY | {DISCORD_PRIMARY_CHANNEL}, SECONDARY | {DISCORD_SECONDARY_CHANNEL}, | TERTIARY | {DISCORD_TERTIARY_CHANNEL}"
     )
-    set_channels(DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_AI_CHANNEL)
+    set_channels(
+        DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_TERTIARY_CHANNEL
+    )
 
     # Check if the periodic task is already running, and start it if not
     if "periodic_task" not in globals() or periodic_task is None:
@@ -471,7 +474,10 @@ async def batchclear(ctx, limit: int):
 
 @bot.event
 async def on_message(message):
-    if message.content.startswith(".."):
+    if message.author == bot.user:
+        logger.info(f"Message is from myself! {bot.user}")
+        return
+    elif message.content.startswith(BOT_PREFIX):
         logger.info(f"Handling command {message.content}")
         await bot.process_commands(message)
     else:
@@ -778,10 +784,10 @@ async def show_reminder(ctx):
             """Return True when AutoRSA signals holdings completion.
 
             Accepts messages from bots as well as messages authored by
-            ``AutoRSA`` to support CLI environments where the AutoRSA
+            ``auto-rsa`` to support CLI environments where the AutoRSA
             user may not be flagged as a bot.
             """
-            author_ok = message.author.bot or message.author.name.lower() == "autorisa"
+            author_ok = message.author.bot or message.author.name.lower() == "auto-rsa"
             return (
                 message.channel == ctx.channel
                 and author_ok
@@ -844,9 +850,9 @@ async def shutdown(ctx):
 # Shutdown handler
 def shutdown_handler(signal_received, frame):
     logger.info("RSAssistant - shutting down...")
-    global periodic_check, reminder_scheduler
-    if periodic_check and not periodic_check.done():
-        periodic_check.cancel()
+    global periodic_task, reminder_scheduler
+    if periodic_task and not periodic_task.done():
+        periodic_task.cancel()
     if reminder_scheduler:
         reminder_scheduler.shutdown()
     sys.exit(0)

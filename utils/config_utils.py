@@ -62,10 +62,9 @@ load_env()
 VERSION = "development 0.1"
 DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL", 0))
 DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
-DISCORD_AI_CHANNEL = int(os.getenv("DISCORD_AI_CHANNEL", 0))
+DISCORD_TERTIARY_CHANNEL = int(os.getenv("DISCORD_TERTIARY_CHANNEL", 0))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-
-# --- Logging setup ---
+BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
 
 # --- Logging resolved paths ---
 logger.info(f"Loaded BOT_TOKEN: {'Set' if BOT_TOKEN else 'Missing'}")
@@ -84,7 +83,7 @@ logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 
 
 def load_account_mappings():
-    logger.debug(f"Loading account mappings from {ACCOUNT_MAPPING}")
+    logger.debug(f"Loading account mappings from file path: {ACCOUNT_MAPPING}")
     if not ACCOUNT_MAPPING.exists():
         logger.error(f"Account mapping file {ACCOUNT_MAPPING} not found.")
         return {}
@@ -92,7 +91,6 @@ def load_account_mappings():
     try:
         with open(ACCOUNT_MAPPING, "r", encoding="utf-8") as f:
             data = json.load(f)
-            logger.debug(f"Account mapping data loaded successfully.")
             if not isinstance(data, dict):
                 logger.error(
                     f"Invalid account mapping structure in {ACCOUNT_MAPPING}. Expected a dictionary."

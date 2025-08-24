@@ -7,6 +7,7 @@ from collections import defaultdict
 import requests
 
 from utils.logging_setup import logger
+from utils.config_utils import BOT_PREFIX
 from utils.parsing_utils import (
     alert_channel_message,
     parse_embed_message,
@@ -28,7 +29,7 @@ from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
-DISCORD_AI_CHANNEL = None
+DISCORD_TERTIARY_CHANNEL = None
 
 # Flag indicating the '..all' command is auditing watchlist holdings
 _audit_active = False
@@ -77,10 +78,10 @@ async def _audit_holdings(message, parsed_holdings):
 
 
 def set_channels(primary_id, secondary_id, tertiary_id):
-    global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_AI_CHANNEL
+    global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_TERTIARY_CHANNEL
     DISCORD_PRIMARY_CHANNEL = primary_id
     DISCORD_SECONDARY_CHANNEL = secondary_id
-    DISCORD_AI_CHANNEL = tertiary_id
+    DISCORD_TERTIARY_CHANNEL = tertiary_id
     logger.info(
         f"on_message_utils loaded with primary={primary_id}, secondary={secondary_id}, tertiary={tertiary_id}"
     )
@@ -125,8 +126,9 @@ async def handle_primary_channel(bot, message):
     maintenance commands.
     """
 
-    if message.content.lower().startswith("manual"):
-        logger.warning(f"Manual order detected: {message.content}")
+    if message.content.startswith(BOT_PREFIX):
+        logger.warning("Detected message with command prefix: {BOT_PREFIX}")
+        return
     elif message.embeds:
         logger.info("Embed message detected.")
         try:
@@ -147,7 +149,7 @@ async def handle_primary_channel(bot, message):
                 await _audit_holdings(message, parsed_holdings)
         except Exception as e:
             logger.error(f"Error parsing embed message: {e}")
-    else:
+    elif message.author.bot:
         logger.info("Parsing regular order message.")
         lowered = message.content.lower().strip()
         if lowered == "..updatebot":
