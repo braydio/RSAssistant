@@ -201,7 +201,7 @@ async def on_ready():
         ready_message = (
             account_setup_message
             if not ACCOUNT_MAPPING
-            else "...watching for order activity...\n(✪‿✪)"
+            else "Watching for order activity (✪‿✪)"
         )
     except (FileNotFoundError, json.JSONDecodeError):
         ready_message = account_setup_message
