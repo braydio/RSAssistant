@@ -37,4 +37,4 @@ fi
 
 # Start the main script
 echo "Starting RSAssistant script..."
-exec python /app/RSAssistant.py
+exec python /app/pr_watcher.py
