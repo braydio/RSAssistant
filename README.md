@@ -78,6 +78,22 @@ When an account has no nickname in `account_mapping.json`, RSAssistant falls
 back to the pattern `"{broker} {group} {account}"`. This ensures new accounts
 and orders are always logged with a deterministic identifier.
 
+## Pull Request Watcher
+
+`pr_watcher.py` monitors the GitHub repository for merged pull requests. When a merge is detected, it stops the running bot, executes `git pull`, and restarts the bot with the latest code.
+
+Run the watcher with:
+
+```bash
+python pr_watcher.py
+```
+
+Set the following environment variables to customize behavior:
+
+- `GITHUB_REPO`: repository in `owner/name` form (default: `your-org/RSAssistant`)
+- `GITHUB_TOKEN`: optional token for authenticated requests
+- `PR_WATCH_INTERVAL`: polling interval in seconds (default: 60)
+
 ## Testing
 
 Run unit tests with:
