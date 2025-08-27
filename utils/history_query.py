@@ -1,3 +1,10 @@
+"""Helpers for querying and visualizing historical holdings.
+
+This module provides functions for translating account identifiers to
+nicknames and for rendering historical holdings charts that can be sent
+back to Discord.
+"""
+
 import io
 import json
 
@@ -12,6 +19,7 @@ from utils.sql_utils import get_db_connection
 with open(ACCOUNT_MAPPING_FILE, "r") as f:
     account_mappings = json.load(f)
 
+
 def get_account_id_or_name(account_input):
     """Return account_id if given nickname, or nickname if given account_id."""
     for entry in account_mappings:
@@ -21,9 +29,30 @@ def get_account_id_or_name(account_input):
             return entry["account_id"]
     return None
 
-async def show_sql_holdings_history(ctx, account: str = None, ticker: str = None, start_date: str = None, end_date: str = None):
-    """
-    Displays historical holdings over time from the SQL database.
+
+async def show_sql_holdings_history(
+    ctx,
+    account: str | None = None,
+    ticker: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
+    """Send a holdings history plot to Discord.
+
+    Parameters
+    ----------
+    ctx:
+        Discord invocation context used to send messages.
+    account:
+        Optional account nickname or numeric identifier to filter by.
+    ticker:
+        Optional stock ticker symbol to filter by.
+    start_date, end_date:
+        Optional date range bounds in ``YYYY-MM-DD`` format.
+
+    The function queries the ``HistoricalHoldings`` table with the provided
+    filters, generates a line plot of quantity over time and replies to the
+    invoking Discord command with the resulting image.
     """
     try:
         query = "SELECT * FROM HistoricalHoldings WHERE 1=1"
@@ -63,13 +92,27 @@ async def show_sql_holdings_history(ctx, account: str = None, ticker: str = None
         df = df.sort_values(by="date")
 
         # Group by date to show cumulative quantities if multiple entries exist per date
-        history = df.groupby("date").agg({"quantity": "sum", "average_price": "mean"}).reset_index()
+        history = (
+            df.groupby("date")
+            .agg({"quantity": "sum", "average_price": "mean"})
+            .reset_index()
+        )
 
         # Plot the data
         plt.figure(figsize=(12, 7))
-        plt.plot(history["date"], history["quantity"], marker='o', label='Total Quantity', color='blue')
-        plt.fill_between(history["date"], 0, history["quantity"], alpha=0.1, color='blue')
-        plt.title(f"Historical Holdings Over Time for {'All Accounts' if not account else account}")
+        plt.plot(
+            history["date"],
+            history["quantity"],
+            marker="o",
+            label="Total Quantity",
+            color="blue",
+        )
+        plt.fill_between(
+            history["date"], 0, history["quantity"], alpha=0.1, color="blue"
+        )
+        plt.title(
+            f"Historical Holdings Over Time for {'All Accounts' if not account else account}"
+        )
         plt.xlabel("Date")
         plt.ylabel("Quantity Held")
         plt.grid(True)
@@ -79,10 +122,12 @@ async def show_sql_holdings_history(ctx, account: str = None, ticker: str = None
         buffer = io.BytesIO()
         plt.savefig(buffer, format="png")
         buffer.seek(0)
-        await ctx.send("Here is the historical holdings trend:", file=discord.File(fp=buffer, filename="holdings_history.png"))
+        await ctx.send(
+            "Here is the historical holdings trend:",
+            file=discord.File(fp=buffer, filename="holdings_history.png"),
+        )
 
         plt.close()
 
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
-
