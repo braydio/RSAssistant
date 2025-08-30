@@ -22,7 +22,7 @@ from utils.config_utils import (
     load_config,
 )
 
-EXCEL_FILE_DIRECTORY = "./volumes/excel/"
+EXCEL_FILE_DIRECTORY = str(EXCEL_FILE_MAIN.parent) + "/"
 EXCEL_FILE_NAME = "ReverseSplitLog"
 BASE_EXCEL_FILE = "ReverseSplitLog.xlsx"
 

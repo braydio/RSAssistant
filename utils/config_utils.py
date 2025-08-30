@@ -22,32 +22,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- Directories ---
+# --- Early path definitions for .env loading ---
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
-VOLUMES_DIR = Path(os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))).resolve()
-CONFIG_DIR = VOLUMES_DIR / "config"
+ENV_PATH = BASE_DIR / "config" / ".env"
 
-# --- Config paths ---
-ENV_PATH = CONFIG_DIR / ".env"
-ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
-WATCH_FILE = CONFIG_DIR / "watch_list.json"
-SELL_FILE = CONFIG_DIR / "sell_list.json"
-EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
-HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
-ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
-SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
-ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
-
-ALPACA_API_SECRET = os.getenv("ALPACA_SECRET_KEY")  # Paper Account
-ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")  # Paper Account
-BASE_URL = "https://paper-api.alpaca.markets/v2"  # Paper Account
-
-# Default placeholder used when an account has no nickname in the mapping.
-DEFAULT_ACCOUNT_NICKNAME = "{broker} {group} {account}"
-
-
-# --- Load .env ---
+# --- Load .env first ---
 def load_env():
     if ENV_PATH.exists():
         dotenv.load_dotenv(dotenv_path=ENV_PATH)
@@ -57,6 +37,20 @@ def load_env():
 
 
 load_env()
+
+# --- Directories (after .env loaded) ---
+VOLUMES_DIR = Path(os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))).resolve()
+CONFIG_DIR = VOLUMES_DIR / "config"
+
+# --- Config paths ---
+ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
+WATCH_FILE = CONFIG_DIR / "watch_list.json"
+SELL_FILE = CONFIG_DIR / "sell_list.json"
+EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
+HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
+ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
+SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
+ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
 
 # --- Runtime constants from env ---
 VERSION = "development 0.1"
