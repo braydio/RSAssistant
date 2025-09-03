@@ -18,10 +18,12 @@ import pandas as pd
 
 from utils.config_utils import (
     DISCORD_SECONDARY_CHANNEL,
+    DISCORD_PRIMARY_CHANNEL,
     SELL_FILE,
     WATCH_FILE,
     load_account_mappings,
     load_config,
+    AUTO_REFRESH_ON_REMINDER,
 )
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import get_last_stock_price, send_large_message_chunks
@@ -406,6 +408,20 @@ async def send_reminder_message(bot):
     else:
         logging.error("Channel not found.")
 
+    # Optionally trigger a holdings refresh in the primary channel
+    try:
+        if AUTO_REFRESH_ON_REMINDER:
+            primary = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+            if primary:
+                await primary.send("!rsa holdings all")
+                logging.info("Triggered holdings refresh due to reminder (AUTO_REFRESH_ON_REMINDER=true)")
+            else:
+                logging.error(
+                    f"Primary channel not found for auto holdings refresh: {DISCORD_PRIMARY_CHANNEL}"
+                )
+    except Exception as e:
+        logging.error(f"Error triggering auto holdings refresh: {e}")
+
 
 def parse_bulk_watchlist_message(content: str):
     """Parse lines of the form 'TICKER X-Y (purchase by mm/dd)'.
@@ -462,4 +478,3 @@ async def add_entries_from_message(content: str, ctx=None) -> int:
         else:
             watch_list_manager.add_ticker(ticker, date, ratio)
     return len(entries)
-

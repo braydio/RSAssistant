@@ -17,9 +17,13 @@ from typing import Optional
 
 import requests
 
-POLL_INTERVAL = int(os.environ.get("PR_WATCH_INTERVAL", "60"))
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "your-org/RSAssistant")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+POLL_INTERVAL = 60
+GITHUB_REPO = "braydio/RSAssistant"
+GITHUB_TOKEN = "(Optional) Github Token Not Set"
+
+# POLL_INTERVAL = int(os.environ.get("", "60"))
+# GITHUB_REPO = os.environ.get("braydio/RSAssistant", "username/repository")
+# GITHUB_TOKEN = os.environ.get("Github-Token Not-Set")
 
 
 def fetch_latest_merge_time() -> Optional[datetime]:
@@ -35,9 +39,7 @@ def fetch_latest_merge_time() -> Optional[datetime]:
     if GITHUB_TOKEN:
         headers["Authorization"] = f"token {GITHUB_TOKEN}"
 
-    url = (
-        f"https://api.github.com/repos/{GITHUB_REPO}/pulls?state=closed&per_page=1&sort=updated&direction=desc"
-    )
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/pulls?state=closed&per_page=1&sort=updated&direction=desc"
     response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
     prs = response.json()
@@ -46,7 +48,9 @@ def fetch_latest_merge_time() -> Optional[datetime]:
     return None
 
 
-def should_restart(last_merge: Optional[datetime], latest_merge: Optional[datetime]) -> bool:
+def should_restart(
+    last_merge: Optional[datetime], latest_merge: Optional[datetime]
+) -> bool:
     """Return ``True`` when a new merge has occurred since ``last_merge``."""
 
     return (

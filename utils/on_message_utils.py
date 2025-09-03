@@ -22,6 +22,15 @@ from utils.watch_utils import (
 )
 from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute
+from utils.monitor_utils import has_acted_today, record_action_today
+from utils.config_utils import (
+    AUTO_SELL_LIVE,
+    HOLDING_ALERT_MIN_PRICE,
+    IGNORE_TICKERS as IGNORE_TICKERS_SET,
+    DISCORD_PRIMARY_CHANNEL as PRIMARY_CHAN_ID,
+    MENTION_USER_ID,
+    MENTION_ON_ALERTS,
+)
 from utils import split_watch_utils
 
 from bs4 import BeautifulSoup
@@ -145,6 +154,43 @@ async def handle_primary_channel(bot, message):
                 )
 
             save_holdings_to_csv(parsed_holdings)
+
+            # After saving, optionally alert and auto-sell tickers over threshold
+            try:
+                threshold = float(HOLDING_ALERT_MIN_PRICE)
+            except Exception:
+                threshold = 1.0
+
+            for h in parsed_holdings:
+                try:
+                    ticker = str(h.get("ticker", "")).upper()
+                    if not ticker or ticker == "CASH AND SWEEP FUNDS":
+                        continue
+                    if ticker in IGNORE_TICKERS_SET:
+                        continue
+                    price = float(h.get("price", 0) or 0)
+                    quantity = float(h.get("quantity", 0) or 0)
+                    broker = str(h.get("broker", "")).strip()
+                    account_name = str(h.get("account_name", h.get("account", "")))
+                    if price < threshold or quantity <= 0:
+                        continue
+                    if has_acted_today(broker, account_name, ticker):
+                        continue
+
+                    mention = f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
+                    note = (
+                        f"{mention}Detected holding >= ${threshold:.2f}: {ticker} @ ${price:.2f} "
+                        f"in {broker} {account_name} (qty {quantity})."
+                    )
+                    await message.channel.send(note)
+
+                    if AUTO_SELL_LIVE:
+                        # Use '..ord' so scheduling logic (market hours) is respected
+                        sell_cmd = f"{BOT_PREFIX}ord sell {ticker} {broker} {quantity}"
+                        await message.channel.send(sell_cmd)
+                    record_action_today(broker, account_name, ticker)
+                except Exception as exc:
+                    logger.error(f"Monitor/auto-sell step failed for holding {h}: {exc}")
             if _audit_active:
                 await _audit_holdings(message, parsed_holdings)
         except Exception as e:

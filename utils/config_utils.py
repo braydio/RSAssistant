@@ -29,11 +29,42 @@ ENV_PATH = BASE_DIR / "config" / ".env"
 
 # --- Load .env first ---
 def load_env():
+    """Load environment variables from a single, explicit source.
+
+    Precedence:
+    1. If `ENV_FILE` is set, load from that path only.
+    2. If running in Docker (``/.dockerenv`` present), do not load any file
+       and rely on process environment (e.g., compose `env_file`).
+    3. Otherwise, load from `config/.env` when present.
+    """
+
+    # Explicit override wins and is the only file loaded
+    env_file_override = os.getenv("ENV_FILE")
+    if env_file_override:
+        override_path = Path(env_file_override)
+        if not override_path.is_absolute():
+            override_path = (BASE_DIR / override_path).resolve()
+        if override_path.exists():
+            dotenv.load_dotenv(dotenv_path=override_path)
+            logger.info(f"Environment variables loaded from ENV_FILE={override_path}")
+        else:
+            logger.warning(
+                f"ENV_FILE set to {override_path} but file not found. Using process env only."
+            )
+        return
+
+    # In Docker, rely on injected environment (compose env_file/environment)
+    in_docker = Path("/.dockerenv").exists()
+    if in_docker:
+        logger.info("Running in Docker; using process environment (no .env file loaded)")
+        return
+
+    # Local dev default: config/.env
     if ENV_PATH.exists():
         dotenv.load_dotenv(dotenv_path=ENV_PATH)
         logger.info(f"Environment variables loaded from {ENV_PATH}")
     else:
-        logger.warning(f".env file not found at {ENV_PATH}")
+        logger.warning(f".env file not found at {ENV_PATH}; using process environment only")
 
 
 load_env()
@@ -59,6 +90,75 @@ DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
 DISCORD_TERTIARY_CHANNEL = int(os.getenv("DISCORD_TERTIARY_CHANNEL", 0))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
+
+# --- Feature toggles and thresholds ---
+# Automatically trigger holdings refresh when the watchlist reminder is sent
+AUTO_REFRESH_ON_REMINDER = (
+    os.getenv("AUTO_REFRESH_ON_REMINDER", "false").strip().lower() == "true"
+)
+# Threshold for triggering alerts on detected holdings based on last price
+HOLDING_ALERT_MIN_PRICE = float(os.getenv("HOLDING_ALERT_MIN_PRICE", "1"))
+# If enabled, automatically place sell orders to close detected holdings
+AUTO_SELL_LIVE = os.getenv("AUTO_SELL_LIVE", "false").strip().lower() == "true"
+# Comma-separated list of tickers to ignore for alerts/auto-sell
+# Also supports a file of tickers (one per line) at CONFIG_DIR/ignore_tickers.txt
+# or a custom path via IGNORE_TICKERS_FILE.
+
+# Path to ignore-tickers file (defaults to volumes/config/ignore_tickers.txt)
+IGNORE_TICKERS_FILE = Path(
+    os.getenv("IGNORE_TICKERS_FILE", str(CONFIG_DIR / "ignore_tickers.txt"))
+).resolve()
+
+
+def _load_ignore_tickers_from_file(path: Path) -> set:
+    """Load tickers from a newline-delimited file, ignoring blanks and comments.
+
+    Lines beginning with '#' are treated as comments. Whitespace is trimmed and
+    tickers are normalized to uppercase.
+    """
+    tickers = set()
+    try:
+        if not path.exists():
+            return tickers
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                raw = line.strip()
+                if not raw or raw.startswith("#"):
+                    continue
+                # Allow optional inline comments with ' # '
+                value = raw.split(" # ", 1)[0].strip()
+                if value:
+                    tickers.add(value.upper())
+    except Exception as e:
+        logger.error(f"Failed reading ignore tickers from {path}: {e}")
+    return tickers
+
+
+def _compute_ignore_tickers() -> set:
+    """Combine env CSV IGNORE_TICKERS with file-based ignore list."""
+    env_set = {
+        t.strip().upper()
+        for t in os.getenv("IGNORE_TICKERS", "").split(",")
+        if t.strip()
+    }
+    file_set = _load_ignore_tickers_from_file(IGNORE_TICKERS_FILE)
+    combined = env_set | file_set
+    if combined:
+        logger.info(
+            f"Loaded {len(combined)} ignored tickers (env={len(env_set)}, file={len(file_set)} from {IGNORE_TICKERS_FILE})"
+        )
+    else:
+        logger.info("No ignored tickers configured.")
+    return combined
+
+
+IGNORE_TICKERS = _compute_ignore_tickers()
+
+# --- Mentions ---
+# Discord user ID to mention in alerts (e.g., 123456789012345678)
+MENTION_USER_ID = os.getenv("MENTION_USER_ID", os.getenv("MY_ID", "")).strip()
+# Whether to include a mention on over-threshold alerts
+MENTION_ON_ALERTS = os.getenv("MENTION_ON_ALERTS", "true").strip().lower() == "true"
 
 # --- Logging resolved paths ---
 logger.info(f"Loaded BOT_TOKEN: {'Set' if BOT_TOKEN else 'Missing'}")

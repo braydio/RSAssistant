@@ -1,0 +1,6 @@
+# One ticker per line to ignore in over-threshold holdings alerts and auto-sell.
+# Lines starting with '#' are comments. Tickers are case-insensitive.
+# Example:
+# AAPL
+# MSFT  # Long-term position
+

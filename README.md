@@ -15,6 +15,17 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
   the `VOLUMES_DIR` environment variable to use a different location (e.g.
   `/mnt/netstorage/volumes`).
 
+### Daily Holdings Refresh + Over-$1 Monitor
+
+RSAssistant can optionally trigger a holdings refresh when a watchlist reminder is posted, then watch incoming holdings embeds and alert on positions meeting a price threshold. It can also optionally auto-sell those positions.
+
+- Auto refresh on reminder: posts `!rsa holdings all` after the reminder
+- Over-threshold alert: posts a note in the primary Discord channel
+- Optional auto-sell: posts a `..ord sell {ticker} {broker} {quantity}`
+- Daily de-dupe: avoids repeat alerts/sells per broker/account/ticker per day
+
+Configure these via environment variables (see below).
+
 ## Directory Overview
 
 ```
@@ -44,12 +55,17 @@ pip install -r requirements.txt
 2. Copy the example configuration and update your Discord credentials:
 
 ```bash
+\# For local development (default loader):
+cp config/example.env config/.env
+
+\# For Docker (compose reads env_file):
 cp config/example.env volumes/config/.env
 cp config/example.settings.yaml volumes/config/settings.yml
 ```
 
 If you want RSAssistant to store data in an external location, set the
-``VOLUMES_DIR`` variable in ``volumes/config/.env`` to your desired path.
+`VOLUMES_DIR` variable in your environment (for Docker, put it in
+`volumes/config/.env`; for local, put it in `config/.env`) to your desired path.
 
 3. Launch the bot:
 
@@ -61,6 +77,33 @@ The bot's `..all` command now audits your holdings against the watchlist,
 summarizes any tickers that are missing from your accounts, and consolidates
 broker holdings status into a single embed.
 
+### Configuration: Auto Refresh + Monitor
+
+Add the following keys to your environment. The app now loads from a single source:
+
+- Local default: `config/.env`
+- Override: set `ENV_FILE=/path/to/your.env` when running locally
+- Docker: compose injects variables from `volumes/config/.env`; the app does not load a file in-container
+
+- `AUTO_REFRESH_ON_REMINDER` (bool): If `true`, send `!rsa holdings all` after the reminder fires. Default `false`.
+- `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger the alert. Default `1`.
+- `AUTO_SELL_LIVE` (bool): If `true`, also post `..ord sell {ticker} {broker} {quantity}`. Default `false`.
+- `IGNORE_TICKERS` (CSV): Tickers to skip for alert/auto-sell (e.g., `ABCD,EFGH`). Default empty.
+- `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `volumes/config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
+
+You can use either the env var, the file, or both — the sets merge. Create the file like:
+
+```
+cp config/ignore_tickers.example.txt volumes/config/ignore_tickers.txt
+echo "AAPL" >> volumes/config/ignore_tickers.txt
+echo "MSFT  # Long-term" >> volumes/config/ignore_tickers.txt
+```
+
+- `MENTION_USER_ID` (string): Your Discord user ID to @-mention in alerts (e.g., `123456789012345678`). Optional.
+- `MENTION_ON_ALERTS` (bool): Enable/disable mentions on alerts. Default `true`.
+
+De-duplication state is stored at `volumes/config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
+
 ### Docker
 
 Alternatively, build and run with Docker:
@@ -71,6 +114,17 @@ docker compose up --build
 
 The compose setup also includes a `watchtower` container which checks for new
 images daily and automatically updates the running `rsassistant` service.
+
+Environment loading behavior inside Docker:
+
+- Compose uses `env_file: volumes/config/.env` and passes variables to the container.
+- The application detects it is running in Docker and relies on the process environment only (no additional `.env` file is read inside the container).
+
+To run locally with a custom env file path instead of `config/.env`, prefix commands with:
+
+```bash
+ENV_FILE=volumes/config/.env python RSAssistant.py
+```
 
 ## Default Account Nicknames
 
