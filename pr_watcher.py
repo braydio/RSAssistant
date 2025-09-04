@@ -17,6 +17,7 @@ from typing import Optional
 
 import requests
 
+<<<<<<< Updated upstream
 POLL_INTERVAL = 60
 GITHUB_REPO = "braydio/RSAssistant"
 GITHUB_TOKEN = "(Optional) Github Token Not Set"
@@ -24,6 +25,15 @@ GITHUB_TOKEN = "(Optional) Github Token Not Set"
 # POLL_INTERVAL = int(os.environ.get("", "60"))
 # GITHUB_REPO = os.environ.get("braydio/RSAssistant", "username/repository")
 # GITHUB_TOKEN = os.environ.get("Github-Token Not-Set")
+=======
+POLL_INTERVAL = "60"
+GITHUB_REPO = "braydio/RSAssistant"
+GITHUB_TOKEN = "Optional Token Not Set"
+
+# POLL_INTERVAL = int(os.environ.get("PR_WATCH_INTERVAL", "60"))
+# GITHUB_REPO = os.environ.get("GITHUB_REPO", "your-org/RSAssistant")
+# GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+>>>>>>> Stashed changes
 
 
 def fetch_latest_merge_time() -> Optional[datetime]:
