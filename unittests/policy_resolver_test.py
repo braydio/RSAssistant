@@ -14,3 +14,8 @@ def test_extract_round_up_snippet():
     )
     snippet = SplitPolicyResolver.extract_round_up_snippet(text)
     assert "rounded up" in snippet.lower()
+
+
+def test_extract_effective_date():
+    text = "The reverse stock split will be effective on October 31, 2023."
+    assert SplitPolicyResolver.extract_effective_date(text) == "2023-10-31"
