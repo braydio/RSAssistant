@@ -2,10 +2,13 @@
 """Utilities for fetching and analyzing reverse split policy sources."""
 
 import os
-import requests
 import re
+from datetime import datetime
 from pathlib import Path
+
+import requests
 from bs4 import BeautifulSoup
+
 from utils.logging_setup import logger
 from utils.sec_policy_fetcher import SECPolicyFetcher
 from utils.config_utils import VOLUMES_DIR
@@ -163,6 +166,28 @@ class SplitPolicyResolver:
         return None
 
     @staticmethod
+    def extract_effective_date(text):
+        """Return the effective date (YYYY-MM-DD) if present in text."""
+        if not text:
+            return None
+
+        patterns = [
+            r"(?:effective|takes effect|will take effect|will be effective|becomes effective)[^\.\n]*?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4})",
+            r"(?:effective|takes effect|will take effect|will be effective|becomes effective)[^\.\n]*?(\d{1,2}/\d{1,2}/\d{4})",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                date_str = match.group(1) if match.lastindex else match.group(0)
+                for fmt in ("%B %d, %Y", "%b %d, %Y", "%m/%d/%Y"):
+                    try:
+                        return datetime.strptime(date_str, fmt).date().isoformat()
+                    except ValueError:
+                        continue
+        return None
+
+    @staticmethod
     def log_full_return(
         url,
         text,
@@ -226,17 +251,20 @@ class SplitPolicyResolver:
 
     @classmethod
     def analyze_sec_filing(cls, sec_url):
+        """Parse an SEC filing for policy details and effective date."""
         try:
             logger.info(f"Analyzing SEC filing at {sec_url}")
             filing_text = cls.fetch_sec_filing_text(sec_url)
             if filing_text:
                 sec_policy = cls.analyze_fractional_share_policy(filing_text)
                 snippet = cls.extract_round_up_snippet(filing_text)
+                effective_date = cls.extract_effective_date(filing_text)
                 return {
                     "sec_policy": sec_policy,
                     "sec_url": sec_url,
                     "snippet": snippet,
                     "round_up_confirmed": bool(snippet),
+                    "effective_date": effective_date,
                 }
             else:
                 return {
@@ -261,6 +289,7 @@ class SplitPolicyResolver:
 
     @classmethod
     def full_analysis(cls, nasdaq_url):
+        """Gather policy info, effective date, and source text from NASDAQ notice."""
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
             ticker = cls.extract_ticker_from_url(nasdaq_url)
@@ -287,6 +316,10 @@ class SplitPolicyResolver:
                     if press_text:
                         press_policy = cls.analyze_fractional_share_policy(press_text)
                         nasdaq_result["sec_policy"] = press_policy
+                        if not nasdaq_result.get("effective_date"):
+                            nasdaq_result["effective_date"] = cls.extract_effective_date(
+                                press_text
+                            )
                         logger.info(f"Press Release analysis result: {press_policy}")
                     else:
                         logger.warning(
@@ -321,6 +354,10 @@ class SplitPolicyResolver:
                 if body_text:
                     cls.log_full_return(source_url, body_text)
                     nasdaq_result["body_text"] = body_text
+                    if not nasdaq_result.get("effective_date"):
+                        nasdaq_result["effective_date"] = cls.extract_effective_date(
+                            body_text
+                        )
                 else:
                     logger.warning(f"Failed to fetch body text from {source_url}")
             else:

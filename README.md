@@ -5,7 +5,7 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
 ## Features
 
 - Monitors NASDAQ and SEC feeds for reverse split announcements.
-- Parses filings and press releases for fractional share policies.
+- Parses filings and press releases for fractional share policies and effective dates.
 - Maintains watch and sell lists with automatic reminders.
 - Schedules buy or sell orders and executes them via autoRSA.
 - The `..all` command refreshes holdings, audits them against the watchlist,

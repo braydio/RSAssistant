@@ -250,7 +250,7 @@ async def handle_secondary_channel(bot, message):
 
         if policy_info.get("round_up_confirmed"):
             await attempt_autobuy(bot, message.channel, ticker, quantity=1)
-            split_date = date.today().isoformat()
+            split_date = policy_info.get("effective_date") or date.today().isoformat()
             split_watch_utils.add_split_watch(ticker, split_date)
             logger.info(f"Added split watch: {ticker} @ {split_date}")
     except Exception:
@@ -302,8 +302,12 @@ def build_policy_summary(ticker, policy_info, fallback_url):
     if "sec_url" in policy_info:
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
+    effective_date = policy_info.get("effective_date")
+    if effective_date:
+        summary += f"**Effective Date:** {effective_date}\n"
+
     policy_text = policy_info.get("sec_policy") or policy_info.get("policy")
-    summary += f" **Fractional Share Policy:** {policy_text}"
+    summary += f"**Fractional Share Policy:** {policy_text}"
 
     snippet = policy_info.get("snippet")
     if snippet:
