@@ -19,6 +19,7 @@ from pathlib import Path
 import dotenv
 
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
 ENV_PATH = BASE_DIR / "config" / ".env"
+
 
 # --- Load .env first ---
 def load_env():
@@ -56,7 +58,9 @@ def load_env():
     # In Docker, rely on injected environment (compose env_file/environment)
     in_docker = Path("/.dockerenv").exists()
     if in_docker:
-        logger.info("Running in Docker; using process environment (no .env file loaded)")
+        logger.info(
+            "Running in Docker; using process environment (no .env file loaded)"
+        )
         return
 
     # Local dev default: config/.env
@@ -64,7 +68,9 @@ def load_env():
         dotenv.load_dotenv(dotenv_path=ENV_PATH)
         logger.info(f"Environment variables loaded from {ENV_PATH}")
     else:
-        logger.warning(f".env file not found at {ENV_PATH}; using process environment only")
+        logger.warning(
+            f".env file not found at {ENV_PATH}; using process environment only"
+        )
 
 
 load_env()
@@ -82,6 +88,9 @@ HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
 ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
 SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
+
+# --- Account nickname pattern ---
+DEFAULT_ACCOUNT_NICKNAME = "{broker} {group} {account}"
 
 # --- Runtime constants from env ---
 VERSION = "development 0.1"
@@ -170,7 +179,7 @@ logger.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
 logger.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
 logger.info(f"Resolved SELLING_FILE: {SELL_FILE}")
 
-ENABLE_TICKER_CLI = os.getenv("ENABLE_TICKER", False)
+ENABLE_TICKER_CLI = os.getenv("ENABLE_TICKER", "false").strip().lower() == "true"
 logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 
 # === Account Mapping Functions ===
@@ -196,14 +205,18 @@ def load_account_mappings():
         return {}
 
 
-def save_account_mappings(mappings):
+def save_account_mappings(mappings: dict) -> None:
+    """Persist account nickname mappings to disk."""
+
     logger.debug(f"Saving account mappings to {ACCOUNT_MAPPING}")
     with open(ACCOUNT_MAPPING, "w", encoding="utf-8") as f:
         json.dump(mappings, f, indent=4)
     logger.info(f"Account mappings saved to {ACCOUNT_MAPPING}")
 
 
-def get_broker_name(broker_number):
+def get_broker_name(broker_number: int | str) -> Optional[str]:
+    """Return the broker name for ``broker_number`` if present."""
+
     mappings = load_account_mappings()
     for broker, accounts in mappings.items():
         if str(broker_number) in accounts:
@@ -211,12 +224,16 @@ def get_broker_name(broker_number):
     return None
 
 
-def get_broker_group(broker_name):
+def get_broker_group(broker_name: str) -> list:
+    """Return list of group numbers for ``broker_name``."""
+
     mappings = load_account_mappings()
     return list(mappings.get(broker_name, {}).keys())
 
 
-def get_account_number(broker_name, broker_number):
+def get_account_number(broker_name: str, broker_number: int | str) -> list:
+    """Return account numbers under ``broker_name`` and ``broker_number``."""
+
     mappings = load_account_mappings()
     return list(mappings.get(broker_name, {}).get(str(broker_number), {}).keys())
 
