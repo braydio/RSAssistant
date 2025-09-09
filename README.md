@@ -31,9 +31,12 @@ Configure these via environment variables (see below).
 ```
 .
 ├── RSAssistant.py           # Main bot application
+├── pr_watcher.py            # PR watcher script
 ├── utils/                   # Helper modules and order management
 ├── config/                  # Example env and settings files
 ├── volumes/                 # Logs, database, and Excel output
+├── unittests/               # Test suite
+├── requirements.txt         # Python dependencies
 ├── docker-compose.yml       # Docker setup
 └── Dockerfile
 ```
@@ -45,7 +48,7 @@ Configure these via environment variables (see below).
 1. Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/your-org/RSAssistant.git
+git clone https://github.com/braydio/RSAssistant.git
 cd RSAssistant
 python -m venv .venv
 source .venv/bin/activate
@@ -144,7 +147,7 @@ python pr_watcher.py
 
 Set the following environment variables to customize behavior:
 
-- `GITHUB_REPO`: repository in `owner/name` form (default: `your-org/RSAssistant`)
+- `GITHUB_REPO`: repository in `owner/name` form (default: `braydio/RSAssistant`)
 - `GITHUB_TOKEN`: optional token for authenticated requests
 - `PR_WATCH_INTERVAL`: polling interval in seconds (default: 60)
 
@@ -153,8 +156,10 @@ Set the following environment variables to customize behavior:
 Run unit tests with:
 
 ```bash
-pytest
+python -m pytest
 ```
+
+Tests rely on `pytest` for fixtures and discovery.
 
 ## License
 
