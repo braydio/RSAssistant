@@ -113,6 +113,17 @@ AUTO_SELL_LIVE = os.getenv("AUTO_SELL_LIVE", "false").strip().lower() == "true"
 # Also supports a file of tickers (one per line) at CONFIG_DIR/ignore_tickers.txt
 # or a custom path via IGNORE_TICKERS_FILE.
 
+# Persistence layer toggles (enabled by default)
+CSV_LOGGING_ENABLED = (
+    os.getenv("CSV_LOGGING_ENABLED", "true").strip().lower() == "true"
+)
+EXCEL_LOGGING_ENABLED = (
+    os.getenv("EXCEL_LOGGING_ENABLED", "true").strip().lower() == "true"
+)
+SQL_LOGGING_ENABLED = (
+    os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
+)
+
 # Path to ignore-tickers file (defaults to volumes/config/ignore_tickers.txt)
 IGNORE_TICKERS_FILE = Path(
     os.getenv("IGNORE_TICKERS_FILE", str(CONFIG_DIR / "ignore_tickers.txt"))
@@ -278,8 +289,10 @@ _config_cache = None
 def load_config():
     """
     Load configuration from environment variables and static defaults.
-    Replaces legacy YAML-based config loading.
-    Returns a dictionary structured like the original YAML config for compatibility.
+    Replaces legacy YAML-based config loading and exposes runtime
+    persistence toggles for CSV, Excel, and SQL logging.
+    Returns a dictionary structured like the original YAML config for
+    compatibility.
     """
     global _config_cache
     if _config_cache is not None:
@@ -314,6 +327,11 @@ def load_config():
                 str(VOLUMES_DIR / "logs" / "heartbeat.txt"),
             ),
             "interval": int(os.getenv("HEARTBEAT_INTERVAL", 60)),
+        },
+        "persistence": {
+            "csv": CSV_LOGGING_ENABLED,
+            "excel": EXCEL_LOGGING_ENABLED,
+            "sql": SQL_LOGGING_ENABLED,
         },
     }
 

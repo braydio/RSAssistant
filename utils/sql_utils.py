@@ -9,6 +9,7 @@ from utils.config_utils import (
     SQL_DATABASE,
     load_config,
     get_account_nickname_or_default,
+    SQL_LOGGING_ENABLED,
 )
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,12 @@ SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/
 
 # Database connection helper
 def get_db_connection():
-    """Helper function to get a database connection."""
+    """Return a database connection when SQL logging is enabled."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.debug("SQL logging disabled; database connection not created.")
+        raise RuntimeError("SQL logging disabled")
+
     logger.debug("Attempting to establish a database connection.")
     try:
         conn = sqlite3.connect(
@@ -43,12 +49,18 @@ def get_or_create_account_id(
     """
     Retrieve or create an account entry.
 
-    If ``account_nickname`` is ``None`` the nickname is resolved using
+    Returns ``None`` when SQL logging is disabled. If ``account_nickname``
+    is ``None`` the nickname is resolved using
     :func:`utils.config_utils.get_account_nickname_or_default`.
     """
     logger.info(
         f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}."
     )
+
+    if not SQL_LOGGING_ENABLED:
+        logger.debug("SQL logging disabled; skipping account lookup.")
+        return None
+
     if account_nickname is None:
         account_nickname = get_account_nickname_or_default(
             broker, broker_number, account_number
@@ -57,7 +69,6 @@ def get_or_create_account_id(
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            # Check if the account exists
             cursor.execute(
                 """
                 SELECT account_id
@@ -72,7 +83,6 @@ def get_or_create_account_id(
                 logger.debug(f"Account ID found: {result[0]}.")
                 return result[0]
 
-            # Create the account if it doesn't exist
             cursor.execute(
                 """
                 INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
@@ -90,7 +100,12 @@ def get_or_create_account_id(
 
 
 def init_db():
-    """Initializes the database tables with improvements."""
+    """Initialize database tables if SQL logging is enabled."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.info("SQL logging disabled; skipping database initialization.")
+        return
+
     logger.info("Initializing database with required tables.")
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -153,7 +168,12 @@ def init_db():
 def update_holdings_live(
     broker, broker_number, account_number, ticker, quantity, price
 ):
-    """Updates or inserts a holding into HoldingsLive."""
+    """Insert a holding into ``HoldingsLive`` when logging is enabled."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.info("SQL logging disabled; skipping holdings update.")
+        return
+
     logger.info(
         f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}."
     )
@@ -162,7 +182,6 @@ def update_holdings_live(
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            # Insert the new holding
             cursor.execute(
                 """
                 INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
@@ -383,7 +402,15 @@ def insert_order_history(order_data):
 
 
 def bot_query_database(table_name, filters=None, order_by=None, limit=10):
-    """Modular query function that handles errors and provides helpful feedback."""
+    """Query a table and return rows or an error message.
+
+    Returns a descriptive error when SQL logging is disabled.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.info("SQL logging disabled; query aborted.")
+        return {"error": "SQL logging disabled"}
+
     logger.info(
         f"Querying table {table_name} with filters: {filters}, order_by: {order_by}, limit: {limit}."
     )

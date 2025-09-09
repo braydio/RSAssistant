@@ -15,6 +15,17 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
   the `VOLUMES_DIR` environment variable to use a different location (e.g.
   `/mnt/netstorage/volumes`).
 
+### Persistent logging toggles
+
+CSV, Excel, and SQL persistence are enabled by default. To disable any of
+these logging layers, set the corresponding environment variable to `false`:
+
+- `CSV_LOGGING_ENABLED`
+- `EXCEL_LOGGING_ENABLED`
+- `SQL_LOGGING_ENABLED`
+
+Any value other than `false` leaves the logger enabled.
+
 ### Daily Holdings Refresh + Over-$1 Monitor
 
 RSAssistant can optionally trigger a holdings refresh when a watchlist reminder is posted, then watch incoming holdings embeds and alert on positions meeting a price threshold. It can also optionally auto-sell those positions.

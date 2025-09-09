@@ -18,7 +18,12 @@ from datetime import datetime, timedelta
 import discord
 from discord import Embed
 
-from utils.config_utils import HOLDINGS_LOG_CSV, ORDERS_LOG_CSV, load_config
+from utils.config_utils import (
+    HOLDINGS_LOG_CSV,
+    ORDERS_LOG_CSV,
+    load_config,
+    CSV_LOGGING_ENABLED,
+)
 from utils.sql_utils import update_holdings_live
 
 logger = logging.getLogger(__name__)
@@ -197,7 +202,12 @@ def identify_latest_orders(orders, new_order):
 
 
 def write_orders_to_csv(orders, file_path):
-    """Writes orders to CSV, overwriting the file."""
+    """Write orders to CSV when logging is enabled."""
+
+    if not CSV_LOGGING_ENABLED:
+        logger.info("CSV logging disabled; skipping write to %s", file_path)
+        return
+
     with open(file_path, mode="w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=ORDERS_HEADERS)
         writer.writeheader()
@@ -228,7 +238,16 @@ def alert_negative_quantity(order_data):
 
 
 def save_order_to_csv(order_data):
-    # Saves order, deletes duplicates and stale entries
+    """Persist an order to ``ORDERS_LOG_CSV`` if logging is enabled.
+
+    When :data:`CSV_LOGGING_ENABLED` is ``False`` this function logs the
+    skip and returns without writing to disk.
+    """
+
+    if not CSV_LOGGING_ENABLED:
+        logger.info("CSV logging disabled; skipping order save.")
+        return
+
     try:
         logger.info(f"Processing order data: {order_data}")
 
@@ -283,8 +302,12 @@ def save_holdings_to_csv(parsed_holdings):
     Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
     fields plus a ``Timestamp``.  When loading an existing CSV the function
     emits a warning if required columns such as ``Key`` or ``Timestamp`` are
-    missing.
+    missing. Logging can be disabled via :data:`CSV_LOGGING_ENABLED`.
     """
+
+    if not CSV_LOGGING_ENABLED:
+        logger.info("CSV logging disabled; skipping holdings save.")
+        return
 
     # Generate the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -413,10 +436,14 @@ def save_holdings_to_csv(parsed_holdings):
 
 
 def clear_holdings_log(filename):
+    """Clear all holdings from the CSV file, preserving only headers.
+
+    Returns ``True`` if successful, ``False`` otherwise. No-op when
+    :data:`CSV_LOGGING_ENABLED` is ``False``.
     """
-    Clears all holdings from the CSV file, preserving only the headers.
-    Returns True if successful, False otherwise.
-    """
+    if not CSV_LOGGING_ENABLED:
+        logger.info("CSV logging disabled; skipping clear for %s", filename)
+        return True, "CSV logging disabled; nothing to clear."
     try:
         # Check if the file exists
         if not os.path.exists(filename):

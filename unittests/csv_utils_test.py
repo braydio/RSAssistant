@@ -127,3 +127,44 @@ def test_get_top_holdings_refreshes_data(tmp_path):
     top, _ = csv_utils.get_top_holdings(2)
     tickers = {h["Stock"] for h in top["Broker"]}
     assert {"AAA", "BBB"} <= tickers
+
+
+def test_save_order_to_csv_disabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("CSV_LOGGING_ENABLED", "false")
+    import importlib
+    import utils.config_utils as cu
+    import utils.csv_utils as cu_mod
+
+    importlib.reload(cu)
+    cu_mod = importlib.reload(cu_mod)
+
+    cu_mod.ORDERS_LOG_CSV = str(tmp_path / "orders.csv")
+    cu_mod.save_order_to_csv({})
+    assert not (tmp_path / "orders.csv").exists()
+
+
+def test_save_holdings_to_csv_disabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("CSV_LOGGING_ENABLED", "false")
+    import importlib
+    import utils.config_utils as cu
+    import utils.csv_utils as cu_mod
+
+    importlib.reload(cu)
+    cu_mod = importlib.reload(cu_mod)
+
+    cu_mod.HOLDINGS_LOG_CSV = str(tmp_path / "holdings.csv")
+    cu_mod.save_holdings_to_csv(
+        [
+            {
+                "broker": "B",
+                "group": "1",
+                "account": "A1",
+                "ticker": "XYZ",
+                "quantity": 1,
+                "price": 1,
+                "value": 1,
+                "account_total": 1,
+            }
+        ]
+    )
+    assert not (tmp_path / "holdings.csv").exists()
