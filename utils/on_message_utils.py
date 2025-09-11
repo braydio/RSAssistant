@@ -347,11 +347,31 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
 
 
 def build_policy_summary(ticker, policy_info, fallback_url):
-    summary = f"**Reverse Split Alert** for `{ticker}`\n"
-    summary += f"[NASDAQ Notice]({policy_info.get('nasdaq_url', fallback_url)})\n"
+    """Construct a Markdown summary of split policy information.
 
-    if "press_url" in policy_info:
-        summary += f"[Press Release]({policy_info['press_url']})\n"
+    Parameters
+    ----------
+    ticker : str
+        Stock ticker symbol.
+    policy_info : dict
+        Data from :class:`SplitPolicyResolver` or press release analysis.
+    fallback_url : str
+        URL used when specific source links are unavailable.
+    """
+
+    summary = f"**Reverse Split Alert** for `{ticker}`\n"
+    nasdaq_url = policy_info.get("nasdaq_url")
+    press_url = policy_info.get("press_url")
+
+    if nasdaq_url:
+        summary += f"[NASDAQ Notice]({nasdaq_url})\n"
+    elif press_url:
+        summary += f"[Press Release]({press_url})\n"
+    else:
+        summary += f"[Source]({fallback_url})\n"
+
+    if press_url and press_url != nasdaq_url:
+        summary += f"[Press Release]({press_url})\n"
     if "sec_url" in policy_info:
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
