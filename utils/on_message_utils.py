@@ -44,6 +44,11 @@ _audit_active = False
 # Accumulates missing tickers per account during an audit
 _missing_summary = defaultdict(set)
 
+# Flag and buffers for holdings refresh aggregation
+_refresh_active = False
+_pending_alerts_by_broker = defaultdict(set)  # broker -> set[ticker]
+_pending_sell_commands = []  # queued auto-sell commands during refresh
+
 
 def enable_audit():
     """Activate watchlist auditing for the '..all' command."""
@@ -134,6 +139,52 @@ async def handle_primary_channel(bot, message):
     maintenance commands.
     """
 
+    # Detect completion message regardless of author to flush buffered alerts
+    global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
+    lowered_content = message.content.lower().strip()
+    if _refresh_active and "all commands complete in all brokers" in lowered_content:
+        try:
+            threshold = float(HOLDING_ALERT_MIN_PRICE)
+        except Exception:
+            threshold = 1.0
+
+        if _pending_alerts_by_broker:
+            mention = (
+                f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
+            )
+            lines = []
+            for broker in sorted(_pending_alerts_by_broker.keys()):
+                tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
+                lines.append(f"- {broker}: {tickers}")
+
+            header = (
+                f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
+            )
+            max_len = 2000
+            body = "\n".join(lines)
+            first_msg = (header + body)[:max_len]
+            await message.channel.send(first_msg)
+
+            remaining = body[len(first_msg) - len(header) :]
+            while remaining:
+                chunk = remaining[: max_len - 1]
+                await message.channel.send(chunk)
+                remaining = remaining[len(chunk) :]
+
+            for cmd in _pending_sell_commands:
+                await message.channel.send(cmd)
+
+        _refresh_active = False
+        _pending_alerts_by_broker = defaultdict(set)
+        _pending_sell_commands = []
+
+    # Detect start of holdings refresh to buffer alerts until completion
+    if "!rsa holdings" in lowered_content:
+        _refresh_active = True
+        _pending_alerts_by_broker = defaultdict(set)
+        _pending_sell_commands = []
+        logger.info("Detected start of holdings refresh; buffering alerts.")
+
     if message.content.startswith(BOT_PREFIX):
         logger.warning(f"Detected message with command prefix: {BOT_PREFIX}")
         return
@@ -201,8 +252,12 @@ async def handle_primary_channel(bot, message):
                 except Exception as exc:
                     logger.error(f"Monitor/auto-sell step failed for holding {h}: {exc}")
 
-            # Post a single consolidated summary message with one mention
-            if alert_entries:
+            # During refresh, buffer alerts and sell commands; otherwise, send immediately
+            if alert_entries and _refresh_active:
+                for e in alert_entries:
+                    _pending_alerts_by_broker[e["broker"]].add(e["ticker"])
+                _pending_sell_commands.extend(sell_commands)
+            elif alert_entries:
                 # Group tickers by account for readability
                 grouped = {}
                 for e in alert_entries:
@@ -245,6 +300,45 @@ async def handle_primary_channel(bot, message):
     elif message.author.bot:
         logger.info("Parsing regular order message.")
         lowered = message.content.lower().strip()
+        # If AutoRSA signals completion, flush buffered alerts per brokerage
+        if _refresh_active and "all commands complete in all brokers" in lowered:
+            try:
+                threshold = float(HOLDING_ALERT_MIN_PRICE)
+            except Exception:
+                threshold = 1.0
+
+            if _pending_alerts_by_broker:
+                mention = (
+                    f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
+                )
+                lines = []
+                # Produce per-broker unique ticker list
+                for broker in sorted(_pending_alerts_by_broker.keys()):
+                    tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
+                    lines.append(f"- {broker}: {tickers}")
+
+                header = (
+                    f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
+                )
+                max_len = 2000
+                body = "\n".join(lines)
+                first_msg = (header + body)[:max_len]
+                await message.channel.send(first_msg)
+
+                remaining = body[len(first_msg) - len(header) :]
+                while remaining:
+                    chunk = remaining[: max_len - 1]
+                    await message.channel.send(chunk)
+                    remaining = remaining[len(chunk) :]
+
+                # Send queued auto-sell commands after the summary
+                for cmd in _pending_sell_commands:
+                    await message.channel.send(cmd)
+
+            # Reset refresh state
+            _refresh_active = False
+            _pending_alerts_by_broker = defaultdict(set)
+            _pending_sell_commands = []
         if lowered == "..updatebot":
             await message.channel.send("Pulling latest code and restarting...")
             update_and_restart()
