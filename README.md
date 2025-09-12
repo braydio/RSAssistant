@@ -34,6 +34,7 @@ Configure these via environment variables (see below).
 ├── pr_watcher.py            # PR watcher script
 ├── utils/                   # Helper modules and order management
 ├── config/                  # Example env and settings files
+├── custom-overrides/        # Patches for NelsonDane/autoRSA
 ├── volumes/                 # Logs, database, and Excel output
 ├── unittests/               # Test suite
 ├── requirements.txt         # Python dependencies
@@ -42,6 +43,7 @@ Configure these via environment variables (see below).
 ```
 
 `RSAssistant.py` initializes the bot, command handlers, and scheduled tasks. Utility modules under `utils/` handle configuration, watch lists, and order execution.
+The `custom-overrides/` directory provides patches for NelsonDane's autoRSA; see `custom-overrides/README.md` for instructions.
 
 ## Quick Start
 
