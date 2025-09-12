@@ -1,0 +1,41 @@
+services:
+    auto-rsa:
+        build: 
+            context: .
+            dockerfile: Dockerfile
+        container_name: braydio-rsa
+        restart: unless-stopped
+        env_file:
+            - .env
+        tty: true
+        volumes:
+            - ./creds:/app/creds
+            - ./custom-overrides/autoRSA.py:/app/autoRSA.py
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "0.5"
+    watchtower:
+        # Auto update the auto-rsa container every hour
+        # For more info see: https://containrrr.dev/watchtower/arguments/
+        image: containrrr/watchtower
+        container_name: watchtower
+        hostname: braydio-rsa
+        environment:
+            - WATCHTOWER_CLEANUP=true
+            - WATCHTOWER_INCLUDE_STOPPED=true
+            - WATCHTOWER_POLL_INTERVAL=3600
+            # For more info on notifications see: https://containrrr.dev/watchtower/notifications/
+            # - WATCHTOWER_NOTIFICATIONS=shoutrrr
+            # - WATCHTOWER_NOTIFICATION_URL=discord://TOKEN@WEBHOOKID
+        command:
+            - auto-rsa
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    memory: 224M
+                    cpus: "0.1"
