@@ -35,3 +35,26 @@ def test_ignore_tickers_file_and_env_merge(tmp_path, monkeypatch):
     merged = config_utils._compute_ignore_tickers()
     # Uppercased unique set from both sources
     assert merged == {"AAPL", "MSFT", "GOOG", "AMZN"}
+
+
+def test_persistence_defaults_true():
+    assert config_utils.CSV_LOGGING_ENABLED
+    assert config_utils.EXCEL_LOGGING_ENABLED
+    assert config_utils.SQL_LOGGING_ENABLED
+
+
+def test_persistence_env_override(monkeypatch):
+    monkeypatch.setenv("CSV_LOGGING_ENABLED", "false")
+    monkeypatch.setenv("EXCEL_LOGGING_ENABLED", "false")
+    monkeypatch.setenv("SQL_LOGGING_ENABLED", "false")
+    import importlib
+
+    cu = importlib.reload(config_utils)
+    assert not cu.CSV_LOGGING_ENABLED
+    assert not cu.EXCEL_LOGGING_ENABLED
+    assert not cu.SQL_LOGGING_ENABLED
+    assert cu.load_config()["persistence"] == {
+        "csv": False,
+        "excel": False,
+        "sql": False,
+    }

@@ -36,6 +36,7 @@ from utils.config_utils import (
     ORDERS_LOG_CSV,
     ACCOUNT_MAPPING,
     BOT_PREFIX,
+    SQL_LOGGING_ENABLED,
 )
 
 from utils.csv_utils import (
@@ -84,7 +85,10 @@ setup_logging()
 
 logger = logging.getLogger(__name__)
 
-init_db()
+if SQL_LOGGING_ENABLED:
+    init_db()
+else:
+    logger.info("SQL logging disabled; skipping database initialization.")
 
 logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
 logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
