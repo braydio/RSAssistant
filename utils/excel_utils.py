@@ -20,6 +20,7 @@ from utils.config_utils import (
     get_account_nickname_or_default,
     load_account_mappings,
     load_config,
+    EXCEL_LOGGING_ENABLED,
 )
 
 EXCEL_FILE_DIRECTORY = str(EXCEL_FILE_MAIN.parent) + "/"
@@ -43,49 +44,45 @@ tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
 
 
 def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
+    """Return the path of the base Excel file.
+
+    When :data:`EXCEL_LOGGING_ENABLED` is ``False`` this function simply
+    returns the base path without creating or verifying backups.
     """
-    Returns the path of the base Excel file (without date).
-    If today's backup or tomorrow's backup doesn't exist, it creates them from the base file or today's file.
-    """
-    # logger: Log directory and filename values
+
+    base_excel_file_path = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
+
+    if not EXCEL_LOGGING_ENABLED:
+        return base_excel_file_path
+
     logger.debug(f"directory={directory}, filename={filename}")
 
     archive_dir = os.path.join(str(directory), "archive")
     logger.debug(f"archive_dir={archive_dir}")
 
-    # Full paths for today's and tomorrow's backup files
     today_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{today}.xlsx")
     tomorrow_excel_file = os.path.join(
         archive_dir, f"Backup_{filename}.{tomorrow}.xlsx"
     )
 
-    # Path to the base file (this is the file we will use for reading/writing)
-    base_excel_file_path = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
-
-    # Ensure the archive directory exists
     if not os.path.exists(archive_dir):
         os.makedirs(archive_dir)
         logger.debug(f"Created archive directory: {archive_dir}")
 
-    # Check if today's backup file exists
     if not os.path.exists(today_excel_file):
-        # If not, copy from the base file
         if os.path.exists(base_excel_file_path):
             shutil.copy(base_excel_file_path, today_excel_file)
             logger.info(f"Created today's backup Excel file: {today_excel_file}")
         else:
             logger.error(f"Base Excel file {base_excel_file_path} not found.")
 
-    # Check if tomorrow's backup file exists
     if not os.path.exists(tomorrow_excel_file):
-        # If not, copy from today's backup if it exists
         if os.path.exists(today_excel_file):
             shutil.copy(today_excel_file, tomorrow_excel_file)
             logger.info(f"Created tomorrow's backup Excel file: {tomorrow_excel_file}")
         else:
             logger.error(f"Today's backup file {today_excel_file} not found.")
 
-    # Return the path to the base file (this is the file you will use)
     return base_excel_file_path
 
 
@@ -104,6 +101,12 @@ def copy_cell_format(source_cell, target_cell):
 
 
 def create_excel_backups(excel_backup):
+    """Create a dated backup of the Excel log when enabled."""
+
+    if not EXCEL_LOGGING_ENABLED:
+        logger.info("Excel logging disabled; skipping backup creation.")
+        return
+
     if not os.path.exists(excel_backup):
         shutil.copy(BASE_EXCEL_FILE, excel_backup)
         logger.info(
@@ -114,7 +117,11 @@ def create_excel_backups(excel_backup):
 
 
 def excel_backups_checks():
-    # Save backups, create archive directory
+    """Ensure today's and tomorrow's backups exist when enabled."""
+
+    if not EXCEL_LOGGING_ENABLED:
+        return
+
     archive_dir = os.path.join(EXCEL_FILE_DIRECTORY, "archive")
     prior_backup = os.path.join(archive_dir, f"Backup_{EXCEL_FILE_NAME}.{today}.xlsx")
     new_backup = os.path.join(archive_dir, f"Backup_{EXCEL_FILE_NAME}.{tomorrow}.xlsx")
@@ -129,14 +136,22 @@ def excel_backups_checks():
 
 
 def load_excel_workbook(file_path):
-    """Load an Excel workbook or return None if not found."""
-    if os.path.exists(file_path):
-        logger.info(f"Loading workbook: {file_path}")
-        excel_backups_checks()
-        return openpyxl.load_workbook(file_path)
-    else:
+    """Load an Excel workbook or return ``None`` if not found.
+
+    Backup checks are skipped when Excel logging is disabled.
+    """
+
+    if not os.path.exists(file_path):
         logger.error(f"Workbook not found: {file_path}")
         return None
+
+    if EXCEL_LOGGING_ENABLED:
+        logger.info(f"Loading workbook: {file_path}")
+        excel_backups_checks()
+    else:
+        logger.info("Excel logging disabled; loading workbook without backups.")
+
+    return openpyxl.load_workbook(file_path)
 
 
 EXCEL_FILE_LIVE = load_excel_workbook(EXCEL_FILE_PATH)
@@ -833,7 +848,12 @@ def update_cell_value(ws, row, col, value):
 
 
 def save_workbook(wb, filename):
-    # Save the workbook and handle any errors.
+    """Persist the workbook if Excel logging is enabled."""
+
+    if not EXCEL_LOGGING_ENABLED:
+        logger.info("Excel logging disabled; skipping workbook save.")
+        return
+
     try:
         wb.save(filename)
         logger.info(f"Successfully saved the Excel log: {filename}")
