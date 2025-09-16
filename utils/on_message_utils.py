@@ -27,6 +27,7 @@ from utils.config_utils import (
     AUTO_SELL_LIVE,
     HOLDING_ALERT_MIN_PRICE,
     IGNORE_TICKERS as IGNORE_TICKERS_SET,
+    IGNORE_BROKERS as IGNORE_BROKERS_SET,
     DISCORD_PRIMARY_CHANNEL as PRIMARY_CHAN_ID,
     MENTION_USER_ID,
     MENTION_ON_ALERTS,
@@ -48,6 +49,14 @@ _missing_summary = defaultdict(set)
 _refresh_active = False
 _pending_alerts_by_broker = defaultdict(set)  # broker -> set[ticker]
 _pending_sell_commands = []  # queued auto-sell commands during refresh
+
+
+def is_broker_ignored(broker: str) -> bool:
+    """Return ``True`` when ``broker`` is configured to skip alerts/auto-sell."""
+
+    if not broker:
+        return False
+    return broker.strip().upper() in IGNORE_BROKERS_SET
 
 
 def enable_audit():
@@ -225,6 +234,8 @@ async def handle_primary_channel(bot, message):
                     price = float(h.get("price", 0) or 0)
                     quantity = float(h.get("quantity", 0) or 0)
                     broker = str(h.get("broker", "")).strip()
+                    if is_broker_ignored(broker):
+                        continue
                     account_name = str(h.get("account_name", h.get("account", "")))
                     if price < threshold or quantity <= 0:
                         continue

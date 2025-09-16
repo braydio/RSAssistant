@@ -124,22 +124,26 @@ SQL_LOGGING_ENABLED = (
     os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
 )
 
-# Path to ignore-tickers file (defaults to volumes/config/ignore_tickers.txt)
+# Path to ignore list files (defaults inside volumes/config/)
 IGNORE_TICKERS_FILE = Path(
     os.getenv("IGNORE_TICKERS_FILE", str(CONFIG_DIR / "ignore_tickers.txt"))
 ).resolve()
+IGNORE_BROKERS_FILE = Path(
+    os.getenv("IGNORE_BROKERS_FILE", str(CONFIG_DIR / "ignore_brokers.txt"))
+).resolve()
 
 
-def _load_ignore_tickers_from_file(path: Path) -> set:
-    """Load tickers from a newline-delimited file, ignoring blanks and comments.
+def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
+    """Return uppercase ignore entries from ``path`` for the given ``entry_type``.
 
-    Lines beginning with '#' are treated as comments. Whitespace is trimmed and
-    tickers are normalized to uppercase.
+    The file is expected to contain one value per line. Blank lines and comments
+    starting with ``#`` are ignored. Inline comments using ``" # "`` are
+    stripped. Values are normalized to uppercase to simplify comparisons.
     """
-    tickers = set()
+    entries = set()
     try:
         if not path.exists():
-            return tickers
+            return entries
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 raw = line.strip()
@@ -148,10 +152,10 @@ def _load_ignore_tickers_from_file(path: Path) -> set:
                 # Allow optional inline comments with ' # '
                 value = raw.split(" # ", 1)[0].strip()
                 if value:
-                    tickers.add(value.upper())
+                    entries.add(value.upper())
     except Exception as e:
-        logger.error(f"Failed reading ignore tickers from {path}: {e}")
-    return tickers
+        logger.error(f"Failed reading ignore {entry_type} from {path}: {e}")
+    return entries
 
 
 def _compute_ignore_tickers() -> set:
@@ -161,7 +165,7 @@ def _compute_ignore_tickers() -> set:
         for t in os.getenv("IGNORE_TICKERS", "").split(",")
         if t.strip()
     }
-    file_set = _load_ignore_tickers_from_file(IGNORE_TICKERS_FILE)
+    file_set = _load_ignore_entries_from_file(IGNORE_TICKERS_FILE, "tickers")
     combined = env_set | file_set
     if combined:
         logger.info(
@@ -173,6 +177,27 @@ def _compute_ignore_tickers() -> set:
 
 
 IGNORE_TICKERS = _compute_ignore_tickers()
+
+
+def _compute_ignore_brokers() -> set:
+    """Combine env CSV IGNORE_BROKERS with file-based ignore list."""
+    env_set = {
+        b.strip().upper()
+        for b in os.getenv("IGNORE_BROKERS", "").split(",")
+        if b.strip()
+    }
+    file_set = _load_ignore_entries_from_file(IGNORE_BROKERS_FILE, "brokers")
+    combined = env_set | file_set
+    if combined:
+        logger.info(
+            f"Loaded {len(combined)} ignored brokers (env={len(env_set)}, file={len(file_set)} from {IGNORE_BROKERS_FILE})"
+        )
+    else:
+        logger.info("No ignored brokers configured.")
+    return combined
+
+
+IGNORE_BROKERS = _compute_ignore_brokers()
 
 # --- Mentions ---
 # Discord user ID to mention in alerts (e.g., 123456789012345678)
