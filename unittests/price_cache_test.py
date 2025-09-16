@@ -57,21 +57,15 @@ def test_fetch_price_from_api_parses_fallback(monkeypatch):
         def json(self):
             return self._payload
 
-    captured = {}
+    captured = []
 
     def dummy_get(url, params=None, timeout=None):
-        captured["url"] = url
-        captured["params"] = params
-        captured["timeout"] = timeout
+        captured.append((url, params, timeout))
         return DummyResponse(
             {
-                "quoteResponse": {
-                    "result": [
-                        {
-                            "regularMarketPrice": None,
-                            "postMarketPrice": 7.891,
-                        }
-                    ]
+                "data": {
+                    "primaryData": {"lastSalePrice": "N/A"},
+                    "extendedData": {"lastTradePrice": "$7.891"},
                 }
             }
         )
@@ -81,4 +75,42 @@ def test_fetch_price_from_api_parses_fallback(monkeypatch):
 
     price = price_cache._fetch_price_from_api("XYZ")
     assert price == 7.89
-    assert captured["params"] == {"symbols": "XYZ"}
+    assert captured[0][0] == price_cache.API_URL_TEMPLATE.format(symbol="XYZ")
+    assert captured[0][1] == price_cache.API_DEFAULT_PARAMS
+    assert captured[0][2] == price_cache.REQUEST_TIMEOUT
+
+
+def test_fetch_price_from_api_retries_symbol_variants(monkeypatch):
+    """Tickers with dots should try a hyphenated fallback for Nasdaq."""
+
+    class DummyResponse:
+        status_code = 200
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    responses = {
+        price_cache.API_URL_TEMPLATE.format(symbol="BRK.B"): DummyResponse({"data": {}}),
+        price_cache.API_URL_TEMPLATE.format(symbol="BRK-B"): DummyResponse(
+            {
+                "data": {
+                    "primaryData": {"lastSalePrice": "$123.45"},
+                }
+            }
+        ),
+    }
+
+    def dummy_get(url, params=None, timeout=None):
+        return responses[url]
+
+    dummy_session = SimpleNamespace(get=dummy_get)
+    monkeypatch.setattr(price_cache, "_get_session", lambda: dummy_session)
+
+    price = price_cache._fetch_price_from_api("BRK.B")
+    assert price == 123.45

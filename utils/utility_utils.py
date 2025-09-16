@@ -427,9 +427,9 @@ def get_last_stock_price(stock):
 
     Notes
     -----
-    The price is sourced from :mod:`utils.price_cache`, which uses the Yahoo
-    Finance quote endpoint directly with retry logic and on-disk caching to
-    avoid the throttling issues encountered with the :mod:`yfinance` package.
+    The price is sourced from :mod:`utils.price_cache`, which queries Nasdaq's
+    quote API with retry logic and on-disk caching to avoid the throttling
+    issues encountered with the :mod:`yfinance` package.
     """
     price = get_price(stock)
     if price is None:

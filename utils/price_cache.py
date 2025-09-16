@@ -1,11 +1,12 @@
-"""Persistent market data price cache backed by Yahoo's quote endpoint."""
+"""Persistent market data price cache backed by Nasdaq's quote endpoint."""
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import time
-from typing import Dict, Tuple
+from typing import Dict, Iterator, Tuple
 
 import requests
 from requests import Session
@@ -23,9 +24,10 @@ _FILE_CACHE_LOADED = False
 _SESSION: Session | None = None
 
 # cache stored under volumes/cache to survive bot restarts
-CACHE_FILE = VOLUMES_DIR / "cache" / "yf_price_cache.json"
+CACHE_FILE = VOLUMES_DIR / "cache" / "nasdaq_price_cache.json"
 TTL_SECONDS = 600  # 10 minutes
-API_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+API_URL_TEMPLATE = "https://api.nasdaq.com/api/quote/{symbol}/info"
+API_DEFAULT_PARAMS = {"assetclass": "stocks"}
 REQUEST_TIMEOUT = 10
 
 
@@ -54,6 +56,8 @@ def _get_session() -> Session:
             {
                 "User-Agent": "RSAssistant/1.0 (+https://github.com/braydio/RSAssistant)",
                 "Accept": "application/json",
+                "Referer": "https://www.nasdaq.com/",
+                "Connection": "keep-alive",
             }
         )
         _SESSION = session
@@ -91,33 +95,68 @@ def _save_cache_to_file() -> None:
         logger.warning("Failed to save price cache: %s", exc)
 
 
-def _extract_price(quote: dict) -> float | None:
-    """Return the best available price from a Yahoo Finance quote payload.
+def _symbol_candidates(ticker: str) -> Iterator[str]:
+    """Yield Nasdaq API symbol representations for ``ticker``.
 
-    Parameters
-    ----------
-    quote : dict
-        Parsed quote object from the Yahoo Finance quote endpoint.
-
-    Returns
-    -------
-    float | None
-        Rounded price when available, otherwise ``None``.
+    The Nasdaq quote endpoint accepts a handful of symbol formats. The helper
+    yields the normalized ticker plus common alternates (for example replacing
+    dots with hyphens) to maximise the chance of a hit without requiring
+    callers to understand the vendor specific nuances.
     """
 
-    for field in ("regularMarketPrice", "postMarketPrice", "preMarketPrice"):
-        value = quote.get(field)
-        if value in (None, 0):
-            continue
-        try:
-            return round(float(value), 2)
-        except (TypeError, ValueError):
-            logger.debug("Invalid value %r for %s", value, field)
+    normalized = ticker.upper().strip()
+    if not normalized:
+        return
+
+    yield normalized
+    if "." in normalized:
+        yield normalized.replace(".", "-")
+
+
+def _parse_price_value(value: str | float | int | None) -> float | None:
+    """Convert the Nasdaq price field to a float.
+
+    The API often wraps prices in strings like ``"$123.45"`` or ``"N/A"``. The
+    helper removes non-numeric characters while preserving the decimal point so
+    the rest of the module can work with consistent ``float`` values.
+    """
+
+    if value in (None, "", "N/A", "n/a", "--"):
+        return None
+    if isinstance(value, (int, float)):
+        return round(float(value), 2)
+
+    text = str(value).replace(",", "")
+    match = re.search(r"\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+    cleaned = match.group(0)
+    try:
+        return round(float(cleaned), 2)
+    except ValueError:
+        logger.debug("Unable to parse price value %r", value)
+        return None
+
+
+def _extract_price(data: dict) -> float | None:
+    """Return the best available price from a Nasdaq quote payload."""
+
+    for section in ("primaryData", "extendedData"):
+        block = data.get(section) or {}
+        for field in ("lastSalePrice", "lastTradePrice", "lastPrice"):
+            price = _parse_price_value(block.get(field))
+            if price is not None:
+                return price
+
+    for field in ("lastSalePrice", "lastTradePrice", "lastPrice"):
+        price = _parse_price_value(data.get(field))
+        if price is not None:
+            return price
     return None
 
 
 def _fetch_price_from_api(ticker: str) -> float | None:
-    """Fetch the most recent price for ``ticker`` using the quote endpoint.
+    """Fetch the most recent price for ``ticker`` using the Nasdaq quote API.
 
     Parameters
     ----------
@@ -131,39 +170,48 @@ def _fetch_price_from_api(ticker: str) -> float | None:
     """
 
     session = _get_session()
-    try:
-        response = session.get(
-            API_URL, params={"symbols": ticker}, timeout=REQUEST_TIMEOUT
-        )
-    except requests.RequestException as exc:
-        logger.error("Request error while fetching %s: %s", ticker, exc)
-        return None
+    for symbol in _symbol_candidates(ticker):
+        url = API_URL_TEMPLATE.format(symbol=symbol)
+        try:
+            response = session.get(
+                url, params=API_DEFAULT_PARAMS, timeout=REQUEST_TIMEOUT
+            )
+        except requests.RequestException as exc:
+            logger.error("Request error while fetching %s (%s): %s", ticker, symbol, exc)
+            continue
 
-    if response.status_code == 429:
-        logger.warning("Quote API throttled request for %s", ticker)
-        return None
+        if response.status_code in (403, 429):
+            logger.warning(
+                "Nasdaq quote API refused request for %s (status %s)",
+                ticker,
+                response.status_code,
+            )
+            continue
 
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as exc:
-        logger.error("HTTP error while fetching %s: %s", ticker, exc)
-        return None
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            logger.error("HTTP error while fetching %s (%s): %s", ticker, symbol, exc)
+            continue
 
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        logger.error("Invalid JSON while fetching %s: %s", ticker, exc)
-        return None
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            logger.error("Invalid JSON while fetching %s (%s): %s", ticker, symbol, exc)
+            continue
 
-    result = (payload.get("quoteResponse") or {}).get("result") or []
-    if not result:
-        logger.warning("Quote API returned no result for %s", ticker)
-        return None
+        data = payload.get("data") or {}
+        if not data:
+            logger.debug("Nasdaq API returned no data for %s (%s)", ticker, symbol)
+            continue
 
-    price = _extract_price(result[0])
-    if price is None:
-        logger.warning("Quote API response missing usable price for %s", ticker)
-    return price
+        price = _extract_price(data)
+        if price is not None:
+            return price
+        logger.debug("Nasdaq API payload missing price for %s (%s)", ticker, symbol)
+
+    logger.warning("Unable to retrieve price for %s from Nasdaq API", ticker)
+    return None
 
 
 def get_price(ticker: str) -> float | None:
