@@ -359,7 +359,12 @@ async def handle_primary_channel(bot, message):
 
 
 async def handle_secondary_channel(bot, message):
-    """Handle NASDAQ alerts posted in the secondary channel."""
+    """Handle NASDAQ alerts posted in the secondary channel.
+
+    Reverse split policy summaries and supporting snippets are forwarded to
+    the tertiary channel when it is configured. Other operational messages
+    continue to use their original destinations.
+    """
     logger.info(f"Received message on secondary channel: {message.content}")
     result = alert_channel_message(message.content)
     logger.info(f"Alert parser result: {result}")
@@ -388,7 +393,22 @@ async def handle_secondary_channel(bot, message):
             context = f"Round-up snippet from {url}: "
             snippet = body_text[: 2000 - len(context)]
             logger.info(f"Posting body text snippet for {ticker}")
-            await message.channel.send(context + snippet)
+
+            target_channel = None
+            if DISCORD_TERTIARY_CHANNEL:
+                target_channel = bot.get_channel(DISCORD_TERTIARY_CHANNEL)
+                if not target_channel:
+                    logger.error(
+                        "Tertiary channel %s not found; unable to post snippet to tertiary.",
+                        DISCORD_TERTIARY_CHANNEL,
+                    )
+            if not target_channel:
+                logger.warning(
+                    "Falling back to secondary channel for %s snippet delivery.", ticker
+                )
+                target_channel = message.channel
+
+            await target_channel.send(context + snippet)
 
         if policy_info.get("round_up_confirmed"):
             await attempt_autobuy(bot, message.channel, ticker, quantity=1)
@@ -464,12 +484,43 @@ def build_policy_summary(ticker, policy_info, fallback_url):
 
 
 async def post_policy_summary(bot, ticker, summary):
-    chan = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
-    if chan:
-        await chan.send(summary)
-        logger.info(f"Posted policy summary for {ticker}")
-    else:
-        logger.error("Primary channel unavailable")
+    """Send a reverse split policy summary to the tertiary channel.
+
+    If the tertiary channel ID is not configured or cannot be resolved, the
+    summary falls back to the primary channel so the alert is not lost.
+
+    Args:
+        bot: Active Discord bot/client instance.
+        ticker: The ticker symbol associated with the alert.
+        summary: Rendered summary text to post.
+    """
+
+    channel = None
+    if DISCORD_TERTIARY_CHANNEL:
+        channel = bot.get_channel(DISCORD_TERTIARY_CHANNEL)
+        if not channel:
+            logger.error(
+                "Tertiary channel %s not found; reverse split summary will fallback.",
+                DISCORD_TERTIARY_CHANNEL,
+            )
+
+    if not channel and DISCORD_PRIMARY_CHANNEL:
+        channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+        if channel:
+            logger.warning(
+                "Posting %s reverse split summary to primary channel fallback.", ticker
+            )
+
+    if not channel:
+        logger.error(
+            "Unable to resolve a channel for %s reverse split summary.", ticker
+        )
+        return
+
+    await channel.send(summary)
+    logger.info(
+        "Posted policy summary for %s to channel %s", ticker, getattr(channel, "id", "unknown")
+    )
 
 
 
