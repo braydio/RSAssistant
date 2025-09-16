@@ -13,8 +13,7 @@ from pathlib import Path
 
 import discord
 import yaml
-import yfinance as yf
-from utils.yfinance_cache import get_price
+from utils.price_cache import get_price
 
 from utils.config_utils import (
     ACCOUNT_MAPPING,
@@ -413,7 +412,25 @@ async def all_brokers(ctx):
 
 # Retrieve Last Stock Price
 def get_last_stock_price(stock):
-    """Fetches the last price of a given stock using Yahoo Finance with caching."""
+    """Return the most recent cached price for ``stock``.
+
+    Parameters
+    ----------
+    stock : str
+        Equity ticker symbol to look up.
+
+    Returns
+    -------
+    float | None
+        Cached or freshly fetched quote value. ``None`` when pricing data is
+        unavailable even after attempting a refresh.
+
+    Notes
+    -----
+    The price is sourced from :mod:`utils.price_cache`, which uses the Yahoo
+    Finance quote endpoint directly with retry logic and on-disk caching to
+    avoid the throttling issues encountered with the :mod:`yfinance` package.
+    """
     price = get_price(stock)
     if price is None:
         logging.warning(f"No stock data found for {stock}.")

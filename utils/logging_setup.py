@@ -149,7 +149,6 @@ def setup_logging(config=None, verbose=False):
         handlers=[handler, console_handler],
     )
 
-    logging.getLogger("yfinance").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.info("Logging setup complete.")
