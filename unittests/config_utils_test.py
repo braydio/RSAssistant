@@ -37,6 +37,23 @@ def test_ignore_tickers_file_and_env_merge(tmp_path, monkeypatch):
     assert merged == {"AAPL", "MSFT", "GOOG", "AMZN"}
 
 
+def test_ignore_brokers_file_and_env_merge(tmp_path, monkeypatch):
+    ignore_file = tmp_path / "ignore_brokers.txt"
+    ignore_file.write_text("""
+    Fidelity
+    Schwab  # Workplace plan
+
+
+    """.strip(), encoding="utf-8")
+
+    monkeypatch.setattr(config_utils, "IGNORE_BROKERS_FILE", ignore_file)
+    monkeypatch.setenv("IGNORE_BROKERS", "tasty, , robinhood ")
+
+    merged = config_utils._compute_ignore_brokers()
+
+    assert merged == {"FIDELITY", "SCHWAB", "TASTY", "ROBINHOOD"}
+
+
 def test_persistence_defaults_true():
     assert config_utils.CSV_LOGGING_ENABLED
     assert config_utils.EXCEL_LOGGING_ENABLED
