@@ -9,12 +9,14 @@ import csv
 import json
 import re
 from datetime import datetime
-from utils.logging_setup import logger
-
 from typing import Match, Optional, Tuple
+
+import requests
+from requests import RequestException
 
 from discord import embeds
 
+from utils.logging_setup import logger
 from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     load_account_mappings,
@@ -31,6 +33,60 @@ account_mapping = load_account_mappings()
 
 # Store incomplete orders
 incomplete_orders = {}
+
+# Patterns to discover ticker symbols from remote press releases or notices.
+_REMOTE_TICKER_PATTERNS = [
+    re.compile(
+        r"(?:NASDAQ(?:CM|GM|GS)?|NASDAQ CAPITAL MARKET|NASDAQ STOCK MARKET|"
+        r"NYSE(?: AMERICAN| ARCA| MKT)?|NYSEMKT|NYSEARCA|AMEX|OTC(?:QX|QB|MKTS|BB)?|"
+        r"TSX(?: VENTURE)?|TSXV|CSE|ASX|LSE|AIM)\s*[:=\-–]?\s*([A-Z][A-Z0-9.\-]{0,6})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"trading under the symbol\s+[\"'“”]?([A-Z]{1,5})[\"'“”]?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"ticker symbol\s+[\"'“”]?([A-Z]{1,5})[\"'“”]?",
+        re.IGNORECASE,
+    ),
+]
+
+
+def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
+    """Return a ticker symbol by inspecting a linked article when needed.
+
+    Args:
+        url: Source URL associated with the reverse split announcement.
+
+    Returns:
+        Optional[str]: Uppercase ticker if one can be resolved; otherwise ``None``.
+    """
+
+    if not url:
+        logger.warning("No URL provided for remote ticker extraction.")
+        return None
+
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+    except RequestException as exc:
+        logger.warning(
+            "Unable to fetch %s for remote ticker detection: %s", url, exc
+        )
+        return None
+
+    text = re.sub(r"<[^>]+>", " ", response.text or "")
+
+    for pattern in _REMOTE_TICKER_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            ticker = match.group(1).upper()
+            logger.info("Resolved ticker %s from remote source %s", ticker, url)
+            return ticker
+
+    logger.warning("Ticker not found within remote source %s", url)
+    return None
 
 # RIP
 # "Tradier": r"(Tradier)\s(\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s([A-Z]+)",
@@ -927,7 +983,12 @@ async def send_negative_holdings(
 
 
 def alert_channel_message(content):
-    """Extracts ticker, URL, and confirms if a reverse split alert is present."""
+    """Extracts ticker, URL, and confirms if a reverse split alert is present.
+
+    When a ticker is not embedded directly in the Discord message, the
+    function will attempt to resolve it by downloading the linked article or
+    notice and scanning for common ticker annotations used in press releases.
+    """
 
     # Regex pattern to extract the URL
     url_pattern = r"http[s]?://[^\s]+"
@@ -940,10 +1001,12 @@ def alert_channel_message(content):
     # Regex pattern to extract the ticker inside parentheses
     ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
     ticker_match = re.search(ticker_pattern, content)
-    ticker = ticker_match.group(1) if ticker_match else None
+    ticker = ticker_match.group(1).upper() if ticker_match else None
 
     if ticker:
         logger.info(f"Ticker detected in alert message: {ticker}")
+    else:
+        ticker = _extract_ticker_from_remote_source(url)
 
     # Case-insensitive check if "Reverse Stock Split" appears anywhere in the message
     reverse_split_confirm = (
