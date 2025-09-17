@@ -51,6 +51,57 @@ _pending_alerts_by_broker = defaultdict(set)  # broker -> set[ticker]
 _pending_sell_commands = []  # queued auto-sell commands during refresh
 
 
+def _reset_refresh_state():
+    """Clear any buffered holdings refresh state."""
+
+    global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
+    _refresh_active = False
+    _pending_alerts_by_broker = defaultdict(set)
+    _pending_sell_commands = []
+
+
+async def _handle_refresh_completion(message, lowered_content: str) -> None:
+    """Flush buffered alerts when AutoRSA signals holdings completion."""
+
+    global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
+
+    if not _refresh_active or "all commands complete in all brokers" not in lowered_content:
+        return
+
+    try:
+        threshold = float(HOLDING_ALERT_MIN_PRICE)
+    except Exception:
+        threshold = 1.0
+
+    if _pending_alerts_by_broker:
+        mention = (
+            f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
+        )
+        lines = []
+        for broker in sorted(_pending_alerts_by_broker.keys()):
+            tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
+            lines.append(f"- {broker}: {tickers}")
+
+        header = (
+            f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
+        )
+        max_len = 2000
+        body = "\n".join(lines)
+        first_msg = (header + body)[:max_len]
+        await message.channel.send(first_msg)
+
+        remaining = body[len(first_msg) - len(header) :]
+        while remaining:
+            chunk = remaining[: max_len - 1]
+            await message.channel.send(chunk)
+            remaining = remaining[len(chunk) :]
+
+        for cmd in _pending_sell_commands:
+            await message.channel.send(cmd)
+
+    _reset_refresh_state()
+
+
 def is_broker_ignored(broker: str) -> bool:
     """Return ``True`` when ``broker`` is configured to skip alerts/auto-sell."""
 
@@ -151,41 +202,7 @@ async def handle_primary_channel(bot, message):
     # Detect completion message regardless of author to flush buffered alerts
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
     lowered_content = message.content.lower().strip()
-    if _refresh_active and "all commands complete in all brokers" in lowered_content:
-        try:
-            threshold = float(HOLDING_ALERT_MIN_PRICE)
-        except Exception:
-            threshold = 1.0
-
-        if _pending_alerts_by_broker:
-            mention = (
-                f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
-            )
-            lines = []
-            for broker in sorted(_pending_alerts_by_broker.keys()):
-                tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
-                lines.append(f"- {broker}: {tickers}")
-
-            header = (
-                f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
-            )
-            max_len = 2000
-            body = "\n".join(lines)
-            first_msg = (header + body)[:max_len]
-            await message.channel.send(first_msg)
-
-            remaining = body[len(first_msg) - len(header) :]
-            while remaining:
-                chunk = remaining[: max_len - 1]
-                await message.channel.send(chunk)
-                remaining = remaining[len(chunk) :]
-
-            for cmd in _pending_sell_commands:
-                await message.channel.send(cmd)
-
-        _refresh_active = False
-        _pending_alerts_by_broker = defaultdict(set)
-        _pending_sell_commands = []
+    await _handle_refresh_completion(message, lowered_content)
 
     # Detect start of holdings refresh to buffer alerts until completion
     if "!rsa holdings" in lowered_content:
@@ -310,46 +327,7 @@ async def handle_primary_channel(bot, message):
             logger.error(f"Error parsing embed message: {e}")
     elif message.author.bot:
         logger.info("Parsing regular order message.")
-        lowered = message.content.lower().strip()
-        # If AutoRSA signals completion, flush buffered alerts per brokerage
-        if _refresh_active and "all commands complete in all brokers" in lowered:
-            try:
-                threshold = float(HOLDING_ALERT_MIN_PRICE)
-            except Exception:
-                threshold = 1.0
-
-            if _pending_alerts_by_broker:
-                mention = (
-                    f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
-                )
-                lines = []
-                # Produce per-broker unique ticker list
-                for broker in sorted(_pending_alerts_by_broker.keys()):
-                    tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
-                    lines.append(f"- {broker}: {tickers}")
-
-                header = (
-                    f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
-                )
-                max_len = 2000
-                body = "\n".join(lines)
-                first_msg = (header + body)[:max_len]
-                await message.channel.send(first_msg)
-
-                remaining = body[len(first_msg) - len(header) :]
-                while remaining:
-                    chunk = remaining[: max_len - 1]
-                    await message.channel.send(chunk)
-                    remaining = remaining[len(chunk) :]
-
-                # Send queued auto-sell commands after the summary
-                for cmd in _pending_sell_commands:
-                    await message.channel.send(cmd)
-
-            # Reset refresh state
-            _refresh_active = False
-            _pending_alerts_by_broker = defaultdict(set)
-            _pending_sell_commands = []
+        lowered = lowered_content
         if lowered == "..updatebot":
             await message.channel.send("Pulling latest code and restarting...")
             update_and_restart()
