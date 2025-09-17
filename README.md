@@ -93,6 +93,21 @@ The bot's `..all` command now audits your holdings against the watchlist,
 summarizes any tickers that are missing from your accounts, and consolidates
 broker holdings status into a single embed.
 
+### Discord channel configuration
+
+RSAssistant differentiates between three Discord channels so information lands
+where it is most actionable:
+
+- `DISCORD_PRIMARY_CHANNEL`: Operational commands, holdings refresh output, and
+  scheduled order confirmations.
+- `DISCORD_SECONDARY_CHANNEL`: Source feed where NASDAQ and SEC alerts arrive.
+- `DISCORD_TERTIARY_CHANNEL`: Destination for reverse split summaries and the
+  associated policy snippets parsed from filings or press releases.
+
+Populate the corresponding environment variables in your `.env` file with the
+channel IDs for your server. When the tertiary channel ID is omitted, the bot
+falls back to the primary channel to avoid dropping critical alerts.
+
 ### Configuration: Auto Refresh + Monitor
 
 Add the following keys to your environment. The app now loads from a single source:
@@ -106,6 +121,8 @@ Add the following keys to your environment. The app now loads from a single sour
 - `AUTO_SELL_LIVE` (bool): If `true`, also post `..ord sell {ticker} {broker} {quantity}`. Default `false`.
 - `IGNORE_TICKERS` (CSV): Tickers to skip for alert/auto-sell (e.g., `ABCD,EFGH`). Default empty.
 - `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `volumes/config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
+- `IGNORE_BROKERS` (CSV): Brokers to skip for alert/auto-sell (e.g., `Fidelity,Schwab`). Default empty.
+- `IGNORE_BROKERS_FILE` (path, optional): File containing one broker name per line to ignore. Defaults to `volumes/config/ignore_brokers.txt`. Lines starting with `#` are treated as comments.
 
 You can use either the env var, the file, or both — the sets merge. Create the file like:
 
@@ -114,6 +131,9 @@ cp config/ignore_tickers.example.txt volumes/config/ignore_tickers.txt
 echo "AAPL" >> volumes/config/ignore_tickers.txt
 echo "MSFT  # Long-term" >> volumes/config/ignore_tickers.txt
 ```
+
+Apply the same approach for brokers by creating `volumes/config/ignore_brokers.txt`
+with one broker name per line.
 
 - `MENTION_USER_ID` (string): Your Discord user ID to @-mention in alerts (e.g., `123456789012345678`). Optional.
 - `MENTION_ON_ALERTS` (bool): Enable/disable mentions on alerts. Default `true`.
