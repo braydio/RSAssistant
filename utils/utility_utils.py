@@ -2,27 +2,24 @@
 
 import asyncio
 import csv
-import json
 import logging
-
-logger = logging.getLogger(__name__)
-import os
-import warnings
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import discord
 import yaml
+
 from utils.price_cache import get_price
 
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     HOLDINGS_LOG_CSV,
-    ORDERS_LOG_CSV,
     get_account_nickname,
     load_account_mappings,
     load_config,
 )
+
+logger = logging.getLogger(__name__)
 
 # Load configuration and holdings data
 config = load_config()
@@ -70,11 +67,29 @@ async def track_ticker_summary(
     account_mapping_file=ACCOUNT_MAPPING,
     collect=False,
 ):
-    """
-    Track accounts that hold the specified ticker, aggregating at the broker level.
-    Shows details at the account level if a specific broker is provided. When
-    ``collect`` is True, broker-level status data is returned instead of being
-    sent to the Discord channel.
+    """Track holdings for ``ticker`` grouped by broker.
+
+    The function loads the latest holdings snapshot, resolves each row to the
+    canonical ``"<Broker> <Account Nickname>"`` key and builds broker/account
+    status dictionaries used by aggregated and detailed Discord views.
+
+    Args:
+        ctx: Discord invocation context used for sending embeds.
+        ticker (str): Symbol to inspect.
+        show_details (bool): Historical argument preserved for compatibility.
+        specific_broker (str | None): Optional broker to fetch a detailed view
+            for. When provided, a pair of embeds is dispatched with account
+            level data.
+        holding_logs_file (Path | str): Path to the holdings CSV snapshot.
+        account_mapping_file (Path | str): Path to the account mapping JSON,
+            only used for error reporting.
+        collect (bool): When ``True`` and ``specific_broker`` is ``None`` the
+            function returns broker statuses instead of posting to Discord.
+
+    Returns:
+        tuple[dict[str, tuple[str, int, int]], str] | None: Broker-level status
+        mapping with the latest timestamp when ``collect`` is requested;
+        otherwise ``None`` because embeds are sent via ``ctx``.
     """
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
@@ -89,8 +104,50 @@ async def track_ticker_summary(
             csv_reader = csv.DictReader(file)
 
             for row in csv_reader:
-                broker_name = row["Broker Name"]
-                account_key = row["Key"]  # "Broker Name + Nickname"
+                broker_name = row.get("Broker Name")
+                if not broker_name:
+                    continue
+
+                broker_number_raw = row.get("Broker Number")
+                account_number_raw = row.get("Account Number")
+                broker_number = (
+                    str(broker_number_raw).strip()
+                    if broker_number_raw not in (None, "")
+                    else ""
+                )
+                account_number = (
+                    str(account_number_raw).strip()
+                    if account_number_raw not in (None, "")
+                    else ""
+                )
+
+                # Resolve the canonical "<Broker> <Account Nickname>" identifier.
+                account_nickname = None
+                if broker_number and account_number:
+                    broker_mapping = mapped_accounts.get(broker_name, {})
+                    group_mapping = broker_mapping.get(broker_number, {})
+                    account_nickname = group_mapping.get(account_number)
+                    if not account_nickname:
+                        account_nickname = get_account_nickname(
+                            broker_name, broker_number, account_number
+                        )
+                        mapped_accounts.setdefault(broker_name, {}).setdefault(
+                            broker_number, {}
+                        )[account_number] = account_nickname
+
+                if not account_nickname:
+                    key_value = row.get("Key", "")
+                    prefix = f"{broker_name} "
+                    if isinstance(key_value, str) and key_value.startswith(prefix):
+                        account_nickname = key_value[len(prefix) :]
+                    else:
+                        fallback_nickname = row.get("Account Nickname") or row.get(
+                            "Nickname"
+                        )
+                        account_nickname = fallback_nickname or account_number or ""
+
+                account_nickname = account_nickname or ""
+                account_key = f"{broker_name} {account_nickname}"
 
                 timestamp_str = row.get("Timestamp", "")
                 try:
@@ -148,9 +205,7 @@ async def track_ticker_summary(
                 ctx, ticker, specific_broker, holdings, mapped_accounts, timestamp_str
             )
         else:
-            await get_aggregated_broker_summary(
-                ctx, ticker, statuses, timestamp_str
-            )
+            await get_aggregated_broker_summary(ctx, ticker, statuses, timestamp_str)
 
     except FileNotFoundError:
         await ctx.send(
@@ -160,6 +215,7 @@ async def track_ticker_summary(
         await ctx.send(f"Error: Missing expected column in CSV: {e}")
     except Exception as e:
         await ctx.send(f"Error: {e}")
+
 
 def compute_broker_statuses(holdings, account_mapping):
     """Return held vs total account counts per broker.
@@ -671,14 +727,12 @@ def all_brokers_summary_by_owner(specific_broker=None):
                 )
 
             owner = "Uncategorized"  # Default to Uncategorized
-            matched = False
 
             # Match the owner based on account_owners' indicators in the nickname
             for indicator, owner_name in group_titles.items():
                 logger.debug(f"Checking if '{indicator}' in nickname '{nickname}'...")
                 if indicator in nickname:
                     owner = owner_name
-                    matched = True
                     logger.debug(
                         f"Match found! Indicator: '{indicator}' -> Owner: {owner}"
                     )
