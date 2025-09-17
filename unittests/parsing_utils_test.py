@@ -101,3 +101,53 @@ def test_process_verified_orders_price_fetch_failure(monkeypatch):
 
     assert calls, "record_error_message should be called"
     assert not saved, "order should not be saved to CSV"
+
+
+def test_alert_channel_message_remote_ticker(monkeypatch):
+    """Messages without inline tickers should resolve symbols from linked sources."""
+
+    class FakeResponse:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    captured = {}
+
+    def fake_get(url, timeout=10):  # pragma: no cover - simple test helper
+        captured["url"] = url
+        html = (
+            "<html><body>bioAffinity Technologies, Inc. "
+            "(<span>NasdaqCM</span>: <strong>BIAF</strong>) announced "
+            "a reverse stock split.</body></html>"
+        )
+        return FakeResponse(html)
+
+    monkeypatch.setattr(parsing_utils.requests, "get", fake_get)
+
+    content = (
+        "📰 | **bioAffinity Technologies Announces 1-for-30 Reverse Stock Split**\n"
+        "https://example.com/release"
+    )
+
+    result = parsing_utils.alert_channel_message(content)
+
+    assert result["ticker"] == "BIAF"
+    assert result["reverse_split_confirmed"] is True
+    assert captured["url"] == "https://example.com/release"
+
+
+def test_alert_channel_message_remote_ticker_failure(monkeypatch):
+    """Ticker remains None when remote fetching raises an error."""
+
+    def fake_get(url, timeout=10):
+        raise parsing_utils.RequestException("network error")
+
+    monkeypatch.setattr(parsing_utils.requests, "get", fake_get)
+
+    content = "📰 | **Headline**\nhttps://example.com/pr"
+    result = parsing_utils.alert_channel_message(content)
+
+    assert result["ticker"] is None
+    assert result["reverse_split_confirmed"] is False
