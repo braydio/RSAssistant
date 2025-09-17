@@ -70,11 +70,27 @@ async def track_ticker_summary(
     account_mapping_file=ACCOUNT_MAPPING,
     collect=False,
 ):
-    """
-    Track accounts that hold the specified ticker, aggregating at the broker level.
-    Shows details at the account level if a specific broker is provided. When
-    ``collect`` is True, broker-level status data is returned instead of being
-    sent to the Discord channel.
+    """Summarize holdings for a ticker at the broker level.
+
+    Args:
+        ctx: Discord command context used when emitting embeds.
+        ticker (str): Requested stock symbol to evaluate.
+        show_details (bool): Retained for backwards compatibility. Detailed
+            views are controlled by ``specific_broker``.
+        specific_broker (str | None): If provided, show a detailed embed for
+            the named broker instead of the aggregated summary.
+        holding_logs_file (Path | str): CSV log containing account holdings.
+        account_mapping_file (Path | str): Path to the account mapping file.
+            Used only for error reporting when the file cannot be located.
+        collect (bool): When ``True`` the broker status mapping and timestamp
+            are returned instead of sending Discord embeds.
+
+    Returns:
+        tuple[dict[str, tuple[str, int, int]], str] | None: When ``collect`` is
+        truthy and ``specific_broker`` is not provided a tuple containing the
+        broker status mapping and the most recent holdings timestamp is
+        returned. Otherwise the result is sent to Discord and ``None`` is
+        returned.
     """
     holdings = {}
     ticker = ticker.upper().strip()  # Standardize ticker format
@@ -89,6 +105,10 @@ async def track_ticker_summary(
             csv_reader = csv.DictReader(file)
 
             for row in csv_reader:
+                stock = row.get("Stock", "").upper().strip()
+                if stock != ticker:
+                    continue
+
                 broker_name = row["Broker Name"]
                 account_key = row["Key"]  # "Broker Name + Nickname"
 
@@ -99,14 +119,12 @@ async def track_ticker_summary(
                     timestamp = datetime.min
 
                 key = (broker_name, account_key)
-                if key not in latest_rows or timestamp > latest_rows[key]["_ts"]:
+                if key not in latest_rows or timestamp >= latest_rows[key]["_ts"]:
                     row["_ts"] = timestamp
                     latest_rows[key] = row
 
         # Build holdings dict from latest rows
         for (broker_name, account_key), row in latest_rows.items():
-            stock = row["Stock"].upper().strip()
-
             try:
                 quantity = float(row["Quantity"])
                 price = float(row["Price"])
@@ -114,23 +132,18 @@ async def track_ticker_summary(
             except ValueError:
                 continue
 
+            if quantity <= 0:
+                continue
+
             if broker_name not in holdings:
                 holdings[broker_name] = {}
 
-            if stock == ticker and quantity > 0:
-                holdings[broker_name][account_key] = {
-                    "status": "✅",
-                    "Quantity": quantity,
-                    "Price": price,
-                    "Account Total": account_total,
-                }
-            else:
-                holdings[broker_name][account_key] = {
-                    "status": "❌",
-                    "Quantity": "N/A",
-                    "Price": "N/A",
-                    "Account Total": "N/A",
-                }
+            holdings[broker_name][account_key] = {
+                "status": "✅",
+                "Quantity": quantity,
+                "Price": price,
+                "Account Total": account_total,
+            }
 
         latest_timestamp = (
             max(row["_ts"] for row in latest_rows.values()) if latest_rows else None
