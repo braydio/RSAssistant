@@ -20,15 +20,17 @@ logger = logging.getLogger(__name__)
 
 CacheEntry = Tuple[float, float]
 _CACHE: Dict[str, CacheEntry] = {}
+_FAILED_ATTEMPTS: Dict[str, float] = {}
 _FILE_CACHE_LOADED = False
 _SESSION: Session | None = None
 
 # cache stored under volumes/cache to survive bot restarts
 CACHE_FILE = VOLUMES_DIR / "cache" / "nasdaq_price_cache.json"
 TTL_SECONDS = 600  # 10 minutes
+FAILURE_BACKOFF_SECONDS = 120  # Skip refetching a failing ticker for two minutes
 API_URL_TEMPLATE = "https://api.nasdaq.com/api/quote/{symbol}/info"
 API_DEFAULT_PARAMS = {"assetclass": "stocks"}
-REQUEST_TIMEOUT = 10
+REQUEST_TIMEOUT = (3.05, 6)
 
 
 def _get_session() -> Session:
@@ -44,7 +46,10 @@ def _get_session() -> Session:
     if _SESSION is None:
         session = requests.Session()
         retry_strategy = Retry(
-            total=3,
+            total=1,
+            connect=1,
+            read=1,
+            status=1,
             status_forcelist=(408, 409, 429, 500, 502, 503, 504),
             allowed_methods=frozenset({"GET"}),
             backoff_factor=0.5,
@@ -226,6 +231,13 @@ def get_price(ticker: str) -> float | None:
     -------
     float | None
         Cached or freshly fetched market price, or ``None`` when unavailable.
+
+    Notes
+    -----
+    When the Nasdaq API fails or times out the most recent cached value is
+    returned even if it is older than :data:`TTL_SECONDS`. Subsequent refresh
+    attempts are paused for :data:`FAILURE_BACKOFF_SECONDS` to avoid blocking
+    the event loop with repeated network calls.
     """
 
     ticker = ticker.upper().strip()
@@ -234,15 +246,24 @@ def get_price(ticker: str) -> float | None:
 
     _load_cache_from_file()
     now = time.time()
-    if ticker in _CACHE:
-        ts, price = _CACHE[ticker]
-        if now - ts < TTL_SECONDS:
-            return price
+    cache_entry = _CACHE.get(ticker)
+    cached_ts = 0.0
+    cached_price = None
+    if cache_entry:
+        cached_ts, cached_price = cache_entry
+        if now - cached_ts < TTL_SECONDS:
+            return cached_price
+
+    failure_ts = _FAILED_ATTEMPTS.get(ticker)
+    if failure_ts and now - failure_ts < FAILURE_BACKOFF_SECONDS:
+        return cached_price
 
     price = _fetch_price_from_api(ticker)
     if price is not None:
         _CACHE[ticker] = (now, price)
+        _FAILED_ATTEMPTS.pop(ticker, None)
         _save_cache_to_file()
         return price
 
-    return None
+    _FAILED_ATTEMPTS[ticker] = now
+    return cached_price

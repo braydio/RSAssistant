@@ -197,6 +197,11 @@ async def handle_primary_channel(bot, message):
     Embed messages are treated as holdings updates and persisted to the
     holdings CSV log. All other messages are routed to order parsing or
     maintenance commands.
+
+    Notes
+    -----
+    Order messages are parsed in a background thread to keep the Discord
+    heartbeat responsive even if broker APIs respond slowly.
     """
 
     # Detect completion message regardless of author to flush buffered alerts
@@ -344,7 +349,7 @@ async def handle_primary_channel(bot, message):
             await message.channel.send(f"Added {count} tickers to watchlist.")
             logger.info(f"Added {count} tickers from bulk watchlist message.")
             return
-        parse_order_message(message.content)
+        await asyncio.to_thread(parse_order_message, message.content)
 
 
 async def handle_secondary_channel(bot, message):
