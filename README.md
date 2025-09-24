@@ -42,6 +42,7 @@ Configure these via environment variables (see below).
 ```
 .
 ├── RSAssistant.py           # Main bot application
+├── deepsource_monitor.py    # DeepSource GitHub check monitor
 ├── pr_watcher.py            # PR watcher script
 ├── utils/                   # Helper modules and order management
 ├── config/                  # Example env and settings files
@@ -183,6 +184,29 @@ Set the following environment variables to customize behavior:
 - `GITHUB_REPO`: repository in `owner/name` form (default: `braydio/RSAssistant`)
 - `GITHUB_TOKEN`: optional token for authenticated requests
 - `PR_WATCH_INTERVAL`: polling interval in seconds (default: 60)
+
+## DeepSource Monitor
+
+`deepsource_monitor.py` polls the GitHub checks API for the latest DeepSource
+run on the repository's default branch. The script logs whenever the
+DeepSource status changes, making it easy to host the monitor alongside the
+bot or as a standalone health check.
+
+Run the monitor with:
+
+```bash
+python deepsource_monitor.py
+```
+
+Configuration relies on the same GitHub settings used by the PR watcher and
+accepts two additional environment variables:
+
+- `DEEPSOURCE_APP_NAME`: GitHub check app name to match (default: `DeepSource`)
+- `DEEPSOURCE_POLL_INTERVAL`: polling cadence in seconds (default: 300)
+
+The monitor logs informational messages for successful runs, escalates to an
+error log when DeepSource fails, and raises a warning if no DeepSource run is
+found on the latest commit.
 
 ## Testing
 
