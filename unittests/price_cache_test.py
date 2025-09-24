@@ -15,6 +15,7 @@ def test_get_price_persists_and_loads(tmp_path, monkeypatch):
     cache_file = tmp_path / "prices.json"
     monkeypatch.setattr(price_cache, "CACHE_FILE", cache_file)
     monkeypatch.setattr(price_cache, "_CACHE", {})
+    monkeypatch.setattr(price_cache, "_FAILED_ATTEMPTS", {})
     monkeypatch.setattr(price_cache, "_FILE_CACHE_LOADED", False)
 
     fake_time = 1000
@@ -114,3 +115,63 @@ def test_fetch_price_from_api_retries_symbol_variants(monkeypatch):
 
     price = price_cache._fetch_price_from_api("BRK.B")
     assert price == 123.45
+
+
+def test_get_price_returns_stale_on_failure(tmp_path, monkeypatch):
+    """Stale cache entries should be returned when the API repeatedly fails."""
+
+    cache_file = tmp_path / "prices.json"
+    monkeypatch.setattr(price_cache, "CACHE_FILE", cache_file)
+    monkeypatch.setattr(price_cache, "_CACHE", {})
+    monkeypatch.setattr(price_cache, "_FAILED_ATTEMPTS", {})
+    monkeypatch.setattr(price_cache, "_FILE_CACHE_LOADED", False)
+    monkeypatch.setattr(price_cache, "_save_cache_to_file", lambda: None)
+
+    stale_time = 10_000
+    stale_price = 9.87
+    monkeypatch.setattr(
+        price_cache,
+        "time",
+        SimpleNamespace(time=lambda: stale_time),
+    )
+    price_cache._CACHE["ABC"] = (
+        stale_time - price_cache.TTL_SECONDS - 5,
+        stale_price,
+    )
+    monkeypatch.setattr(price_cache, "_fetch_price_from_api", lambda _: None)
+
+    price = price_cache.get_price("ABC")
+    assert price == stale_price
+    assert price_cache._FAILED_ATTEMPTS["ABC"] == stale_time
+
+
+def test_get_price_respects_failure_backoff(tmp_path, monkeypatch):
+    """Recent failures should prevent another slow API call immediately."""
+
+    cache_file = tmp_path / "prices.json"
+    monkeypatch.setattr(price_cache, "CACHE_FILE", cache_file)
+    monkeypatch.setattr(price_cache, "_CACHE", {})
+    monkeypatch.setattr(price_cache, "_FAILED_ATTEMPTS", {})
+    monkeypatch.setattr(price_cache, "_FILE_CACHE_LOADED", False)
+
+    now = 5_000
+    monkeypatch.setattr(
+        price_cache,
+        "time",
+        SimpleNamespace(time=lambda: now),
+    )
+    cached_price = 4.56
+    price_cache._CACHE["XYZ"] = (
+        now - price_cache.TTL_SECONDS - 10,
+        cached_price,
+    )
+    price_cache._FAILED_ATTEMPTS["XYZ"] = now - 10
+
+    def should_not_run(_):
+        raise AssertionError("API fetch attempted during backoff")
+
+    monkeypatch.setattr(price_cache, "_fetch_price_from_api", should_not_run)
+
+    price = price_cache.get_price("XYZ")
+    assert price == cached_price
+    assert price_cache._FAILED_ATTEMPTS["XYZ"] == now - 10
