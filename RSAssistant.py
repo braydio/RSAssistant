@@ -506,6 +506,12 @@ async def send_scheduled_reminder():
     extras={"category": "Watchlist"},
 )
 async def view_sell_list(ctx):
+    """Display queued sell orders stored by the bot.
+
+    Args:
+        ctx (commands.Context): Invocation context for the command.
+    """
+
     sell_list = watch_list_manager.get_sell_list()
     if not sell_list:
         await ctx.send("The sell list is empty.")
@@ -520,6 +526,34 @@ async def view_sell_list(ctx):
             added_on = details.get("added_on", "N/A")
             embed.add_field(name=ticker, value=f"Added on: {added_on}", inline=False)
         await ctx.send(embed=embed)
+
+
+@bot.command(
+    name="unsell",
+    help="Remove a ticker from the sell queue.",
+    usage="<ticker>",
+    extras={"category": "Watchlist"},
+)
+async def remove_sell_order(ctx, ticker: str):
+    """Remove a queued sell order for ``ticker`` from the sell list.
+
+    Args:
+        ctx (commands.Context): Invocation context for the command.
+        ticker (str): Symbol to remove from the sell queue.
+    """
+
+    normalized_ticker = ticker.upper()
+    removed = watch_list_manager.remove_from_sell_list(normalized_ticker)
+
+    if removed:
+        logger.info("Removed %s from sell list via command.", normalized_ticker)
+        await ctx.send(f"{normalized_ticker} removed from the sell list.")
+    else:
+        logger.info(
+            "Attempted to remove %s from sell list but it was not present.",
+            normalized_ticker,
+        )
+        await ctx.send(f"{normalized_ticker} was not found in the sell list.")
 
 
 @bot.command(
