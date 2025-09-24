@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from utils import config_utils
 
