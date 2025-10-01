@@ -301,6 +301,11 @@ async def show_order_queue(ctx):
         await ctx.send(message)
 
 
+ORD_COMMAND_USAGE = (
+    f"{BOT_PREFIX}ord <buy/sell> <ticker> [broker] [quantity] [time]"
+)
+
+
 @bot.command(
     name="ord",
     help="Schedule a buy or sell order.",
@@ -315,6 +320,30 @@ async def process_order(
     quantity: float = 1,
     time: str = None,
 ):
+    """Validate input and schedule an order for execution."""
+
+    invalid_usage_message = (
+        f"Invalid arguments. Expected format: `{ORD_COMMAND_USAGE}`"
+    )
+
+    if not action or action.lower() not in {"buy", "sell"}:
+        await ctx.send(invalid_usage_message)
+        return
+
+    if not ticker:
+        await ctx.send(invalid_usage_message)
+        return
+
+    try:
+        quantity_value = float(quantity)
+    except (TypeError, ValueError):
+        await ctx.send(invalid_usage_message)
+        return
+
+    if quantity_value <= 0:
+        await ctx.send(invalid_usage_message)
+        return
+
     try:
         now = datetime.now()
         market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
@@ -395,19 +424,39 @@ async def process_order(
                 ctx,
                 action=action,
                 ticker=ticker,
-                quantity=quantity,
+                quantity=quantity_value,
                 broker=broker,
                 execution_time=execution_time,
                 order_id=order_id,
             )
         )
         logger.info(
-            f"Order scheduled: {action.upper()} {ticker.upper()} {quantity} {broker} at {execution_time}."
+            f"Order scheduled: {action.upper()} {ticker.upper()} {quantity_value} {broker} at {execution_time}."
         )
 
     except Exception as e:
         logger.error(f"Error scheduling {action} order: {e}")
         await ctx.send(f"An error occurred: {e}")
+
+
+@process_order.error
+async def process_order_error(ctx, error):
+    """Provide a helpful usage hint when ``..ord`` fails due to bad input."""
+
+    expected_usage = f"`{ORD_COMMAND_USAGE}`"
+    if isinstance(
+        error,
+        (
+            commands.MissingRequiredArgument,
+            commands.BadArgument,
+            commands.BadUnionArgument,
+        ),
+    ):
+        await ctx.send(f"Invalid arguments. Expected format: {expected_usage}")
+        return
+
+    logger.exception("Unexpected error during ..ord execution")
+    await ctx.send(f"An error occurred: {error}")
 
 
 @bot.command(
