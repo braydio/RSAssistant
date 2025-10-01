@@ -1,0 +1,80 @@
+"""Unit tests for watch list presentation helpers."""
+
+import os
+import tempfile
+from unittest import IsolatedAsyncioTestCase
+from unittest.mock import AsyncMock, patch
+
+from utils.watch_utils import WatchListManager
+
+
+class DummyContext:
+    """Minimal async context stub for Discord send operations."""
+
+    def __init__(self):
+        self.sent_messages = []
+
+    async def send(self, content=None, embed=None):  # pragma: no cover - exercised indirectly
+        self.sent_messages.append({"content": content, "embed": embed})
+
+
+class WatchUtilsTest(IsolatedAsyncioTestCase):
+    """Validate watch list display helpers for Discord commands."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        watch_path = os.path.join(self.temp_dir.name, "watch.json")
+        sell_path = os.path.join(self.temp_dir.name, "sell.json")
+        self.manager = WatchListManager(watch_path, sell_path)
+        self.ctx = DummyContext()
+
+    def tearDown(self):  # pragma: no cover - cleanup
+        self.temp_dir.cleanup()
+
+    async def test_list_watched_tickers_without_prices(self):
+        """Default watchlist view should omit price lookups."""
+        self.manager.watch_list = {
+            "TEST": {"split_date": "01/02", "split_ratio": "1-10"}
+        }
+
+        with patch("utils.watch_utils.get_last_stock_price") as price_mock:
+            await self.manager.list_watched_tickers(self.ctx, include_prices=False)
+
+        price_mock.assert_not_called()
+        self.assertEqual(len(self.ctx.sent_messages), 1)
+        embed = self.ctx.sent_messages[0]["embed"]
+        self.assertIsNotNone(embed)
+        self.assertEqual(embed.fields[0].name, "TEST")
+        self.assertIn("Split Date: 01/02", embed.fields[0].value)
+        self.assertIn("Split Ratio: 1-10", embed.fields[0].value)
+
+    async def test_list_watched_tickers_with_prices(self):
+        """Optional price view should append formatted price data."""
+        self.manager.watch_list = {
+            "TEST": {"split_date": "01/02", "split_ratio": "N/A"}
+        }
+
+        with patch(
+            "utils.watch_utils.get_last_stock_price", return_value=12.34
+        ) as price_mock:
+            await self.manager.list_watched_tickers(self.ctx, include_prices=True)
+
+        price_mock.assert_called_once_with("TEST")
+        embed = self.ctx.sent_messages[0]["embed"]
+        self.assertEqual(embed.fields[0].name, "TEST — $12.34")
+        self.assertIn("Split Ratio: N/A", embed.fields[0].value)
+
+    async def test_send_watchlist_prices_uses_chunk_sender(self):
+        """Plain price output should delegate to chunked sender."""
+        self.manager.watch_list = {
+            "TEST": {"split_date": "01/02", "split_ratio": "1-10"}
+        }
+
+        chunk_mock = AsyncMock()
+        with patch(
+            "utils.watch_utils.send_large_message_chunks", chunk_mock
+        ), patch("utils.watch_utils.get_last_stock_price", return_value=8.9):
+            await self.manager.send_watchlist_prices(self.ctx)
+
+        chunk_mock.assert_awaited_once_with(self.ctx, "TEST: $8.90")
+        self.assertEqual(self.ctx.sent_messages, [])

@@ -220,32 +220,59 @@ class WatchListManager:
         await ctx.send(f"Updated the split ratio for {ticker} to {split_ratio}.")
         logging.info(f"Updated split ratio for {ticker} in watchlist to {split_ratio}.")
 
-    async def list_watched_tickers(self, ctx):
-        """List all currently watched stock tickers with their split dates using an embed."""
+    async def list_watched_tickers(
+        self, ctx, include_prices: bool = False
+    ) -> None:
+        """List all watched tickers with split details.
+
+        Args:
+            ctx: Discord command context used to send the response.
+            include_prices: When ``True`` append the latest known price to the
+                field title for each ticker. Defaults to ``False``.
+        """
         watch_list = self.get_watch_list()
 
         if not watch_list:
             await ctx.send("No tickers are being watched.")
-        else:
-            embed = discord.Embed(
-                title="Watchlist",
-                description="All tickers and split dates:",
-                color=discord.Color.blue(),
-            )
+            return
 
-            for ticker, data in watch_list.items():
-                split_date = data.get("split_date", "N/A")
+        embed = discord.Embed(
+            title="Watchlist",
+            description="Tracked reverse split candidates:",
+            color=discord.Color.blue(),
+        )
+
+        for ticker, data in sorted(watch_list.items()):
+            split_date = data.get("split_date", "N/A")
+            split_ratio = data.get("split_ratio", "N/A")
+            field_name = ticker
+            if include_prices:
                 last_price = get_last_stock_price(ticker)
-                last_price_display = (
-                    f"{last_price:.2f}" if last_price is not None else "N/A"
+                price_display = (
+                    f"${last_price:.2f}" if last_price is not None else "N/A"
                 )
-                embed.add_field(
-                    name=f"{ticker} **|** ${last_price_display}",
-                    value=f" **|** Split Date: {split_date} \n",
-                    inline=True,
-                )
+                field_name = f"{ticker} — {price_display}"
 
-            await ctx.send(embed=embed)
+            value_lines = [f"Split Date: {split_date}", f"Split Ratio: {split_ratio}"]
+            embed.add_field(name=field_name, value="\n".join(value_lines), inline=False)
+
+        await ctx.send(embed=embed)
+
+    async def send_watchlist_prices(self, ctx) -> None:
+        """Send a plain-text list of watchlist tickers with the latest prices."""
+        watch_list = self.get_watch_list()
+
+        if not watch_list:
+            await ctx.send("No tickers are being watched.")
+            return
+
+        lines = []
+        for ticker in sorted(watch_list.keys()):
+            last_price = get_last_stock_price(ticker)
+            price_display = f"${last_price:.2f}" if last_price is not None else "N/A"
+            lines.append(f"{ticker}: {price_display}")
+
+        await send_large_message_chunks(ctx, "\n".join(lines))
 
     async def stop_watching(self, ctx, ticker: str):
         """Stop watching a stock ticker across all accounts."""
