@@ -30,6 +30,12 @@ Any value other than `false` leaves the logger enabled.
 
 RSAssistant can optionally trigger a holdings refresh when a watchlist reminder is posted, then watch incoming holdings embeds and alert on positions meeting a price threshold. It can also optionally auto-sell those positions.
 
+### Watchlist commands
+
+- `..watchlist`: Display all tracked tickers with their split dates and ratios (no prices).
+- `..watchprices`: Display the watchlist with split info and the latest pulled prices.
+- `..prices`: List only the latest prices for tickers on the watchlist.
+
 - Auto refresh on reminder: posts `!rsa holdings all` after the reminder
 - Over-threshold alert: posts a note in the primary Discord channel
 - Optional auto-sell: posts a `..ord sell {ticker} {broker} {quantity}`

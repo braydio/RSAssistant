@@ -739,8 +739,28 @@ async def add_ratio(ctx, ticker: str, split_ratio: str):
     extras={"category": "Watchlist"},
 )
 async def allwatching(ctx):
-    """Lists all tickers being watched."""
-    await watch_list_manager.list_watched_tickers(ctx)
+    """List watched tickers with split dates and ratios."""
+    await watch_list_manager.list_watched_tickers(ctx, include_prices=False)
+
+
+@bot.command(
+    name="watchprices",
+    help="List watched tickers with split info and latest prices.",
+    extras={"category": "Watchlist"},
+)
+async def watchlist_with_prices(ctx):
+    """List watched tickers including their latest price."""
+    await watch_list_manager.list_watched_tickers(ctx, include_prices=True)
+
+
+@bot.command(
+    name="prices",
+    help="Show the latest price for each watchlist ticker.",
+    extras={"category": "Watchlist"},
+)
+async def watchlist_prices(ctx):
+    """Display only the latest prices for watchlist tickers."""
+    await watch_list_manager.send_watchlist_prices(ctx)
 
 
 @bot.command(
