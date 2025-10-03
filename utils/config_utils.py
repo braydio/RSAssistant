@@ -99,6 +99,10 @@ DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
 DISCORD_TERTIARY_CHANNEL = int(os.getenv("DISCORD_TERTIARY_CHANNEL", 0))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
+# Enable scheduled ``..all`` refreshes every 15 minutes during market hours
+ENABLE_MARKET_REFRESH = (
+    os.getenv("ENABLE_MARKET_REFRESH", "false").strip().lower() == "true"
+)
 
 # --- Feature toggles and thresholds ---
 # Automatically trigger holdings refresh when the watchlist reminder is sent
@@ -200,10 +204,28 @@ def _compute_ignore_brokers() -> set:
 IGNORE_BROKERS = _compute_ignore_brokers()
 
 # --- Mentions ---
-# Discord user ID to mention in alerts (e.g., 123456789012345678)
-MENTION_USER_ID = os.getenv("MENTION_USER_ID", os.getenv("MY_ID", "")).strip()
+
+
+def _parse_user_ids(raw_value: str) -> list[str]:
+    """Return a list of sanitized Discord user IDs from ``raw_value``."""
+
+    if not raw_value:
+        return []
+    return [value for value in (item.strip() for item in raw_value.split(",")) if value]
+
+
+_raw_mentions = os.getenv("MENTION_USER_IDS") or os.getenv("MENTION_USER_ID") or os.getenv("MY_ID", "")
+# Discord user IDs to mention in alerts (e.g., 123456789012345678)
+MENTION_USER_IDS = _parse_user_ids(_raw_mentions)
+# Maintain backward compatibility for single-ID usage
+MENTION_USER_ID = MENTION_USER_IDS[0] if MENTION_USER_IDS else ""
 # Whether to include a mention on over-threshold alerts
 MENTION_ON_ALERTS = os.getenv("MENTION_ON_ALERTS", "true").strip().lower() == "true"
+
+if MENTION_USER_IDS:
+    logger.info(f"Configured {len(MENTION_USER_IDS)} mention ID(s) for alerts.")
+else:
+    logger.info("No mention IDs configured for alerts.")
 
 # --- Logging resolved paths ---
 logger.info(f"Loaded BOT_TOKEN: {'Set' if BOT_TOKEN else 'Missing'}")
