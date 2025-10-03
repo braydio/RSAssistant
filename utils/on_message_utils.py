@@ -4,6 +4,7 @@ import re
 import asyncio
 from datetime import datetime, timedelta, date
 from collections import defaultdict
+from typing import Sequence
 import requests
 
 from utils.logging_setup import logger
@@ -29,7 +30,7 @@ from utils.config_utils import (
     IGNORE_TICKERS as IGNORE_TICKERS_SET,
     IGNORE_BROKERS as IGNORE_BROKERS_SET,
     DISCORD_PRIMARY_CHANNEL as PRIMARY_CHAN_ID,
-    MENTION_USER_ID,
+    MENTION_USER_IDS,
     MENTION_ON_ALERTS,
 )
 from utils import split_watch_utils
@@ -49,6 +50,26 @@ _missing_summary = defaultdict(set)
 _refresh_active = False
 _pending_alerts_by_broker = defaultdict(set)  # broker -> set[ticker]
 _pending_sell_commands = []  # queued auto-sell commands during refresh
+
+AREB_TICKER = "AREB"
+AREB_QUANTITY_THRESHOLD = 50
+_AREB_ALERT_SUFFIX = "_AREB_THRESHOLD"
+
+
+def format_mentions(user_ids: Sequence[str], enabled: bool, force: bool = False) -> str:
+    """Return a Discord mention string for ``user_ids`` when enabled or forced."""
+
+    if not user_ids:
+        return ""
+    if force or enabled:
+        return " ".join(f"<@{user_id}>" for user_id in user_ids) + " "
+    return ""
+
+
+def _mention_prefix(force: bool = False) -> str:
+    """Return the configured mention prefix, optionally forcing inclusion."""
+
+    return format_mentions(MENTION_USER_IDS, MENTION_ON_ALERTS, force=force)
 
 
 def _reset_refresh_state():
@@ -74,9 +95,7 @@ async def _handle_refresh_completion(message, lowered_content: str) -> None:
         threshold = 1.0
 
     if _pending_alerts_by_broker:
-        mention = (
-            f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
-        )
+        mention = _mention_prefix()
         lines = []
         for broker in sorted(_pending_alerts_by_broker.keys()):
             tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
@@ -245,20 +264,35 @@ async def handle_primary_channel(bot, message):
             # Aggregate alerts for a single summary message at the end
             alert_entries = []
             sell_commands = []
+            areb_alerts = []
 
             for h in parsed_holdings:
                 try:
                     ticker = str(h.get("ticker", "")).upper()
                     if not ticker or ticker == "CASH AND SWEEP FUNDS":
                         continue
-                    if ticker in IGNORE_TICKERS_SET:
-                        continue
+
+                    broker = str(h.get("broker", "")).strip()
+                    account_name = str(h.get("account_name", h.get("account", "")))
                     price = float(h.get("price", 0) or 0)
                     quantity = float(h.get("quantity", 0) or 0)
-                    broker = str(h.get("broker", "")).strip()
-                    if is_broker_ignored(broker):
+
+                    if ticker == AREB_TICKER and quantity > AREB_QUANTITY_THRESHOLD:
+                        if not is_broker_ignored(broker):
+                            alert_key = f"{ticker}{_AREB_ALERT_SUFFIX}"
+                            if not has_acted_today(broker, account_name, alert_key):
+                                areb_alerts.append(
+                                    {
+                                        "broker": broker,
+                                        "account_name": account_name,
+                                        "quantity": quantity,
+                                        "price": price,
+                                    }
+                                )
+                                record_action_today(broker, account_name, alert_key)
+
+                    if ticker in IGNORE_TICKERS_SET or is_broker_ignored(broker):
                         continue
-                    account_name = str(h.get("account_name", h.get("account", "")))
                     if price < threshold or quantity <= 0:
                         continue
                     if has_acted_today(broker, account_name, ticker):
@@ -285,6 +319,24 @@ async def handle_primary_channel(bot, message):
                 except Exception as exc:
                     logger.error(f"Monitor/auto-sell step failed for holding {h}: {exc}")
 
+            if areb_alerts:
+                mention = _mention_prefix(force=True)
+                header = (
+                    f"{mention}AREB position(s) above {AREB_QUANTITY_THRESHOLD} shares detected:\n"
+                )
+                lines = []
+                for alert in areb_alerts:
+                    qty = alert["quantity"]
+                    broker = alert["broker"]
+                    account_name = alert["account_name"]
+                    price = alert["price"]
+                    price_fragment = f" @ ${price:.2f}" if price else ""
+                    lines.append(
+                        f"- {broker} {account_name}: {qty:.2f} shares{price_fragment}"
+                    )
+                body = "\n".join(lines)
+                await message.channel.send(header + body)
+
             # During refresh, buffer alerts and sell commands; otherwise, send immediately
             if alert_entries and _refresh_active:
                 for e in alert_entries:
@@ -304,9 +356,7 @@ async def handle_primary_channel(bot, message):
                     )
                     lines.append(f"- {broker} {account_name}: {details}")
 
-                mention = (
-                    f"<@{MENTION_USER_ID}> " if (MENTION_ON_ALERTS and MENTION_USER_ID) else ""
-                )
+                mention = _mention_prefix()
                 header = (
                     f"{mention}Detected holdings >= ${threshold:.2f} across {len(grouped)} account(s):\n"
                 )

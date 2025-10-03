@@ -77,6 +77,7 @@ from utils.watch_utils import (
     send_reminder_message,
     watch_list_manager,
 )
+from utils.refresh_scheduler import compute_next_refresh_datetime, MARKET_TZ
 
 bot_info = (
     "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
@@ -146,6 +147,8 @@ bot.help_command = CategoryHelpCommand()
 
 periodic_task = None
 reminder_scheduler = None
+total_refresh_task = None
+_total_refresh_lock = asyncio.Lock()
 
 
 async def reschedule_queued_orders():
@@ -179,6 +182,69 @@ async def reschedule_queued_orders():
         except Exception as exc:
             logger.error(f"Failed to reschedule order {order_id}: {exc}")
 
+
+async def _invoke_total_refresh(bot: commands.Bot) -> None:
+    """Trigger the ``..all`` command from the scheduler context."""
+
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    if channel is None:
+        logger.error(
+            "Total refresh scheduler could not resolve primary channel %s",
+            DISCORD_PRIMARY_CHANNEL,
+        )
+        return
+
+    command = bot.get_command("all")
+    if command is None:
+        logger.error("Total refresh scheduler could not locate '..all' command handler")
+        return
+
+    message = await channel.send(f"{BOT_PREFIX}all")
+    try:
+        ctx = await bot.get_context(message)
+        await bot.invoke(ctx)
+    finally:
+        try:
+            await message.delete()
+        except discord.HTTPException as exc:
+            logger.debug(f"Unable to delete scheduled '..all' trigger message: {exc}")
+
+
+async def _execute_total_refresh(bot: commands.Bot) -> None:
+    """Execute the scheduled ``..all`` refresh with locking."""
+
+    if _total_refresh_lock.locked():
+        logger.warning("Skipping scheduled '..all' refresh; previous run still active.")
+        return
+
+    async with _total_refresh_lock:
+        logger.info("Executing scheduled '..all' holdings refresh.")
+        await _invoke_total_refresh(bot)
+
+
+async def run_total_refresh_scheduler(bot: commands.Bot) -> None:
+    """Invoke ``..all`` at a cadence matching market and off-hours policies."""
+
+    while True:
+        now = datetime.now(MARKET_TZ)
+        next_run = compute_next_refresh_datetime(now)
+        wait_seconds = max((next_run - now).total_seconds(), 0)
+        logger.info(
+            "Next scheduled '..all' refresh at %s",
+            next_run.astimezone(MARKET_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
+        )
+        try:
+            await asyncio.sleep(wait_seconds)
+        except asyncio.CancelledError:
+            logger.info("Total refresh scheduler cancelled before next execution.")
+            raise
+
+        try:
+            await _execute_total_refresh(bot)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.exception(f"Scheduled '..all' refresh failed: {exc}")
 
 @bot.event
 async def on_ready():
@@ -235,6 +301,13 @@ async def on_ready():
         logger.info("Periodic check task started.")
     else:
         logger.info("Periodic check task is already running.")
+
+    global total_refresh_task
+    if total_refresh_task is None:
+        total_refresh_task = asyncio.create_task(run_total_refresh_scheduler(bot))
+        logger.info("Total refresh scheduler started.")
+    else:
+        logger.info("Total refresh scheduler already running.")
 
     # Schedule reminder task using APScheduler
     global reminder_scheduler
@@ -957,9 +1030,11 @@ async def shutdown(ctx):
 # Shutdown handler
 def shutdown_handler(signal_received, frame):
     logger.info("RSAssistant - shutting down...")
-    global periodic_task, reminder_scheduler
+    global periodic_task, reminder_scheduler, total_refresh_task
     if periodic_task and not periodic_task.done():
         periodic_task.cancel()
+    if total_refresh_task and not total_refresh_task.done():
+        total_refresh_task.cancel()
     if reminder_scheduler:
         reminder_scheduler.shutdown()
     sys.exit(0)

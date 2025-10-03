@@ -30,6 +30,8 @@ Any value other than `false` leaves the logger enabled.
 
 RSAssistant can optionally trigger a holdings refresh when a watchlist reminder is posted, then watch incoming holdings embeds and alert on positions meeting a price threshold. It can also optionally auto-sell those positions.
 
+When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total refresh command every 15 minutes during U.S. market hours while continuing to run at 8:00 AM and 8:00 PM Eastern outside of market hours. Without the toggle, the two out-of-hours runs remain so you can opt out of the higher-frequency cadence.
+
 ### Watchlist commands
 
 - `..watchlist`: Display all tracked tickers with their split dates and ratios (no prices).
@@ -126,6 +128,10 @@ Add the following keys to your environment. The app now loads from a single sour
 - `AUTO_REFRESH_ON_REMINDER` (bool): If `true`, send `!rsa holdings all` after the reminder fires. Default `false`.
 - `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger the alert. Default `1`.
 - `AUTO_SELL_LIVE` (bool): If `true`, also post `..ord sell {ticker} {broker} {quantity}`. Default `false`.
+- `ENABLE_MARKET_REFRESH` (bool): If `true`, schedule the ``..all`` command every
+  15 minutes during market hours in addition to the 8:00 AM and 8:00 PM runs.
+  Default `false` to avoid the higher-frequency cadence unless explicitly
+  requested.
 - `IGNORE_TICKERS` (CSV): Tickers to skip for alert/auto-sell (e.g., `ABCD,EFGH`). Default empty.
 - `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `volumes/config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
 - `IGNORE_BROKERS` (CSV): Brokers to skip for alert/auto-sell (e.g., `Fidelity,Schwab`). Default empty.
@@ -142,7 +148,7 @@ echo "MSFT  # Long-term" >> volumes/config/ignore_tickers.txt
 Apply the same approach for brokers by creating `volumes/config/ignore_brokers.txt`
 with one broker name per line.
 
-- `MENTION_USER_ID` (string): Your Discord user ID to @-mention in alerts (e.g., `123456789012345678`). Optional.
+- `MENTION_USER_ID` / `MENTION_USER_IDS` (string or CSV): Discord user ID(s) to @-mention in alerts (e.g., `123456789012345678` or `123...,987...`). Optional.
 - `MENTION_ON_ALERTS` (bool): Enable/disable mentions on alerts. Default `true`.
 
 De-duplication state is stored at `volumes/config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
