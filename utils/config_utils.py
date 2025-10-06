@@ -135,6 +135,9 @@ IGNORE_TICKERS_FILE = Path(
 IGNORE_BROKERS_FILE = Path(
     os.getenv("IGNORE_BROKERS_FILE", str(CONFIG_DIR / "ignore_brokers.txt"))
 ).resolve()
+TAGGED_ALERTS_FILE = Path(
+    os.getenv("TAGGED_ALERTS_FILE", str(CONFIG_DIR / "tagged_alerts.txt"))
+).resolve()
 
 
 def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
@@ -204,6 +207,149 @@ def _compute_ignore_brokers() -> set:
 IGNORE_BROKERS = _compute_ignore_brokers()
 
 # --- Mentions ---
+
+
+def _parse_tagged_alert_entry(raw_value: str, source: str) -> tuple[str, float | None] | None:
+    """Return a ticker and optional quantity threshold from ``raw_value``.
+
+    Parameters
+    ----------
+    raw_value:
+        The raw configuration entry to parse.
+    source:
+        A hint used in log messages to identify the origin of the entry.
+
+    Returns
+    -------
+    tuple[str, float | None] | None
+        ``None`` when the value cannot be parsed. Otherwise returns the
+        uppercased ticker with an optional minimum quantity. When the
+        quantity is omitted or invalid, ``None`` is stored to indicate that
+        any detected position should trigger the tagged alert.
+    """
+
+    if not raw_value:
+        return None
+
+    entry = raw_value.strip()
+    if not entry or entry.startswith("#"):
+        return None
+
+    # Allow inline comments separated by ``#`` with surrounding whitespace.
+    entry = entry.split(" # ", 1)[0].strip()
+    if not entry:
+        return None
+
+    ticker_part, quantity_part = entry, None
+    for separator in (":", "=", " "):
+        if separator in entry:
+            ticker_part, quantity_part = entry.split(separator, 1)
+            break
+
+    ticker = ticker_part.strip().upper()
+    if not ticker:
+        logger.warning(
+            "Skipping tagged alert entry with empty ticker from %s: %s",
+            source,
+            raw_value,
+        )
+        return None
+
+    if quantity_part is None:
+        return ticker, None
+
+    quantity_str = quantity_part.strip()
+    if not quantity_str:
+        return ticker, None
+
+    try:
+        quantity = float(quantity_str)
+    except ValueError:
+        logger.warning(
+            "Invalid quantity '%s' for ticker %s in %s; defaulting to any quantity.",
+            quantity_str,
+            ticker,
+            source,
+        )
+        return ticker, None
+
+    return ticker, quantity
+
+
+def _combine_requirements(current: float | None, new: float | None) -> float | None:
+    """Combine two requirement values, preferring less restrictive options."""
+
+    if current is None or new is None:
+        return None
+    return max(current, new)
+
+
+def _load_tagged_alerts_from_file(path: Path) -> dict[str, float | None]:
+    """Return tagged alert requirements defined in ``path``.
+
+    The file format expects one entry per line using ``TICKER[:QUANTITY]``.
+    Blank lines and comment lines beginning with ``#`` are ignored. Inline
+    comments using ``" # "`` are stripped before parsing.
+    """
+
+    requirements: dict[str, float | None] = {}
+    if not path.exists():
+        return requirements
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                parsed = _parse_tagged_alert_entry(line, str(path))
+                if not parsed:
+                    continue
+                ticker, quantity = parsed
+                if ticker not in requirements:
+                    requirements[ticker] = quantity
+                else:
+                    requirements[ticker] = _combine_requirements(
+                        requirements[ticker], quantity
+                    )
+    except Exception as exc:  # pragma: no cover - logged for operator visibility
+        logger.error("Failed reading tagged alert requirements from %s: %s", path, exc)
+
+    return requirements
+
+
+def _compute_tagged_alert_requirements() -> dict[str, float | None]:
+    """Merge environment and file-based tagged alert requirements."""
+
+    merged: dict[str, float | None] = {}
+
+    env_entries = [item.strip() for item in os.getenv("TAGGED_ALERT_TICKERS", "").split(",")]
+    for entry in env_entries:
+        parsed = _parse_tagged_alert_entry(entry, "TAGGED_ALERT_TICKERS")
+        if not parsed:
+            continue
+        ticker, quantity = parsed
+        if ticker not in merged:
+            merged[ticker] = quantity
+        else:
+            merged[ticker] = _combine_requirements(merged[ticker], quantity)
+
+    file_requirements = _load_tagged_alerts_from_file(TAGGED_ALERTS_FILE)
+    for ticker, quantity in file_requirements.items():
+        if ticker not in merged:
+            merged[ticker] = quantity
+        else:
+            merged[ticker] = _combine_requirements(merged[ticker], quantity)
+
+    if merged:
+        logger.info(
+            "Loaded %d tagged alert requirement(s) (env + file).",
+            len(merged),
+        )
+    else:
+        logger.info("No tagged alert requirements configured; tagging all alerts.")
+
+    return merged
+
+
+TAGGED_ALERT_REQUIREMENTS = _compute_tagged_alert_requirements()
 
 
 def _parse_user_ids(raw_value: str) -> list[str]:
