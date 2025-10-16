@@ -281,7 +281,7 @@ def _combine_requirements(current: float | None, new: float | None) -> float | N
 
     if current is None or new is None:
         return None
-    return max(current, new)
+    return min(current, new)
 
 
 def _load_tagged_alerts_from_file(path: Path) -> dict[str, float | None]:

@@ -17,7 +17,7 @@ class TaggedAlertConfigTests(unittest.TestCase):
             config_path = Path(tmpdir) / "tagged_alerts.txt"
             config_path.write_text("AAPL:50\nmsft\n", encoding="utf-8")
             env_vars = {
-                "TAGGED_ALERT_TICKERS": "TSLA:5, GOOG",
+                "TAGGED_ALERT_TICKERS": "TSLA:5, GOOG, AAPL:10",
                 "TAGGED_ALERTS_FILE": str(config_path),
             }
             try:
@@ -26,7 +26,7 @@ class TaggedAlertConfigTests(unittest.TestCase):
                     self.assertEqual(
                         reloaded.TAGGED_ALERT_REQUIREMENTS,
                         {
-                            "AAPL": 50.0,
+                            "AAPL": 10.0,
                             "MSFT": None,
                             "TSLA": 5.0,
                             "GOOG": None,
