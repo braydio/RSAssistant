@@ -32,6 +32,7 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL as PRIMARY_CHAN_ID,
     MENTION_USER_IDS,
     MENTION_ON_ALERTS,
+    TAGGED_ALERT_REQUIREMENTS,
 )
 from utils import split_watch_utils
 
@@ -48,7 +49,7 @@ _missing_summary = defaultdict(set)
 
 # Flag and buffers for holdings refresh aggregation
 _refresh_active = False
-_pending_alerts_by_broker = defaultdict(set)  # broker -> set[ticker]
+_pending_alerts_by_broker = defaultdict(dict)  # broker -> ticker -> quantity
 _pending_sell_commands = []  # queued auto-sell commands during refresh
 
 AREB_TICKER = "AREB"
@@ -66,10 +67,46 @@ def format_mentions(user_ids: Sequence[str], enabled: bool, force: bool = False)
     return ""
 
 
-def _mention_prefix(force: bool = False) -> str:
-    """Return the configured mention prefix, optionally forcing inclusion."""
+def _mention_prefix(force: bool = False, tag_enabled: bool = True) -> str:
+    """Return the configured mention prefix when tagging is enabled."""
 
+    if not tag_enabled and not force:
+        return ""
     return format_mentions(MENTION_USER_IDS, MENTION_ON_ALERTS, force=force)
+
+
+def _should_tag_alert(ticker: str, quantity: float) -> bool:
+    """Return ``True`` when alerts for ``ticker`` should include mentions."""
+
+    if not TAGGED_ALERT_REQUIREMENTS:
+        return True
+
+    normalized = ticker.upper()
+    if normalized not in TAGGED_ALERT_REQUIREMENTS:
+        return False
+    requirement = TAGGED_ALERT_REQUIREMENTS.get(normalized)
+    if requirement is None:
+        return True
+    return quantity >= requirement
+
+
+def _should_tag_entries(entries) -> bool:
+    """Return ``True`` if any alert entry satisfies mention requirements."""
+
+    if not entries:
+        return False
+    if not TAGGED_ALERT_REQUIREMENTS:
+        return True
+
+    for entry in entries:
+        ticker = str(entry.get("ticker", "")).upper()
+        try:
+            quantity = float(entry.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            quantity = 0.0
+        if ticker and _should_tag_alert(ticker, quantity):
+            return True
+    return False
 
 
 def _reset_refresh_state():
@@ -77,7 +114,7 @@ def _reset_refresh_state():
 
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
     _refresh_active = False
-    _pending_alerts_by_broker = defaultdict(set)
+    _pending_alerts_by_broker = defaultdict(dict)
     _pending_sell_commands = []
 
 
@@ -95,10 +132,15 @@ async def _handle_refresh_completion(message, lowered_content: str) -> None:
         threshold = 1.0
 
     if _pending_alerts_by_broker:
-        mention = _mention_prefix()
+        pending_entries = [
+            {"ticker": ticker, "quantity": quantity}
+            for ticker_map in _pending_alerts_by_broker.values()
+            for ticker, quantity in ticker_map.items()
+        ]
+        mention = _mention_prefix(tag_enabled=_should_tag_entries(pending_entries))
         lines = []
         for broker in sorted(_pending_alerts_by_broker.keys()):
-            tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
+            tickers = ", ".join(sorted(_pending_alerts_by_broker[broker].keys()))
             lines.append(f"- {broker}: {tickers}")
 
         header = (
@@ -231,7 +273,7 @@ async def handle_primary_channel(bot, message):
     # Detect start of holdings refresh to buffer alerts until completion
     if "!rsa holdings" in lowered_content:
         _refresh_active = True
-        _pending_alerts_by_broker = defaultdict(set)
+        _pending_alerts_by_broker = defaultdict(dict)
         _pending_sell_commands = []
         logger.info("Detected start of holdings refresh; buffering alerts.")
 
@@ -340,7 +382,13 @@ async def handle_primary_channel(bot, message):
             # During refresh, buffer alerts and sell commands; otherwise, send immediately
             if alert_entries and _refresh_active:
                 for e in alert_entries:
-                    _pending_alerts_by_broker[e["broker"]].add(e["ticker"])
+                    broker_alerts = _pending_alerts_by_broker[e["broker"]]
+                    ticker = e["ticker"]
+                    quantity = float(e.get("quantity", 0) or 0)
+                    broker_alerts[ticker] = max(
+                        quantity,
+                        float(broker_alerts.get(ticker, 0) or 0),
+                    )
                 _pending_sell_commands.extend(sell_commands)
             elif alert_entries:
                 # Group tickers by account for readability
@@ -356,7 +404,7 @@ async def handle_primary_channel(bot, message):
                     )
                     lines.append(f"- {broker} {account_name}: {details}")
 
-                mention = _mention_prefix()
+                mention = _mention_prefix(tag_enabled=_should_tag_entries(alert_entries))
                 header = (
                     f"{mention}Detected holdings >= ${threshold:.2f} across {len(grouped)} account(s):\n"
                 )
