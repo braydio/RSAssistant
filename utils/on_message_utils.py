@@ -4,7 +4,7 @@ import re
 import asyncio
 from datetime import datetime, timedelta, date
 from collections import defaultdict
-from typing import Sequence
+from typing import DefaultDict, Dict, List, Sequence, Tuple
 import requests
 
 from utils.logging_setup import logger
@@ -48,7 +48,21 @@ _missing_summary = defaultdict(set)
 
 # Flag and buffers for holdings refresh aggregation
 _refresh_active = False
-_pending_alerts_by_broker = defaultdict(set)  # broker -> set[ticker]
+def _new_account_bucket() -> DefaultDict[str, List[dict]]:
+    """Return a new nested dictionary used for alert aggregation."""
+
+    return defaultdict(list)
+
+
+def _new_alert_buffer() -> DefaultDict[str, DefaultDict[str, List[dict]]]:
+    """Return an empty alert buffer keyed by broker and account."""
+
+    return defaultdict(_new_account_bucket)
+
+
+_pending_alerts_by_broker: DefaultDict[str, DefaultDict[str, List[dict]]] = (
+    _new_alert_buffer()
+)
 _pending_sell_commands = []  # queued auto-sell commands during refresh
 
 AREB_TICKER = "AREB"
@@ -77,7 +91,7 @@ def _reset_refresh_state():
 
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
     _refresh_active = False
-    _pending_alerts_by_broker = defaultdict(set)
+    _pending_alerts_by_broker = _new_alert_buffer()
     _pending_sell_commands = []
 
 
@@ -96,29 +110,104 @@ async def _handle_refresh_completion(message, lowered_content: str) -> None:
 
     if _pending_alerts_by_broker:
         mention = _mention_prefix()
-        lines = []
-        for broker in sorted(_pending_alerts_by_broker.keys()):
-            tickers = ", ".join(sorted(_pending_alerts_by_broker[broker]))
-            lines.append(f"- {broker}: {tickers}")
-
-        header = (
-            f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
-        )
-        max_len = 2000
-        body = "\n".join(lines)
-        first_msg = (header + body)[:max_len]
-        await message.channel.send(first_msg)
-
-        remaining = body[len(first_msg) - len(header) :]
-        while remaining:
-            chunk = remaining[: max_len - 1]
+        grouped_alerts = {
+            broker: dict(accounts) for broker, accounts in _pending_alerts_by_broker.items()
+        }
+        summary_chunks = _format_alert_summary(grouped_alerts, threshold, mention)
+        for chunk in summary_chunks:
             await message.channel.send(chunk)
-            remaining = remaining[len(chunk) :]
 
         for cmd in _pending_sell_commands:
             await message.channel.send(cmd)
 
     _reset_refresh_state()
+
+
+def _group_alert_entries(entries: Sequence[dict]) -> Dict[str, Dict[str, List[dict]]]:
+    """Group alert entries by broker and account for display."""
+
+    grouped: DefaultDict[str, DefaultDict[str, List[dict]]] = _new_alert_buffer()
+    for entry in entries:
+        broker = str(entry.get("broker", "")) or "Unknown Broker"
+        account = str(entry.get("account_name") or entry.get("account", "")) or "Unknown Account"
+        grouped[broker][account].append(entry)
+
+    return {broker: dict(accounts) for broker, accounts in grouped.items()}
+
+
+def _alert_entry_sort_key(entry: dict) -> Tuple[str, float]:
+    """Return a tuple used to sort alert entries consistently."""
+
+    ticker = str(entry.get("ticker", "")).upper()
+    try:
+        price = float(entry.get("price", 0) or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    return ticker, price
+
+
+def _format_alert_entry(entry: dict) -> str:
+    """Return a readable string for a holdings alert entry."""
+
+    ticker = str(entry.get("ticker", "")).upper() or "UNKNOWN"
+    try:
+        price = float(entry.get("price", 0) or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    try:
+        quantity = float(entry.get("quantity", 0) or 0)
+    except (TypeError, ValueError):
+        quantity = 0.0
+    quantity_text = format(quantity, "g")
+    return f"{ticker} @ ${price:.2f} (qty {quantity_text})"
+
+
+def _format_alert_summary(
+    grouped_by_broker: Dict[str, Dict[str, Sequence[dict]]],
+    threshold: float,
+    mention: str,
+) -> List[str]:
+    """Return Discord message chunks summarizing holdings alerts."""
+
+    if not grouped_by_broker:
+        return []
+
+    total_accounts = sum(len(accounts) for accounts in grouped_by_broker.values())
+    header = (
+        f"{mention}Detected holdings >= ${threshold:.2f} across {total_accounts} account(s):\n"
+    )
+
+    lines: List[str] = []
+    for broker in sorted(grouped_by_broker.keys()):
+        account_sections: List[str] = []
+        for account, items in sorted(grouped_by_broker[broker].items()):
+            details = ", ".join(
+                _format_alert_entry(entry) for entry in sorted(items, key=_alert_entry_sort_key)
+            )
+            account_sections.append(f"{account}: {details}")
+        lines.append(f"- {broker}: {'; '.join(account_sections)}")
+
+    return _chunk_summary_messages(header, lines)
+
+
+def _chunk_summary_messages(header: str, lines: Sequence[str]) -> List[str]:
+    """Split alert summaries into Discord-safe message sizes."""
+
+    if not lines:
+        return []
+
+    max_len = 2000
+    body = "\n".join(lines)
+    first_msg = (header + body)[:max_len]
+    messages = [first_msg]
+
+    remaining = body[len(first_msg) - len(header) :]
+    while remaining:
+        chunk = remaining[: max_len - 1]
+        messages.append(chunk)
+        remaining = remaining[len(chunk) :]
+
+    return messages
 
 
 def is_broker_ignored(broker: str) -> bool:
@@ -231,7 +320,7 @@ async def handle_primary_channel(bot, message):
     # Detect start of holdings refresh to buffer alerts until completion
     if "!rsa holdings" in lowered_content:
         _refresh_active = True
-        _pending_alerts_by_broker = defaultdict(set)
+        _pending_alerts_by_broker = _new_alert_buffer()
         _pending_sell_commands = []
         logger.info("Detected start of holdings refresh; buffering alerts.")
 
@@ -337,41 +426,19 @@ async def handle_primary_channel(bot, message):
                 body = "\n".join(lines)
                 await message.channel.send(header + body)
 
+            grouped_entries = _group_alert_entries(alert_entries)
+
             # During refresh, buffer alerts and sell commands; otherwise, send immediately
-            if alert_entries and _refresh_active:
-                for e in alert_entries:
-                    _pending_alerts_by_broker[e["broker"]].add(e["ticker"])
+            if grouped_entries and _refresh_active:
+                for broker, accounts in grouped_entries.items():
+                    for account, items in accounts.items():
+                        _pending_alerts_by_broker[broker][account].extend(items)
                 _pending_sell_commands.extend(sell_commands)
-            elif alert_entries:
-                # Group tickers by account for readability
-                grouped = {}
-                for e in alert_entries:
-                    key = (e["broker"], e["account_name"])
-                    grouped.setdefault(key, []).append(e)
-
-                lines = []
-                for (broker, account_name), items in grouped.items():
-                    details = ", ".join(
-                        f"{it['ticker']} @ ${it['price']:.2f} (qty {it['quantity']})" for it in items
-                    )
-                    lines.append(f"- {broker} {account_name}: {details}")
-
+            elif grouped_entries:
                 mention = _mention_prefix()
-                header = (
-                    f"{mention}Detected holdings >= ${threshold:.2f} across {len(grouped)} account(s):\n"
-                )
-
-                # Discord 2000 char limit; send in chunks if needed. Mention only once.
-                max_len = 2000
-                body = "\n".join(lines)
-                first_msg = (header + body)[:max_len]
-                await message.channel.send(first_msg)
-
-                remaining = body[len(first_msg) - len(header) :]
-                while remaining:
-                    chunk = remaining[: max_len - 1]
+                summary_chunks = _format_alert_summary(grouped_entries, threshold, mention)
+                for chunk in summary_chunks:
                     await message.channel.send(chunk)
-                    remaining = remaining[len(chunk) :]
 
                 # After summary, send any queued auto-sell commands
                 for cmd in sell_commands:
