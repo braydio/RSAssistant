@@ -129,6 +129,76 @@ def test_get_top_holdings_refreshes_data(tmp_path):
     assert {"AAA", "BBB"} <= tickers
 
 
+def test_save_holdings_negative_quantity_skips_sql(tmp_path):
+    csv_path = tmp_path / "holdings.csv"
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+
+    calls = {"count": 0}
+
+    def fake_update(**kwargs):
+        calls["count"] += 1
+
+    csv_utils.update_holdings_live = fake_update
+
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Fennel",
+                "group": "1",
+                "account": "0001",
+                "ticker": "EJH",
+                "quantity": -1,
+                "price": 2.76,
+            }
+        ]
+    )
+
+    assert csv_path.exists()
+    with open(csv_path, newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
+    assert rows[0]["Stock"] == "EJH"
+    assert float(rows[0]["Quantity"]) == -1.0
+    assert calls["count"] == 0
+
+
+def test_save_holdings_sql_error_does_not_block_csv(tmp_path, caplog):
+    csv_path = tmp_path / "holdings.csv"
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+
+    def failing_update(**kwargs):
+        raise RuntimeError("boom")
+
+    csv_utils.update_holdings_live = failing_update
+
+    caplog.clear()
+    caplog.set_level(logging.WARNING)
+
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Fennel",
+                "group": "1",
+                "account": "0001",
+                "ticker": "AMZE",
+                "quantity": 1,
+                "price": 1.25,
+            }
+        ]
+    )
+
+    assert csv_path.exists()
+    with open(csv_path, newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
+    assert rows[0]["Stock"] == "AMZE"
+    assert any("SQL logging failed" in record.message for record in caplog.records)
+
+
 def test_save_order_to_csv_disabled(monkeypatch, tmp_path):
     monkeypatch.setenv("CSV_LOGGING_ENABLED", "false")
     import importlib

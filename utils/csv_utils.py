@@ -299,6 +299,11 @@ def save_holdings_to_csv(parsed_holdings):
     interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
     compatibility.
 
+    SQL persistence is best-effort. Holdings with negative quantities are still
+    written to the CSV log, but SQL logging is skipped to avoid violating the
+    non-negative quantity constraint on the ``HoldingsLive`` table. Any other
+    SQL failures are logged and do not abort the CSV write.
+
     Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
     fields plus a ``Timestamp``.  When loading an existing CSV the function
     emits a warning if required columns such as ``Key`` or ``Timestamp`` are
@@ -408,15 +413,30 @@ def save_holdings_to_csv(parsed_holdings):
                 new_holdings.append(holding_dict)
                 existing_keys.add(holding_key)
 
-                # Save to the database
-                update_holdings_live(
-                    broker=holding_dict["Broker Name"],
-                    broker_number=holding_dict["Broker Number"],
-                    account_number=holding_dict["Account Number"],
-                    ticker=holding_dict["Stock"],
-                    quantity=holding_dict["Quantity"],
-                    price=holding_dict["Price"],
-                )
+                quantity_value = holding_dict["Quantity"]
+                if quantity_value < 0:
+                    logger.info(
+                        "Skipping SQL logging for negative quantity holding: %s %s %s %s quantity=%s",
+                        holding_dict["Broker Name"],
+                        holding_dict["Broker Number"],
+                        holding_dict["Account Number"],
+                        holding_dict["Stock"],
+                        quantity_value,
+                    )
+                else:
+                    try:
+                        update_holdings_live(
+                            broker=holding_dict["Broker Name"],
+                            broker_number=holding_dict["Broker Number"],
+                            account_number=holding_dict["Account Number"],
+                            ticker=holding_dict["Stock"],
+                            quantity=quantity_value,
+                            price=holding_dict["Price"],
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "SQL logging failed for holding %s: %s", holding_dict.get("Key", ""), exc
+                        )
 
         # Write the updated holdings to the CSV
         if new_holdings:
