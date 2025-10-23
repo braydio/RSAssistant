@@ -1,0 +1,4 @@
+# One ticker per line. Use optional ':quantity' to require a minimum size.
+# Lines beginning with '#' are ignored.
+AAPL:50
+TSLA

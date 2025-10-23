@@ -32,6 +32,7 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL as PRIMARY_CHAN_ID,
     MENTION_USER_IDS,
     MENTION_ON_ALERTS,
+    TAGGED_ALERT_REQUIREMENTS,
 )
 from utils import split_watch_utils
 
@@ -48,6 +49,8 @@ _missing_summary = defaultdict(set)
 
 # Flag and buffers for holdings refresh aggregation
 _refresh_active = False
+
+
 def _new_account_bucket() -> DefaultDict[str, List[dict]]:
     """Return a new nested dictionary used for alert aggregation."""
 
@@ -80,10 +83,46 @@ def format_mentions(user_ids: Sequence[str], enabled: bool, force: bool = False)
     return ""
 
 
-def _mention_prefix(force: bool = False) -> str:
-    """Return the configured mention prefix, optionally forcing inclusion."""
+def _mention_prefix(force: bool = False, tag_enabled: bool = True) -> str:
+    """Return the configured mention prefix when tagging is enabled."""
 
+    if not tag_enabled and not force:
+        return ""
     return format_mentions(MENTION_USER_IDS, MENTION_ON_ALERTS, force=force)
+
+
+def _should_tag_alert(ticker: str, quantity: float) -> bool:
+    """Return ``True`` when alerts for ``ticker`` should include mentions."""
+
+    if not TAGGED_ALERT_REQUIREMENTS:
+        return True
+
+    normalized = ticker.upper()
+    if normalized not in TAGGED_ALERT_REQUIREMENTS:
+        return False
+    requirement = TAGGED_ALERT_REQUIREMENTS.get(normalized)
+    if requirement is None:
+        return True
+    return quantity >= requirement
+
+
+def _should_tag_entries(entries) -> bool:
+    """Return ``True`` if any alert entry satisfies mention requirements."""
+
+    if not entries:
+        return False
+    if not TAGGED_ALERT_REQUIREMENTS:
+        return True
+
+    for entry in entries:
+        ticker = str(entry.get("ticker", "")).upper()
+        try:
+            quantity = float(entry.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            quantity = 0.0
+        if ticker and _should_tag_alert(ticker, quantity):
+            return True
+    return False
 
 
 def _reset_refresh_state():
@@ -109,9 +148,16 @@ async def _handle_refresh_completion(message, lowered_content: str) -> None:
         threshold = 1.0
 
     if _pending_alerts_by_broker:
-        mention = _mention_prefix()
+        pending_entries = [
+            entry
+            for accounts in _pending_alerts_by_broker.values()
+            for items in accounts.values()
+            for entry in items
+        ]
+        mention = _mention_prefix(tag_enabled=_should_tag_entries(pending_entries))
         grouped_alerts = {
-            broker: dict(accounts) for broker, accounts in _pending_alerts_by_broker.items()
+            broker: {account: list(items) for account, items in accounts.items()}
+            for broker, accounts in _pending_alerts_by_broker.items()
         }
         summary_chunks = _format_alert_summary(grouped_alerts, threshold, mention)
         for chunk in summary_chunks:
@@ -435,7 +481,9 @@ async def handle_primary_channel(bot, message):
                         _pending_alerts_by_broker[broker][account].extend(items)
                 _pending_sell_commands.extend(sell_commands)
             elif grouped_entries:
-                mention = _mention_prefix()
+                mention = _mention_prefix(
+                    tag_enabled=_should_tag_entries(alert_entries)
+                )
                 summary_chunks = _format_alert_summary(grouped_entries, threshold, mention)
                 for chunk in summary_chunks:
                     await message.channel.send(chunk)
