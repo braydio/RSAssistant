@@ -121,7 +121,7 @@ class WatchListManager:
             if not split_str:
                 continue
             split_dt = None
-            # Try common date formats
+            # Try common date formats (month/day with optional year)
             for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%d"):
                 try:
                     split_dt = datetime.strptime(split_str, fmt)
@@ -451,13 +451,18 @@ async def send_reminder_message(bot):
 
 
 def parse_bulk_watchlist_message(content: str):
-    """Parse lines of the form 'TICKER X-Y (purchase by mm/dd)'.
+    """Parse bulk watchlist entries in the ``ticker ratio mm/dd`` format.
 
-    Returns a list of tuples: (ticker, date, ratio).
+    Each non-empty line is expected to follow the structure
+    ``TICKER 1-10 (purchase by 10/24)``, where the ratio component is optional
+    and the date portion may be supplied as ``mm/dd``, ``mm/dd/yy`` or
+    ``mm/dd/yyyy``. The function returns a list of tuples structured as
+    ``(ticker, date, ratio)`` suitable for :meth:`WatchListManager.watch_ticker`.
     """
+
     entries = []
     pattern = re.compile(
-        r"^([A-Za-z]+)\s+(\d+-\d+)\s*\(purchase by\s+(\d{1,2}/\d{1,2})\)",
+        r"^(?P<ticker>[A-Za-z]+)\s+(?:(?P<ratio>\d+-\d+)\s+)?\(purchase by\s+(?P<date>\d{1,2}/\d{1,2}(?:/\d{2,4})?)\)",
         re.IGNORECASE,
     )
     for line in content.splitlines():
@@ -466,8 +471,8 @@ def parse_bulk_watchlist_message(content: str):
             continue
         match = pattern.match(line)
         if match:
-            ticker, ratio, date = match.groups()
-            entries.append((ticker.upper(), date, ratio))
+            data = match.groupdict()
+            entries.append((data["ticker"].upper(), data["date"], data.get("ratio")))
     return entries
 
 
