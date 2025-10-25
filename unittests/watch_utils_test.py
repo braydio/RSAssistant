@@ -2,10 +2,11 @@
 
 import os
 import tempfile
+from datetime import datetime as real_datetime
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
-from utils.watch_utils import WatchListManager
+from utils.watch_utils import WatchListManager, parse_bulk_watchlist_message
 
 
 class DummyContext:
@@ -78,3 +79,49 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
 
         chunk_mock.assert_awaited_once_with(self.ctx, "TEST: $8.90")
         self.assertEqual(self.ctx.sent_messages, [])
+
+    def test_parse_bulk_watchlist_message_supports_month_year(self):
+        """Bulk parser should accept ratio-first entries with month/year dates."""
+
+        content = """\
+IPW 1-30 (purchase by 10/24)
+GURE 1-10 (purchase by 10/24)
+YYAI 1-50 (purchase by 10/24)
+ENVB 1-12 (purchase by 10/27)
+ABP 1-30 (purchase by 10/31)
+"""
+
+        entries = parse_bulk_watchlist_message(content)
+
+        self.assertEqual(
+            entries,
+            [
+                ("IPW", "10/24", "1-30"),
+                ("GURE", "10/24", "1-10"),
+                ("YYAI", "10/24", "1-50"),
+                ("ENVB", "10/27", "1-12"),
+                ("ABP", "10/31", "1-30"),
+            ],
+        )
+
+    def test_move_expired_to_sell_respects_month_year_dates(self):
+        """Tickers with month/year dates should remain until that month has passed."""
+
+        self.manager.watch_list = {
+            "IPW": {"split_date": "10/24", "split_ratio": "1-30"}
+        }
+
+        with patch("utils.watch_utils.datetime", wraps=real_datetime) as datetime_mock:
+            datetime_mock.now.return_value = real_datetime(2024, 10, 15)
+            self.manager.move_expired_to_sell()
+
+        self.assertIn("IPW", self.manager.watch_list)
+        self.assertEqual(self.manager.sell_list, {})
+
+        # Advance past October 2024, ensuring the ticker is moved to the sell list.
+        with patch("utils.watch_utils.datetime", wraps=real_datetime) as datetime_mock:
+            datetime_mock.now.return_value = real_datetime(2024, 11, 1)
+            self.manager.move_expired_to_sell()
+
+        self.assertNotIn("IPW", self.manager.watch_list)
+        self.assertIn("IPW", self.manager.sell_list)
