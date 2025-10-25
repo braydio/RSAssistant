@@ -109,6 +109,27 @@ def _should_tag_entries(entries) -> bool:
     return False
 
 
+def _resolve_round_up_snippet(policy_info, max_length: int):
+    """Return a trimmed snippet describing the round-up policy if present."""
+
+    if not policy_info or max_length <= 0:
+        return None
+
+    snippet = policy_info.get("snippet")
+    if snippet:
+        return snippet.strip()[:max_length]
+
+    body_text = policy_info.get("body_text")
+    if not body_text:
+        return None
+
+    extracted = PolicyResolver.extract_round_up_snippet(body_text)
+    if not extracted:
+        return None
+
+    return extracted.strip()[:max_length]
+
+
 def _reset_refresh_state():
     """Clear any buffered holdings refresh state."""
 
@@ -480,10 +501,11 @@ async def handle_secondary_channel(bot, message):
         await post_policy_summary(bot, ticker, summary)
 
         body_text = policy_info.get("body_text")
-        if body_text:
-            # Use parsed URL/ticker variables defined above
-            context = f"Round-up snippet from {url}: "
-            snippet = body_text[: 2000 - len(context)]
+        context = f"Round-up snippet from {url}: "
+        max_length = max(0, 2000 - len(context))
+        snippet = _resolve_round_up_snippet(policy_info, max_length=max_length)
+
+        if snippet:
             logger.info(f"Posting body text snippet for {ticker}")
 
             target_channel = None
@@ -496,11 +518,16 @@ async def handle_secondary_channel(bot, message):
                     )
             if not target_channel:
                 logger.warning(
-                    "Falling back to secondary channel for %s snippet delivery.", ticker
+                    "Falling back to secondary channel for %s snippet delivery.",
+                    ticker,
                 )
                 target_channel = message.channel
 
             await target_channel.send(context + snippet)
+        elif body_text:
+            logger.warning(
+                "No round-up snippet found in body text for %s; skipping post.", ticker
+            )
 
         if policy_info.get("round_up_confirmed"):
             await attempt_autobuy(bot, message.channel, ticker, quantity=1)
