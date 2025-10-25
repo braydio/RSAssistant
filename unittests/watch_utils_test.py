@@ -80,8 +80,8 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         chunk_mock.assert_awaited_once_with(self.ctx, "TEST: $8.90")
         self.assertEqual(self.ctx.sent_messages, [])
 
-    def test_parse_bulk_watchlist_message_supports_month_year(self):
-        """Bulk parser should accept ratio-first entries with month/year dates."""
+    def test_parse_bulk_watchlist_message_supports_month_day(self):
+        """Bulk parser should accept ratio-first entries with month/day dates."""
 
         content = """\
 IPW 1-30 (purchase by 10/24)
@@ -104,23 +104,23 @@ ABP 1-30 (purchase by 10/31)
             ],
         )
 
-    def test_move_expired_to_sell_respects_month_year_dates(self):
-        """Tickers with month/year dates should remain until that month has passed."""
+    def test_move_expired_to_sell_uses_exact_day_for_month_day_dates(self):
+        """Tickers using month/day dates should move immediately after the day passes."""
 
         self.manager.watch_list = {
             "IPW": {"split_date": "10/24", "split_ratio": "1-30"}
         }
 
         with patch("utils.watch_utils.datetime", wraps=real_datetime) as datetime_mock:
-            datetime_mock.now.return_value = real_datetime(2024, 10, 15)
+            datetime_mock.now.return_value = real_datetime(2024, 10, 24)
             self.manager.move_expired_to_sell()
 
         self.assertIn("IPW", self.manager.watch_list)
         self.assertEqual(self.manager.sell_list, {})
 
-        # Advance past October 2024, ensuring the ticker is moved to the sell list.
+        # Advance a single day past the split date; the ticker should move to the sell list.
         with patch("utils.watch_utils.datetime", wraps=real_datetime) as datetime_mock:
-            datetime_mock.now.return_value = real_datetime(2024, 11, 1)
+            datetime_mock.now.return_value = real_datetime(2024, 10, 25)
             self.manager.move_expired_to_sell()
 
         self.assertNotIn("IPW", self.manager.watch_list)

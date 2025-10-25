@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import re
-from calendar import monthrange
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -122,15 +121,12 @@ class WatchListManager:
             if not split_str:
                 continue
             split_dt = None
-            # Try common date formats
-            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%d", "%m/%y", "%m/%Y"):
+            # Try common date formats (month/day with optional year)
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%d"):
                 try:
                     split_dt = datetime.strptime(split_str, fmt)
                     if fmt == "%m/%d":
                         split_dt = split_dt.replace(year=today.year)
-                    elif fmt in ("%m/%y", "%m/%Y"):
-                        last_day = monthrange(split_dt.year, split_dt.month)[1]
-                        split_dt = split_dt.replace(day=last_day)
                     break
                 except ValueError:
                     continue
@@ -455,18 +451,18 @@ async def send_reminder_message(bot):
 
 
 def parse_bulk_watchlist_message(content: str):
-    """Parse bulk watchlist entries in the ``ticker ratio mm/yy`` format.
+    """Parse bulk watchlist entries in the ``ticker ratio mm/dd`` format.
 
     Each non-empty line is expected to follow the structure
     ``TICKER 1-10 (purchase by 10/24)``, where the ratio component is optional
     and the date portion may be supplied as ``mm/dd``, ``mm/dd/yy`` or
-    ``mm/yy``. The function returns a list of tuples structured as
+    ``mm/dd/yyyy``. The function returns a list of tuples structured as
     ``(ticker, date, ratio)`` suitable for :meth:`WatchListManager.watch_ticker`.
     """
 
     entries = []
     pattern = re.compile(
-        r"^(?P<ticker>[A-Za-z]+)\s+(?:(?P<ratio>\d+-\d+)\s+)?\(purchase by\s+(?P<date>\d{1,2}/\d{1,4}(?:/\d{2,4})?)\)",
+        r"^(?P<ticker>[A-Za-z]+)\s+(?:(?P<ratio>\d+-\d+)\s+)?\(purchase by\s+(?P<date>\d{1,2}/\d{1,2}(?:/\d{2,4})?)\)",
         re.IGNORECASE,
     )
     for line in content.splitlines():
