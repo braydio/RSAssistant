@@ -6,12 +6,12 @@ services:
     container_name: RSAssistant
     restart: unless-stopped
     env_file:
-      - ./volumes/config/.env
+      - ./config/.env
     volumes:
       - ./volumes/logs:/app/volumes/logs   # Persist logs
       - ./volumes/db:/app/volumes/db       # Persist database
       - ./volumes/excel:/app/volumes/excel # Persist Excel
-      - ./volumes/config:/app/volumes/config
+      - ./config:/app/config               # Mount unified config directory
     environment:
       TZ: America/New_York
       ENVIRONMENT: production

@@ -5,8 +5,8 @@
 - `utils/`: reusable modules (config, parsing, orders, cache, I/O).
 - `pr_watcher.py`: lightweight PR status watcher.
 - `unittests/`: unit tests grouped by feature (e.g., `*_test.py`).
-- `config/`: local settings and `.env` templates.
-- `volumes/`: docker-mounted config/db/excel data.
+- `config/`: single source for settings and `.env`.
+- `volumes/`: docker-mounted db/excel/logs data.
 - Docker: `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`.
 
 ## Build, Test, and Dev Commands
@@ -35,8 +35,8 @@
 - Required: tests passing, updated docs (README or examples) for user-facing changes.
 
 ## Security & Configuration
-- Never commit secrets. Copy `config/example.env` to `config/.env` for local dev; Docker reads from `volumes/config/`.
-- Primary app settings: `config/settings.yml` (Docker override in `volumes/config/settings.yml`).
+- Never commit secrets. Copy `config/example.env` to `config/.env` for local dev; Docker reads from `config/.env`.
+- Primary app settings: `config/settings.yml`.
 - Redact tokens and account identifiers in logs and PRs.
 
 ## Conventions & Examples

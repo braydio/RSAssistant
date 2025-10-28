@@ -1,7 +1,7 @@
 """Monitoring helpers for holdings detection and de-duplication.
 
 This module tracks alert/sell actions to avoid repeated notifications within
-the same day. It stores a small JSON file under ``volumes/config``.
+the same day. It stores a small JSON file under ``config``.
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Set
 
-from utils.config_utils import VOLUMES_DIR
+from utils.config_utils import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
-CACHE_PATH = (Path(VOLUMES_DIR) / "config" / "overdollar_actions.json").resolve()
+CACHE_PATH = (Path(CONFIG_DIR) / "overdollar_actions.json").resolve()
 
 
 def _load_cache() -> Dict[str, Set[str]]:
@@ -66,4 +66,3 @@ def record_action_today(broker: str, account: str, ticker: str):
         for k in sorted(cache.keys())[:-2]:
             cache.pop(k, None)
     _save_cache(cache)
-

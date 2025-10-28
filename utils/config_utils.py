@@ -8,8 +8,8 @@ accounts are automatically persisted with this default mapping to keep
 brokerage tracking functional without manual setup.
 
 Set the ``VOLUMES_DIR`` environment variable to override the default
-``volumes/`` directory path. This allows running the bot against external
-storage mounts such as ``/mnt/netstorage/volumes``.
+``volumes/`` directory path for logs/DB/Excel. Configuration now lives
+solely under ``./config``.
 """
 
 import json
@@ -77,7 +77,8 @@ load_env()
 
 # --- Directories (after .env loaded) ---
 VOLUMES_DIR = Path(os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))).resolve()
-CONFIG_DIR = VOLUMES_DIR / "config"
+# Single source of truth for configuration
+CONFIG_DIR = (BASE_DIR / "config").resolve()
 
 # --- Config paths ---
 ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
@@ -128,7 +129,7 @@ SQL_LOGGING_ENABLED = (
     os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
 )
 
-# Path to ignore list files (defaults inside volumes/config/)
+# Path to ignore list files (defaults inside config/)
 IGNORE_TICKERS_FILE = Path(
     os.getenv("IGNORE_TICKERS_FILE", str(CONFIG_DIR / "ignore_tickers.txt"))
 ).resolve()

@@ -80,17 +80,13 @@ pip install -r requirements.txt
 2. Copy the example configuration and update your Discord credentials:
 
 ```bash
-\# For local development (default loader):
+\# Single source of truth for configuration
 cp config/example.env config/.env
-
-\# For Docker (compose reads env_file):
-cp config/example.env volumes/config/.env
-cp config/example.settings.yaml volumes/config/settings.yml
 ```
 
 If you want RSAssistant to store data in an external location, set the
-`VOLUMES_DIR` variable in your environment (for Docker, put it in
-`volumes/config/.env`; for local, put it in `config/.env`) to your desired path.
+`VOLUMES_DIR` variable in your environment (for local and Docker) to your
+desired path.
 
 3. Launch the bot:
 
@@ -123,7 +119,7 @@ Add the following keys to your environment. The app now loads from a single sour
 
 - Local default: `config/.env`
 - Override: set `ENV_FILE=/path/to/your.env` when running locally
-- Docker: compose injects variables from `volumes/config/.env`; the app does not load a file in-container
+- Docker: compose injects variables from `config/.env`; the app does not load a file in-container
 
 - `AUTO_REFRESH_ON_REMINDER` (bool): If `true`, send `!rsa holdings all` after the reminder fires. Default `false`.
 - `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger the alert. Default `1`.
@@ -133,25 +129,25 @@ Add the following keys to your environment. The app now loads from a single sour
   Default `false` to avoid the higher-frequency cadence unless explicitly
   requested.
 - `IGNORE_TICKERS` (CSV): Tickers to skip for alert/auto-sell (e.g., `ABCD,EFGH`). Default empty.
-- `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `volumes/config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
+- `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
 - `IGNORE_BROKERS` (CSV): Brokers to skip for alert/auto-sell (e.g., `Fidelity,Schwab`). Default empty.
-- `IGNORE_BROKERS_FILE` (path, optional): File containing one broker name per line to ignore. Defaults to `volumes/config/ignore_brokers.txt`. Lines starting with `#` are treated as comments.
+- `IGNORE_BROKERS_FILE` (path, optional): File containing one broker name per line to ignore. Defaults to `config/ignore_brokers.txt`. Lines starting with `#` are treated as comments.
 
 You can use either the env var, the file, or both — the sets merge. Create the file like:
 
 ```
-cp config/ignore_tickers.example.txt volumes/config/ignore_tickers.txt
-echo "AAPL" >> volumes/config/ignore_tickers.txt
-echo "MSFT  # Long-term" >> volumes/config/ignore_tickers.txt
+cp config/ignore_tickers.example.txt config/ignore_tickers.txt
+echo "AAPL" >> config/ignore_tickers.txt
+echo "MSFT  # Long-term" >> config/ignore_tickers.txt
 ```
 
-Apply the same approach for brokers by creating `volumes/config/ignore_brokers.txt`
+Apply the same approach for brokers by creating `config/ignore_brokers.txt`
 with one broker name per line.
 
 - `MENTION_USER_ID` / `MENTION_USER_IDS` (string or CSV): Discord user ID(s) to @-mention in alerts (e.g., `123456789012345678` or `123...,987...`). Optional.
 - `MENTION_ON_ALERTS` (bool): Enable/disable mentions on alerts. Default `true`.
 
-De-duplication state is stored at `volumes/config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
+De-duplication state is stored at `config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
 
 ### Docker
 
@@ -166,13 +162,13 @@ images daily and automatically updates the running `rsassistant` service.
 
 Environment loading behavior inside Docker:
 
-- Compose uses `env_file: volumes/config/.env` and passes variables to the container.
+- Compose uses `env_file: config/.env` and passes variables to the container.
 - The application detects it is running in Docker and relies on the process environment only (no additional `.env` file is read inside the container).
 
 To run locally with a custom env file path instead of `config/.env`, prefix commands with:
 
 ```bash
-ENV_FILE=volumes/config/.env python RSAssistant.py
+ENV_FILE=config/.env python RSAssistant.py
 ```
 
 ## Default Account Nicknames

@@ -13,7 +13,7 @@ export DISPLAY=:99
 VOLUMES_DIR="${VOLUMES_DIR:-/app/volumes}"
 
 # Check for required directories in volumes and create them if they don't exist
-REQUIRED_DIRECTORIES="$VOLUMES_DIR/logs $VOLUMES_DIR/excel $VOLUMES_DIR/db $VOLUMES_DIR/config"
+REQUIRED_DIRECTORIES="$VOLUMES_DIR/logs $VOLUMES_DIR/excel $VOLUMES_DIR/db"
 
 for DIR in $REQUIRED_DIRECTORIES; do
   if [ ! -d "$DIR" ]; then
