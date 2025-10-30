@@ -14,7 +14,7 @@ def get_reverse_split_handler_from_url(url: str) -> str:
 
         if "Roundup" in text:
             return "Roundup"
-        elif "Cash in lieu" in text or "in lieu" in text:
+        elif "Cash in lieu" in text or "cash in lieu" in text:
             return "Cash in lieu"
         else:
             return "unknown"
