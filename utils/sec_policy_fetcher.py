@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from utils.logging_setup import logger
+from utils.text_normalization import normalize_cash_in_lieu_phrases
 
 
 class SECPolicyFetcher:
@@ -52,12 +53,14 @@ class SECPolicyFetcher:
             return None
 
     def extract_policy_from_filing(self, filing_url):
+        """Retrieve and classify fractional-share handling from a filing URL."""
         try:
             logger.info(f"Fetching and analyzing SEC filing from {filing_url}")
             response = requests.get(filing_url, headers=self.HEADERS, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
-            text_content = soup.get_text(separator=" ").lower()
+            raw_text = soup.get_text(separator=" ")
+            text_content = normalize_cash_in_lieu_phrases(raw_text).lower()
 
             policy_info = {
                 "cash_in_lieu": "cash in lieu" in text_content
