@@ -1,24 +1,30 @@
+"""Helpers for classifying reverse split handling policies from web pages."""
+
+import logging
 
 import requests
-import logging
 from bs4 import BeautifulSoup
 
+from utils.text_normalization import normalize_cash_in_lieu_phrases
+
+
 def get_reverse_split_handler_from_url(url: str) -> str:
+    """Return the detected fractional share policy from the provided URL."""
+
     try:
         response = requests.get(url, timeout=5)
         if response.status_code != 200:
             return "unknown"
 
         soup = BeautifulSoup(response.text, "html.parser")
-        text = soup.get_text(separator=" ")
+        text = normalize_cash_in_lieu_phrases(soup.get_text(separator=" "))
 
         if "Roundup" in text:
             return "Roundup"
-        elif "Cash in lieu" in text or "cash in lieu" in text:
+        if "Cash in lieu" in text or "cash in lieu" in text:
             return "Cash in lieu"
-        else:
-            return "unknown"
+        return "unknown"
 
     except Exception as e:
-        logging.error(f "Error fetching split handler from URL: {e}")
+        logging.error(f"Error fetching split handler from URL: {e}")
         return "unknown"

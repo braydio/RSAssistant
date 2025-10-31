@@ -19,3 +19,17 @@ def test_extract_round_up_snippet():
 def test_extract_effective_date():
     text = "The reverse stock split will be effective on October 31, 2023."
     assert SplitPolicyResolver.extract_effective_date(text) == "2023-10-31"
+
+
+def test_analyze_fractional_share_policy_handles_cache_and_loo():
+    text = "Fractional shares, if any, will be settled via cache and loo payments."
+    result = SplitPolicyResolver.analyze_fractional_share_policy(text)
+    assert result == "Fractional shares will be paid out in cash."
+
+
+def test_detect_policy_from_text_handles_cache_and_loo():
+    text = "This notice confirms cache and loo for fractional shares."
+    policy = SplitPolicyResolver.detect_policy_from_text(
+        text, SplitPolicyResolver.NASDAQ_KEYWORDS
+    )
+    assert policy == "Cash in lieu"

@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from utils.logging_setup import logger
 from utils.sec_policy_fetcher import SECPolicyFetcher
 from utils.config_utils import VOLUMES_DIR
+from utils.text_normalization import normalize_cash_in_lieu_phrases
 
 
 class SplitPolicyResolver:
@@ -203,9 +204,11 @@ class SplitPolicyResolver:
 
     @staticmethod
     def analyze_fractional_share_policy(text):
+        """Summarize how fractional shares are handled in the provided text."""
         if not text:
             return "No text content available."
 
+        text = normalize_cash_in_lieu_phrases(text)
         text_lower = text.lower()
 
         if "fractional share" not in text_lower:
@@ -226,6 +229,7 @@ class SplitPolicyResolver:
 
     @classmethod
     def analyze_nasdaq_notice(cls, nasdaq_url, ticker=None):
+        """Inspect a NASDAQ corporate action notice for fractional share policy."""
         try:
             logger.info(f"Analyzing NASDAQ notice at {nasdaq_url}")
             headers = {
@@ -234,8 +238,8 @@ class SplitPolicyResolver:
             response = requests.get(nasdaq_url, headers=headers, timeout=10)
             response.raise_for_status()
 
-            text = response.text.lower()
-            policy = cls.detect_policy_from_text(text, cls.NASDAQ_KEYWORDS)
+            normalized_text = normalize_cash_in_lieu_phrases(response.text).lower()
+            policy = cls.detect_policy_from_text(normalized_text, cls.NASDAQ_KEYWORDS)
             sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker=ticker)
             press_url = cls.get_press_release_link_from_nasdaq(response.text)
 
@@ -280,6 +284,8 @@ class SplitPolicyResolver:
 
     @staticmethod
     def detect_policy_from_text(text, keywords):
+        """Find the first keyword that appears in ``text`` from ``keywords``."""
+        text = normalize_cash_in_lieu_phrases(text).lower()
         for keyword in keywords:
             if keyword in text:
                 logger.info(f"Detected policy keyword: {keyword}")
@@ -378,7 +384,7 @@ class SplitPolicyResolver:
         if not text:
             return False
 
-        text = text.lower()
+        text = normalize_cash_in_lieu_phrases(text).lower()
         if "round up" in text and not any(
             bad_phrase in text
             for bad_phrase in [
