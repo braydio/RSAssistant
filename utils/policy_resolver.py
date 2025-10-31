@@ -203,6 +203,7 @@ class SplitPolicyResolver:
 
     @staticmethod
     def analyze_fractional_share_policy(text):
+        """Summarize how fractional shares are handled in the provided text."""
         if not text:
             return "No text content available."
 
@@ -226,6 +227,7 @@ class SplitPolicyResolver:
 
     @classmethod
     def analyze_nasdaq_notice(cls, nasdaq_url, ticker=None):
+        """Inspect a NASDAQ corporate action notice for fractional share policy."""
         try:
             logger.info(f"Analyzing NASDAQ notice at {nasdaq_url}")
             headers = {
@@ -234,8 +236,7 @@ class SplitPolicyResolver:
             response = requests.get(nasdaq_url, headers=headers, timeout=10)
             response.raise_for_status()
 
-            text = response.text.lower()
-            policy = cls.detect_policy_from_text(text, cls.NASDAQ_KEYWORDS)
+            policy = cls.detect_policy_from_text(response.text, cls.NASDAQ_KEYWORDS)
             sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker=ticker)
             press_url = cls.get_press_release_link_from_nasdaq(response.text)
 
@@ -280,6 +281,8 @@ class SplitPolicyResolver:
 
     @staticmethod
     def detect_policy_from_text(text, keywords):
+        """Find the first keyword that appears in ``text`` from ``keywords``."""
+        text = text.lower()
         for keyword in keywords:
             if keyword in text:
                 logger.info(f"Detected policy keyword: {keyword}")

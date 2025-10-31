@@ -52,12 +52,14 @@ class SECPolicyFetcher:
             return None
 
     def extract_policy_from_filing(self, filing_url):
+        """Retrieve and classify fractional-share handling from a filing URL."""
         try:
             logger.info(f"Fetching and analyzing SEC filing from {filing_url}")
             response = requests.get(filing_url, headers=self.HEADERS, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
-            text_content = soup.get_text(separator=" ").lower()
+            raw_text = soup.get_text(separator=" ")
+            text_content = raw_text.lower()
 
             policy_info = {
                 "cash_in_lieu": "cash in lieu" in text_content
