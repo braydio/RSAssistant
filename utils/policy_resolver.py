@@ -284,12 +284,47 @@ class SplitPolicyResolver:
 
     @staticmethod
     def detect_policy_from_text(text, keywords):
-        """Find the first keyword that appears in ``text`` from ``keywords``."""
-        text = normalize_cash_in_lieu_phrases(text).lower()
-        for keyword in keywords:
-            if keyword in text:
+        """Return the highest priority policy keyword detected in ``text``.
+
+        The method normalizes text and then evaluates a priority-ordered set of
+        policy phrases. Round-up confirmations are evaluated before "no
+        fractional" language so that statements combining both are still
+        classified as round-up outcomes.
+
+        Args:
+            text: Source text to inspect.
+            keywords: Iterable of policy keywords to search for.
+
+        Returns:
+            A sentence-cased description of the detected policy, or an "unclear"
+            message if no keywords were located.
+        """
+
+        normalized_text = normalize_cash_in_lieu_phrases(text).lower()
+
+        prioritized_keywords = [
+            "rounded up",
+            "rounded down",
+            "cash in lieu",
+            "paid in cash",
+            "cash equivalent",
+            "no fractional shares",
+            "not issuing fractional shares",
+            "fractional shares will not be issued",
+        ]
+
+        # Prioritize critical confirmations regardless of the provided ordering.
+        for keyword in prioritized_keywords:
+            if keyword in keywords and keyword in normalized_text:
                 logger.info(f"Detected policy keyword: {keyword}")
                 return keyword.capitalize()
+
+        # Fall back to the provided ordering if no priority keyword matched.
+        for keyword in keywords:
+            if keyword in normalized_text:
+                logger.info(f"Detected policy keyword: {keyword}")
+                return keyword.capitalize()
+
         logger.warning("No specific policy keywords detected.")
         return "Policy not clearly stated."
 
