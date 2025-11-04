@@ -33,3 +33,14 @@ def test_detect_policy_from_text_handles_cache_and_loo():
         text, SplitPolicyResolver.NASDAQ_KEYWORDS
     )
     assert policy == "Cash in lieu"
+
+
+def test_detect_policy_prioritizes_round_up_over_no_fractional():
+    text = (
+        "No fractional shares will be issued, and any fractional entitlement will "
+        "be rounded up to the nearest whole share."
+    )
+    policy = SplitPolicyResolver.detect_policy_from_text(
+        text, SplitPolicyResolver.NASDAQ_KEYWORDS
+    )
+    assert policy == "Rounded up"
