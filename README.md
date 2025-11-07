@@ -40,7 +40,7 @@ When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total re
 
 - Auto refresh on reminder: posts `!rsa holdings all` after the reminder
 - Over-threshold alert: posts a note in the primary Discord channel
-- Optional auto-sell: posts a `..ord sell {ticker} {broker} {quantity}`
+- Optional auto-sell: posts a `!rsa sell {quantity} {ticker} {broker} false`
 - Daily de-dupe: avoids repeat alerts/sells per broker/account/ticker per day
 
 Configure these via environment variables (see below).
@@ -123,7 +123,7 @@ Add the following keys to your environment. The app now loads from a single sour
 
 - `AUTO_REFRESH_ON_REMINDER` (bool): If `true`, send `!rsa holdings all` after the reminder fires. Default `false`.
 - `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger the alert. Default `1`.
-- `AUTO_SELL_LIVE` (bool): If `true`, also post `..ord sell {ticker} {broker} {quantity}`. Default `false`.
+- `AUTO_SELL_LIVE` (bool): If `true`, also post `!rsa sell {quantity} {ticker} {broker} false`. Default `false`.
 - `ENABLE_MARKET_REFRESH` (bool): If `true`, schedule the ``..all`` command every
   15 minutes during market hours in addition to the 8:00 AM and 8:00 PM runs.
   Default `false` to avoid the higher-frequency cadence unless explicitly
