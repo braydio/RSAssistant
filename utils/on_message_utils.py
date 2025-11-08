@@ -374,7 +374,7 @@ async def handle_primary_channel(bot, message):
 
                     # Queue optional auto-sell commands to send after summary
                     if AUTO_SELL_LIVE:
-                        sell_cmd = f"{BOT_PREFIX}ord sell {ticker} {broker} {quantity}"
+                        sell_cmd = f"!rsa sell {quantity} {ticker} {broker} false"
                         sell_commands.append(sell_cmd)
 
                     # Record that we've acted to avoid duplicates the same day
