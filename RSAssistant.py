@@ -15,6 +15,7 @@ import sys
 import logging
 from datetime import datetime, timedelta
 import itertools
+from typing import Optional
 
 # Third-party imports
 import discord
@@ -530,6 +531,73 @@ async def process_order_error(ctx, error):
 
     logger.exception("Unexpected error during ..ord execution")
     await ctx.send(f"An error occurred: {error}")
+
+
+def build_command_usage(prefix: Optional[str], command: Optional[commands.Command]) -> str:
+    """Construct a normalized command usage string for Discord responses.
+
+    Args:
+        prefix: The command prefix that preceded the invocation.
+        command: The command instance whose usage should be communicated.
+
+    Returns:
+        A fully qualified command usage string suitable for Discord output.
+    """
+
+    effective_prefix = (prefix or BOT_PREFIX).strip()
+    if command is None:
+        return effective_prefix
+
+    qualified_name = getattr(command, "qualified_name", "").strip()
+    usage_hint = (
+        getattr(command, "usage", None)
+        or getattr(command, "signature", "")
+        or ""
+    ).strip()
+
+    if qualified_name and usage_hint:
+        return f"{effective_prefix}{qualified_name} {usage_hint}".strip()
+    if qualified_name:
+        return f"{effective_prefix}{qualified_name}".strip()
+    return effective_prefix
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Send contextual usage information when commands are misused.
+
+    Args:
+        ctx: Invocation context provided by ``discord.py``.
+        error: The exception raised while invoking the command.
+    """
+
+    command = getattr(ctx, "command", None)
+    if command and getattr(command, "on_error", None):
+        return
+
+    has_local_handler = False
+    if command and callable(getattr(command, "has_error_handler", None)):
+        has_local_handler = command.has_error_handler()
+    if has_local_handler:
+        return
+
+    if isinstance(error, commands.UserInputError):
+        usage_text = build_command_usage(getattr(ctx, "prefix", None), command)
+        await ctx.send(f"Incorrect arguments. Usage: `{usage_text}`")
+        return
+
+    if isinstance(error, commands.CommandNotFound):
+        logger.debug(
+            "Command not found during invocation: %s",
+            getattr(ctx, "invoked_with", "<unknown>"),
+        )
+        return
+
+    logger.exception(
+        "Unhandled exception while executing command '%s'.",
+        getattr(command, "qualified_name", "<unknown>"),
+        exc_info=error,
+    )
 
 
 @bot.command(
