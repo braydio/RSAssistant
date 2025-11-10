@@ -76,6 +76,7 @@ from utils.watch_utils import (
     send_reminder_message_embed,
     send_reminder_message,
     watch_list_manager,
+    watch as handle_watch_command,
 )
 from utils.refresh_scheduler import compute_next_refresh_datetime, MARKET_TZ
 
@@ -768,28 +769,21 @@ async def top_holdings_command(ctx, range: int = 3):
 
 @bot.command(
     name="watch",
-    help="Add ticker to the watchlist.",
-    usage="<ticker> <split_date> [split_ratio]",
+    help="Add ticker(s) to the watchlist.",
+    usage="<ticker> <split_date> [split_ratio] | <ticker ratio (purchase by mm/dd)>",
     extras={"category": "Watchlist"},
 )
-async def watch(ctx, ticker: str, split_date: str = None, split_ratio: str = None):
-    """Adds a ticker to the watchlist with an optional split date and split ratio."""
-    try:
-        if split_date:
-            datetime.strptime(split_date, "%m/%d")  # Validates the format as mm/dd
-    except ValueError:
-        await ctx.send("Invalid date format. Please use * mm/dd * e.g., 11/4.")
-        return
+async def watch(ctx, *, text: str):
+    """Add one or more tickers to the watchlist.
 
-    if not split_date:
-        await ctx.send("Please include split date: * mm/dd *")
-        return
+    The command now supports two input styles:
 
-    if split_ratio and not split_ratio.count("-") == 1:
-        await ctx.send("Invalid split ratio format. Use 'X-Y' format (e.g., 1-10).")
-        return
+    * ``..watch TICKER mm/dd [ratio]`` – the traditional single-entry format.
+    * ``..watch`` followed by one or more lines using the bulk format,
+      e.g. ``TICKER 1-10 (purchase by 10/24)``.
+    """
 
-    await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
+    await handle_watch_command(ctx, text=text)
 
 
 @bot.command(

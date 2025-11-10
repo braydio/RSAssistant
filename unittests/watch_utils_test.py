@@ -6,6 +6,7 @@ from datetime import datetime as real_datetime
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
+import utils.watch_utils as watch_utils
 from utils.watch_utils import WatchListManager, parse_bulk_watchlist_message
 
 
@@ -102,6 +103,58 @@ ABP 1-30 (purchase by 10/31)
                 ("ENVB", "10/27", "1-12"),
                 ("ABP", "10/31", "1-30"),
             ],
+        )
+
+    async def test_watch_command_accepts_bulk_format(self):
+        """Bulk watch command should add every parsed ticker."""
+
+        content = """\
+YGMZ 1-16 (purchase by 11/11)
+YDKG 1-100 (purchase by 11/13)
+NCEW 1-8 (purchase by 11/13)
+"""
+
+        # Patch the global watch list manager used by the command helper
+        with patch.object(watch_utils, "watch_list_manager", self.manager), patch(
+            "utils.watch_utils.add_stock_to_excel_log", new_callable=AsyncMock
+        ):
+            await watch_utils.watch(self.ctx, text=content)
+
+        self.assertEqual(
+            self.manager.watch_list,
+            {
+                "YGMZ": {"split_date": "11/11", "split_ratio": "1-16"},
+                "YDKG": {"split_date": "11/13", "split_ratio": "1-100"},
+                "NCEW": {"split_date": "11/13", "split_ratio": "1-8"},
+            },
+        )
+
+        # Three confirmations and one summary message should be sent.
+        self.assertEqual(len(self.ctx.sent_messages), 4)
+        self.assertEqual(
+            self.ctx.sent_messages[-1]["content"], "Added 3 tickers to watchlist."
+        )
+
+    async def test_watch_command_validates_single_entry_inputs(self):
+        """Single-line watch usage should enforce date and ratio validation."""
+
+        with patch.object(watch_utils, "watch_list_manager", self.manager), patch(
+            "utils.watch_utils.add_stock_to_excel_log", new_callable=AsyncMock
+        ):
+            await watch_utils.watch(self.ctx, text="TEST 11/11 1-5")
+
+        self.assertIn("TEST", self.manager.watch_list)
+        self.assertEqual(
+            self.manager.watch_list["TEST"],
+            {"split_date": "11/11", "split_ratio": "1-5"},
+        )
+
+        # Invalid date should surface an error message and abort
+        self.ctx.sent_messages.clear()
+        await watch_utils.watch(self.ctx, text="TESTX 2024-11-11 1-5")
+        self.assertEqual(
+            self.ctx.sent_messages[-1]["content"],
+            "Invalid date format. Please use mm/dd, mm/dd/yy, or mm/dd/yyyy.",
         )
 
     def test_move_expired_to_sell_uses_exact_day_for_month_day_dates(self):
