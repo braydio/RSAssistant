@@ -451,7 +451,7 @@ async def send_reminder_message(bot):
 
 
 def parse_bulk_watchlist_message(content: str):
-    """Parse bulk watchlist entries in the ``ticker ratio mm/dd`` format.
+    """Parse bulk watchlist entries in the ``ticker ratio (purchase by mm/dd)`` format.
 
     Each non-empty line is expected to follow the structure
     ``TICKER 1-10 (purchase by 10/24)``, where the ratio component is optional
@@ -476,11 +476,25 @@ def parse_bulk_watchlist_message(content: str):
     return entries
 
 
+def _is_valid_split_date(date_token: str) -> bool:
+    """Return ``True`` when ``date_token`` uses a supported month/day format."""
+
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m/%d"):
+        try:
+            datetime.strptime(date_token, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 async def watch(ctx, *, text: str):
     """Discord command handler for ``..watch``.
 
-    Supports the traditional format ``..watch TICKER mm/dd [ratio]`` or a
-    multi-line block of entries like ``TICKER 1-10 (purchase by 6/5)``.
+    Supports either the traditional format ``..watch TICKER mm/dd [ratio]`` or a
+    multi-line block of entries like ``TICKER 1-10 (purchase by 6/5)``. In both
+    cases the parsed ticker(s) are forwarded to
+    :meth:`WatchListManager.watch_ticker` for persistence.
     """
     entries = parse_bulk_watchlist_message(text)
     if entries:
@@ -498,6 +512,17 @@ async def watch(ctx, *, text: str):
     ticker = parts[0]
     split_date = parts[1]
     split_ratio = parts[2] if len(parts) > 2 else None
+
+    if not _is_valid_split_date(split_date):
+        await ctx.send(
+            "Invalid date format. Please use mm/dd, mm/dd/yy, or mm/dd/yyyy."
+        )
+        return
+
+    if split_ratio and split_ratio.count("-") != 1:
+        await ctx.send("Invalid split ratio format. Use 'X-Y' (e.g., 1-10).")
+        return
+
     await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
 
 

@@ -34,6 +34,9 @@ When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total re
 
 ### Watchlist commands
 
+- `..watch`: Add one or more tickers to the watchlist using either the
+  traditional ``..watch TICKER mm/dd [ratio]`` format or the bulk lines format
+  such as ``TICKER 1-10 (purchase by 10/24)``.
 - `..watchlist`: Display all tracked tickers with their split dates and ratios (no prices).
 - `..watchprices`: Display the watchlist with split info and the latest pulled prices.
 - `..prices`: List only the latest prices for tickers on the watchlist.
