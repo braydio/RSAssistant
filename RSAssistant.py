@@ -7,6 +7,7 @@ category and served through a custom help formatter so ``..help`` displays
 usage details.
 """
 
+import argparse
 import asyncio
 import json
 import os
@@ -20,6 +21,7 @@ from typing import Optional
 # Third-party imports
 import discord
 import discord.gateway
+from discord import app_commands
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord.ext import commands
@@ -38,6 +40,15 @@ from utils.config_utils import (
     ACCOUNT_MAPPING,
     BOT_PREFIX,
     SQL_LOGGING_ENABLED,
+    ENABLE_AUTOMATED_TRADING,
+    AUTO_RSA_BASE_URL,
+    AUTO_RSA_API_KEY,
+    TRADING_DATABASE,
+    TRADING_ALLOW_EXTENDED_TREND,
+    TRADING_TREND_SAFEGUARD_ENABLED,
+    TRADING_LOGGING_ENABLED,
+    TRADING_TRAILING_BUFFER,
+    TRADING_PRICE_CHECK_INTERVAL_SECONDS,
 )
 
 from utils.csv_utils import (
@@ -80,6 +91,7 @@ from utils.watch_utils import (
     watch as handle_watch_command,
 )
 from utils.refresh_scheduler import compute_next_refresh_datetime, MARKET_TZ
+from utils.trading import TradeExecutor, TradingStateStore, UltMaTradingBot
 from utils.channel_resolver import resolve_reply_channel
 
 bot_info = (
@@ -96,6 +108,10 @@ else:
 
 logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
 logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
+
+TRADING_MODE_ENABLED = ENABLE_AUTOMATED_TRADING
+trading_bot: Optional[UltMaTradingBot] = None
+_trading_tasks_started = False
 
 
 class CategoryHelpCommand(commands.MinimalHelpCommand):
@@ -153,6 +169,11 @@ reminder_scheduler = None
 total_refresh_task = None
 _total_refresh_lock = asyncio.Lock()
 
+trading_group = app_commands.Group(
+    name="rsassist", description="RSAssistant trading controls"
+)
+bot.tree.add_command(trading_group)
+
 
 async def reschedule_queued_orders():
     """Reschedule any persisted orders from previous runs."""
@@ -184,6 +205,269 @@ async def reschedule_queued_orders():
             logger.info(f"Rescheduled queued order {order_id}")
         except Exception as exc:
             logger.error(f"Failed to reschedule order {order_id}: {exc}")
+
+
+async def _notify_trading_error(message: str) -> None:
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    if not channel:
+        logger.error("Trading error: %s", message)
+        return
+    embed = discord.Embed(
+        title="Trading Error",
+        description=message,
+        color=discord.Color.red(),
+        timestamp=datetime.utcnow(),
+    )
+    await channel.send(embed=embed)
+
+
+def _trading_error_callback(message: str) -> None:
+    try:
+        asyncio.get_running_loop().create_task(_notify_trading_error(message))
+    except RuntimeError:
+        logger.error("Trading error (loop closed): %s", message)
+
+
+async def ensure_trading_mode() -> None:
+    """Instantiate and start the optional trading automation."""
+
+    global trading_bot, _trading_tasks_started
+    if not TRADING_MODE_ENABLED:
+        return
+    if trading_bot is not None and _trading_tasks_started:
+        return
+
+    state_store = TradingStateStore(TRADING_DATABASE)
+    executor = TradeExecutor(base_url=AUTO_RSA_BASE_URL, api_key=AUTO_RSA_API_KEY)
+    trading_bot_instance = UltMaTradingBot(
+        executor=executor,
+        state_store=state_store,
+        trailing_buffer=TRADING_TRAILING_BUFFER,
+        price_check_interval=timedelta(
+            seconds=max(TRADING_PRICE_CHECK_INTERVAL_SECONDS, 60)
+        ),
+        on_error=_trading_error_callback,
+    )
+    settings = trading_bot_instance.store.load_settings()
+    settings.allow_extended_trend = TRADING_ALLOW_EXTENDED_TREND
+    settings.trend_safeguard_enabled = TRADING_TREND_SAFEGUARD_ENABLED
+    settings.logging_enabled = TRADING_LOGGING_ENABLED
+    settings.trailing_buffer = TRADING_TRAILING_BUFFER
+    trading_bot_instance.store.save_settings(settings)
+
+    await trading_bot_instance.start()
+    trading_bot = trading_bot_instance
+    _trading_tasks_started = True
+    logger.info("ULT-MA trading automation initialised.")
+
+
+def _trading_disabled_message() -> str:
+    if not TRADING_MODE_ENABLED:
+        return "Automated trading mode is disabled. Launch with --enable-trading or set ENABLE_AUTOMATED_TRADING=true."
+    return "Trading module has not finished initialising."
+
+
+@trading_group.command(name="status", description="Show automated trading status")
+async def trading_status(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+
+    metrics = trading_bot.metrics()
+    position = trading_bot.active_position()
+    embed = discord.Embed(
+        title="ULT-MA Trading Status",
+        color=discord.Color.blurple(),
+        timestamp=datetime.utcnow(),
+    )
+    embed.add_field(name="Last Colour", value=str(metrics.last_color or "–"))
+    embed.add_field(name="Previous Colour", value=str(metrics.previous_color or "–"))
+    embed.add_field(
+        name="Last Direction", value=str(metrics.last_trade_direction or "–")
+    )
+    if metrics.next_check_at:
+        embed.add_field(
+            name="Next Check",
+            value=metrics.next_check_at.strftime("%Y-%m-%d %H:%M UTC"),
+            inline=False,
+        )
+    embed.add_field(name="Paused", value="Yes" if metrics.paused else "No")
+    if position:
+        embed.add_field(
+            name="Active Position",
+            value=(
+                f"{position.symbol} @ {position.entry_price:.2f}\n"
+                f"TP: {position.take_profit:.2f} | SL: {position.stop_loss:.2f}"
+            ),
+            inline=False,
+        )
+        if position.trailing_stop is not None:
+            embed.add_field(
+                name="Trailing Stop",
+                value=f"{position.trailing_stop:.2f}",
+                inline=False,
+            )
+    else:
+        embed.add_field(name="Active Position", value="None", inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@trading_group.command(name="positions", description="Show open trade details")
+async def trading_positions(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+
+    position = trading_bot.active_position()
+    embed = discord.Embed(
+        title="Open Positions",
+        color=discord.Color.gold(),
+        timestamp=datetime.utcnow(),
+    )
+    if position:
+        trailing_value = (
+            f"{position.trailing_stop:.2f}" if position.trailing_stop is not None else "–"
+        )
+        embed.add_field(
+            name=position.symbol,
+            value=(
+                f"Direction: {position.direction}\n"
+                f"Entry: {position.entry_price:.2f}\n"
+                f"TP: {position.take_profit:.2f} | SL: {position.stop_loss:.2f}\n"
+                f"Trailing: {trailing_value}"
+            ),
+            inline=False,
+        )
+    else:
+        embed.description = "No active trades."
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@trading_group.command(name="pause", description="Pause automated trading")
+async def trading_pause(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    trading_bot.pause()
+    await interaction.response.send_message("Trading automation paused.", ephemeral=True)
+
+
+@trading_group.command(name="resume", description="Resume automated trading")
+async def trading_resume(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    trading_bot.resume()
+    await interaction.response.send_message("Trading automation resumed.", ephemeral=True)
+
+
+@trading_group.command(name="force-entry", description="Force a trade entry")
+@app_commands.describe(direction="Choose long (TQQQ) or short (SQQQ)")
+@app_commands.choices(
+    direction=[
+        app_commands.Choice(name="long", value="long"),
+        app_commands.Choice(name="short", value="short"),
+    ]
+)
+async def trading_force_entry(
+    interaction: discord.Interaction, direction: app_commands.Choice[str]
+) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        await trading_bot.force_entry(direction.value)
+    except Exception as exc:  # pragma: no cover - network
+        await interaction.followup.send(f"Failed to force entry: {exc}")
+        return
+    await interaction.followup.send(f"Force entry executed for {direction.value}.")
+
+
+@trading_group.command(name="config", description="Show trading configuration")
+async def trading_config(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    settings = trading_bot.store.load_settings()
+    embed = discord.Embed(
+        title="Trading Configuration",
+        color=discord.Color.teal(),
+        timestamp=datetime.utcnow(),
+    )
+    embed.add_field(
+        name="Trend Safeguard", value="Enabled" if settings.trend_safeguard_enabled else "Disabled"
+    )
+    embed.add_field(
+        name="Extended Trend", value="Enabled" if settings.allow_extended_trend else "Disabled"
+    )
+    embed.add_field(
+        name="Logging", value="Enabled" if settings.logging_enabled else "Disabled"
+    )
+    embed.add_field(
+        name="Trailing Buffer", value=f"{settings.trailing_buffer:.2%}", inline=False
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@trading_group.command(
+    name="toggle-trend-safeguard", description="Toggle the trend confirmation rule"
+)
+async def trading_toggle_safeguard(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    settings = trading_bot.toggle_trend_safeguard()
+    await interaction.response.send_message(
+        f"Trend safeguard {'enabled' if settings.trend_safeguard_enabled else 'disabled'}.",
+        ephemeral=True,
+    )
+
+
+@trading_group.command(
+    name="toggle-extended", description="Toggle extended trend management"
+)
+async def trading_toggle_extended(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    settings = trading_bot.toggle_extended_trend()
+    await interaction.response.send_message(
+        f"Extended trend {'enabled' if settings.allow_extended_trend else 'disabled'}.",
+        ephemeral=True,
+    )
+
+
+@trading_group.command(name="toggle-logging", description="Toggle trading logs")
+async def trading_toggle_logging(interaction: discord.Interaction) -> None:
+    if trading_bot is None:
+        await interaction.response.send_message(
+            _trading_disabled_message(), ephemeral=True
+        )
+        return
+    settings = trading_bot.toggle_logging()
+    await interaction.response.send_message(
+        f"Trading logging {'enabled' if settings.logging_enabled else 'disabled'}.",
+        ephemeral=True,
+    )
 
 
 async def _invoke_total_refresh(bot: commands.Bot) -> None:
@@ -328,6 +612,14 @@ async def on_ready():
         logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     else:
         logger.info("Reminder scheduler already running.")
+
+    if TRADING_MODE_ENABLED:
+        await ensure_trading_mode()
+
+    try:
+        await bot.tree.sync()
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Failed to sync slash commands: %s", exc)
 
     await reschedule_queued_orders()
 
@@ -1106,6 +1398,31 @@ def shutdown_handler(signal_received, frame):
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
 
-# Start the bot with the token from the .env
-if __name__ == "__main__":
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="RSAssistant Discord bot")
+    parser.add_argument(
+        "--enable-trading",
+        action="store_true",
+        help="Opt-in to the automated ULT-MA trading mode.",
+    )
+    return parser
+
+
+def main() -> None:
+    """CLI entrypoint for RSAssistant."""
+
+    global TRADING_MODE_ENABLED
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    if args.enable_trading:
+        TRADING_MODE_ENABLED = True
+
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is required to run RSAssistant.")
+        sys.exit(1)
+
     bot.run(BOT_TOKEN)
+
+
+if __name__ == "__main__":
+    main()
