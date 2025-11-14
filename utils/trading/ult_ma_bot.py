@@ -6,11 +6,12 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 from .executor import TradeExecutor
 from .market_data import YahooMarketDataProvider
 from .state import TradePosition, TradingSettings, TradingStateStore
+from ..config_utils import TRADING_BROKERS
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class UltMaTradingBot:
         self.price_check_interval = price_check_interval
         self.trailing_buffer = trailing_buffer
         self.on_error = on_error
+        self._configured_brokers = list(TRADING_BROKERS)
 
         self._monitor_task: Optional[asyncio.Task] = None
         self._position_task: Optional[asyncio.Task] = None
@@ -70,8 +72,12 @@ class UltMaTradingBot:
             return
         self._stop_event.clear()
         loop = asyncio.get_running_loop()
-        self._monitor_task = loop.create_task(self._monitor_loop(), name="ult-ma-monitor")
-        self._position_task = loop.create_task(self._position_loop(), name="ult-ma-position")
+        self._monitor_task = loop.create_task(
+            self._monitor_loop(), name="ult-ma-monitor"
+        )
+        self._position_task = loop.create_task(
+            self._position_loop(), name="ult-ma-position"
+        )
         logger.info("ULT-MA trading bot tasks started.")
 
     async def stop(self) -> None:
@@ -218,10 +224,15 @@ class UltMaTradingBot:
         confirmation_ready = False
         if confirmation_required:
             if state.pending_color == color:
-                if state.pending_since and timestamp - state.pending_since >= self.candle_interval:
+                if (
+                    state.pending_since
+                    and timestamp - state.pending_since >= self.candle_interval
+                ):
                     confirmation_ready = True
                 else:
-                    logger.info("Trend safeguard awaiting confirmation candle for %s", color)
+                    logger.info(
+                        "Trend safeguard awaiting confirmation candle for %s", color
+                    )
             else:
                 state.pending_color = color
                 state.pending_since = timestamp
@@ -246,13 +257,18 @@ class UltMaTradingBot:
 
         await self._execute_trade(color=color, price=price, timestamp=timestamp)
 
-    async def _execute_trade(self, color: str, price: float, timestamp: datetime) -> None:
+    async def _execute_trade(
+        self, color: str, price: float, timestamp: datetime
+    ) -> None:
         target_symbol = "TQQQ" if color == "green" else "SQQQ"
         opposite_symbol = "SQQQ" if target_symbol == "TQQQ" else "TQQQ"
 
         active = self.store.load_active_position()
         if active and active.symbol == target_symbol:
-            logger.info("Position for %s already active; skipping duplicate entry.", target_symbol)
+            logger.info(
+                "Position for %s already active; skipping duplicate entry.",
+                target_symbol,
+            )
             return
 
         if active and active.symbol == opposite_symbol:
@@ -264,9 +280,13 @@ class UltMaTradingBot:
         tp = price * 1.10
         sl = price * 0.95
         logger.info(
-            "Opening %s position at price %.2f with TP %.2f and SL %.2f", target_symbol, price, tp, sl
+            "Opening %s position at price %.2f with TP %.2f and SL %.2f",
+            target_symbol,
+            price,
+            tp,
+            sl,
         )
-        self.executor.sell(opposite_symbol, "all")
+        self._sell_across_brokers(opposite_symbol, "all")
         self.executor.buy(target_symbol, 1.0, use_percent=True)
         self.executor.set_tp_sl(target_symbol, tp, sl)
 
@@ -323,7 +343,7 @@ class UltMaTradingBot:
         if not position:
             return
         logger.info("Closing %s due to %s", position.symbol, reason)
-        self.executor.sell(position.symbol, "all")
+        self._sell_across_brokers(position.symbol, "all")
         self.executor.cancel_all(position.symbol)
         self.store.record_closed_position(
             symbol=position.symbol,
@@ -337,9 +357,29 @@ class UltMaTradingBot:
         self.store.save_active_position(None)
 
     # ------------------------------------------------------------------
+    def _sell_across_brokers(
+        self, symbol: str, amount: Union[float, int, str] = "all"
+    ) -> None:
+        """Dispatch sell requests to the configured brokers.
+
+        When :data:`TRADING_BROKERS` is configured the executor receives one
+        sell command per broker with the broker identifier included in the
+        payload. When no brokers are configured the legacy behaviour of
+        targeting ``"all"`` is preserved by issuing a single unqualified
+        sell request.
+        """
+
+        brokers = self._configured_brokers or [None]
+        for broker in brokers:
+            self.executor.sell(symbol, amount, broker=broker)
+
+    # ------------------------------------------------------------------
     def _determine_color(self) -> tuple[Optional[str], Optional[float]]:
         if self._webhook_color and self._webhook_timestamp:
-            if datetime.now(TZ_UTC) - self._webhook_timestamp < self.candle_interval * 2:
+            if (
+                datetime.now(TZ_UTC) - self._webhook_timestamp
+                < self.candle_interval * 2
+            ):
                 symbol = "TQQQ" if self._webhook_color == "green" else "SQQQ"
                 price = self.data.fetch_last_price(symbol)
                 return self._webhook_color, price
