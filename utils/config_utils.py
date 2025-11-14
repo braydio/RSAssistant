@@ -89,6 +89,7 @@ HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
 ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
 SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
+TRADING_DATABASE = VOLUMES_DIR / "db" / "ult_ma_trading.db"
 
 # --- Account nickname pattern ---
 DEFAULT_ACCOUNT_NICKNAME = "{broker} {group} {account}"
@@ -128,6 +129,26 @@ EXCEL_LOGGING_ENABLED = (
 SQL_LOGGING_ENABLED = (
     os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
 )
+ENABLE_AUTOMATED_TRADING = (
+    os.getenv("ENABLE_AUTOMATED_TRADING", "false").strip().lower() == "true"
+)
+TRADING_ALLOW_EXTENDED_TREND = (
+    os.getenv("TRADING_ALLOW_EXTENDED_TREND", "false").strip().lower()
+    == "true"
+)
+TRADING_TREND_SAFEGUARD_ENABLED = (
+    os.getenv("TRADING_TREND_SAFEGUARD_ENABLED", "true").strip().lower()
+    == "true"
+)
+TRADING_LOGGING_ENABLED = (
+    os.getenv("TRADING_LOGGING_ENABLED", "true").strip().lower() == "true"
+)
+TRADING_TRAILING_BUFFER = float(os.getenv("TRADING_TRAILING_BUFFER", "0.03"))
+TRADING_PRICE_CHECK_INTERVAL_SECONDS = int(
+    os.getenv("TRADING_PRICE_CHECK_INTERVAL_SECONDS", str(5 * 60))
+)
+AUTO_RSA_BASE_URL = os.getenv("AUTO_RSA_BASE_URL", "")
+AUTO_RSA_API_KEY = os.getenv("AUTO_RSA_API_KEY", "")
 
 # Path to ignore list files (defaults inside config/)
 IGNORE_TICKERS_FILE = Path(
