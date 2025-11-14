@@ -80,6 +80,7 @@ from utils.watch_utils import (
     watch as handle_watch_command,
 )
 from utils.refresh_scheduler import compute_next_refresh_datetime, MARKET_TZ
+from utils.channel_resolver import resolve_reply_channel
 
 bot_info = (
     "RSAssistant by @braydio \n    <https://github.com/braydio/RSAssistant> \n \n "
@@ -160,7 +161,7 @@ async def reschedule_queued_orders():
         logger.info("No queued orders to reschedule.")
         return
 
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
     if not channel:
         logger.error("Primary channel not found for rescheduling orders.")
         return
@@ -188,7 +189,7 @@ async def reschedule_queued_orders():
 async def _invoke_total_refresh(bot: commands.Bot) -> None:
     """Trigger the ``..all`` command from the scheduler context."""
 
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
     if channel is None:
         logger.error(
             "Total refresh scheduler could not resolve primary channel %s",
@@ -260,7 +261,7 @@ async def on_ready():
     logger.info("V3.1 | Running in CLI | Runtime Environment: Production")
 
     # Fetch the primary channel
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
 
     # Prepare account setup message
     account_setup_message = (
@@ -344,7 +345,7 @@ async def process_sell_list(bot):
 
             if now >= scheduled_time:
                 command = f"!rsa sell {details['quantity']} {ticker} {details['broker']} false"
-                channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+                channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
                 if channel:
                     await channel.send(command)
                     logger.info(
@@ -681,7 +682,7 @@ async def on_message(message):
 
 async def send_scheduled_reminder():
     """Send scheduled reminders to the target channel."""
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
     if channel:
         await send_reminder_message_embed(channel)
     else:
@@ -1016,7 +1017,7 @@ async def show_reminder(ctx):
     """
     await ctx.send("Clearing the current holdings for refresh.")
     await clear_holdings(ctx)
-    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
     if channel:
         await send_reminder_message_embed(channel)
         enable_audit()

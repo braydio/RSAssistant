@@ -28,6 +28,7 @@ from utils.config_utils import (
 from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import get_last_stock_price, send_large_message_chunks
 from utils.sql_utils import update_historical_holdings
+from utils.channel_resolver import resolve_reply_channel
 
 # Load configuration and paths from settings
 config = load_config()
@@ -426,25 +427,29 @@ async def send_reminder_message(bot):
 
     embed.set_footer(text="Automated message will repeat.")
 
-    # Send the embed message to the specified channel
-    channel = bot.get_channel(
-        DISCORD_SECONDARY_CHANNEL
-    )  # Replace with correct channel ID
+    channel = resolve_reply_channel(bot, DISCORD_SECONDARY_CHANNEL)
+    if not channel:
+        channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
+    if not channel:
+        channel = resolve_reply_channel(bot)
+
     if channel:
         await channel.send(embed=embed)
     else:
-        logging.error("Channel not found.")
+        logging.error("No configured channel available for reminder message.")
 
     # Optionally trigger a holdings refresh in the primary channel
     try:
         if AUTO_REFRESH_ON_REMINDER:
-            primary = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+            primary = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
+            if not primary:
+                primary = resolve_reply_channel(bot)
             if primary:
                 await primary.send("!rsa holdings all")
                 logging.info("Triggered holdings refresh due to reminder (AUTO_REFRESH_ON_REMINDER=true)")
             else:
                 logging.error(
-                    f"Primary channel not found for auto holdings refresh: {DISCORD_PRIMARY_CHANNEL}"
+                    "No configured channel found for auto holdings refresh command."
                 )
     except Exception as e:
         logging.error(f"Error triggering auto holdings refresh: {e}")

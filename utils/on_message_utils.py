@@ -35,6 +35,10 @@ from utils.config_utils import (
     TAGGED_ALERT_REQUIREMENTS,
 )
 from utils import split_watch_utils
+from utils.channel_resolver import (
+    resolve_message_destination,
+    resolve_reply_channel,
+)
 
 from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
 
@@ -139,7 +143,9 @@ def _reset_refresh_state():
     _pending_sell_commands = []
 
 
-async def _handle_refresh_completion(message, lowered_content: str) -> None:
+async def _handle_refresh_completion(
+    bot, message, lowered_content: str
+) -> None:
     """Flush buffered alerts when AutoRSA signals holdings completion."""
 
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
@@ -170,16 +176,17 @@ async def _handle_refresh_completion(message, lowered_content: str) -> None:
         max_len = 2000
         body = "\n".join(lines)
         first_msg = (header + body)[:max_len]
-        await message.channel.send(first_msg)
+        response_channel = resolve_message_destination(bot, message.channel)
+        await response_channel.send(first_msg)
 
         remaining = body[len(first_msg) - len(header) :]
         while remaining:
             chunk = remaining[: max_len - 1]
-            await message.channel.send(chunk)
+            await response_channel.send(chunk)
             remaining = remaining[len(chunk) :]
 
         for cmd in _pending_sell_commands:
-            await message.channel.send(cmd)
+            await response_channel.send(cmd)
 
     _reset_refresh_state()
 
@@ -225,11 +232,12 @@ def compute_account_missing_tickers(parsed_holdings):
     return results
 
 
-async def _audit_holdings(message, parsed_holdings):
+async def _audit_holdings(bot, message, parsed_holdings):
     missing = compute_account_missing_tickers(parsed_holdings)
+    response_channel = resolve_message_destination(bot, message.channel)
     for account, tickers in missing.items():
         _missing_summary[account].update(tickers)
-        await message.channel.send(f"Missing in {account}: {', '.join(tickers)}")
+        await response_channel.send(f"Missing in {account}: {', '.join(tickers)}")
 
 
 def set_channels(primary_id, secondary_id, tertiary_id):
@@ -289,7 +297,9 @@ async def handle_primary_channel(bot, message):
     # Detect completion message regardless of author to flush buffered alerts
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
     lowered_content = message.content.lower().strip()
-    await _handle_refresh_completion(message, lowered_content)
+    await _handle_refresh_completion(bot, message, lowered_content)
+
+    response_channel = resolve_message_destination(bot, message.channel)
 
     # Detect start of holdings refresh to buffer alerts until completion
     if "!rsa holdings" in lowered_content:
@@ -398,7 +408,7 @@ async def handle_primary_channel(bot, message):
                         f"- {broker} {account_name}: {qty:.2f} shares{price_fragment}"
                     )
                 body = "\n".join(lines)
-                await message.channel.send(header + body)
+                await response_channel.send(header + body)
 
             # During refresh, buffer alerts and sell commands; otherwise, send immediately
             if alert_entries and _refresh_active:
@@ -434,30 +444,30 @@ async def handle_primary_channel(bot, message):
                 max_len = 2000
                 body = "\n".join(lines)
                 first_msg = (header + body)[:max_len]
-                await message.channel.send(first_msg)
+                await response_channel.send(first_msg)
 
                 remaining = body[len(first_msg) - len(header) :]
                 while remaining:
                     chunk = remaining[: max_len - 1]
-                    await message.channel.send(chunk)
+                    await response_channel.send(chunk)
                     remaining = remaining[len(chunk) :]
 
                 # After summary, send any queued auto-sell commands
                 for cmd in sell_commands:
-                    await message.channel.send(cmd)
+                    await response_channel.send(cmd)
             if _audit_active:
-                await _audit_holdings(message, parsed_holdings)
+                await _audit_holdings(bot, message, parsed_holdings)
         except Exception as e:
             logger.error(f"Error parsing embed message: {e}")
     elif message.author.bot:
         logger.info("Parsing regular order message.")
         lowered = lowered_content
         if lowered == "..updatebot":
-            await message.channel.send("Pulling latest code and restarting...")
+            await response_channel.send("Pulling latest code and restarting...")
             update_and_restart()
             return
         if lowered == "..revertupdate":
-            await message.channel.send("Reverting last update and restarting...")
+            await response_channel.send("Reverting last update and restarting...")
             revert_and_restart()
             return
 
@@ -465,7 +475,7 @@ async def handle_primary_channel(bot, message):
         if entries:
             ctx = await bot.get_context(message)
             count = await add_entries_from_message(message.content, ctx)
-            await message.channel.send(f"Added {count} tickers to watchlist.")
+            await response_channel.send(f"Added {count} tickers to watchlist.")
             logger.info(f"Added {count} tickers from bulk watchlist message.")
             return
         await asyncio.to_thread(parse_order_message, message.content)
@@ -484,6 +494,8 @@ async def handle_secondary_channel(bot, message):
     if not (isinstance(result, dict) and result.get("reverse_split_confirmed")):
         logger.warning("Message not confirming reverse split or malformed")
         return
+
+    response_channel = resolve_message_destination(bot, message.channel)
     ticker = result.get("ticker")
     url = result.get("url")
     if not ticker or not url:
@@ -510,18 +522,27 @@ async def handle_secondary_channel(bot, message):
 
             target_channel = None
             if DISCORD_TERTIARY_CHANNEL:
-                target_channel = bot.get_channel(DISCORD_TERTIARY_CHANNEL)
+                target_channel = resolve_reply_channel(
+                    bot, preferred_id=DISCORD_TERTIARY_CHANNEL
+                )
                 if not target_channel:
                     logger.error(
                         "Tertiary channel %s not found; unable to post snippet to tertiary.",
                         DISCORD_TERTIARY_CHANNEL,
                     )
             if not target_channel:
+                fallback_channel = resolve_reply_channel(
+                    bot, preferred_id=DISCORD_SECONDARY_CHANNEL
+                )
+                if fallback_channel:
+                    target_channel = fallback_channel
+                else:
+                    target_channel = response_channel
                 logger.warning(
-                    "Falling back to secondary channel for %s snippet delivery.",
+                    "Falling back to channel %s for %s snippet delivery.",
+                    getattr(target_channel, "id", "unknown"),
                     ticker,
                 )
-                target_channel = message.channel
 
             await target_channel.send(context + snippet)
         elif body_text:
@@ -530,7 +551,7 @@ async def handle_secondary_channel(bot, message):
             )
 
         if policy_info.get("round_up_confirmed"):
-            await attempt_autobuy(bot, message.channel, ticker, quantity=1)
+            await attempt_autobuy(bot, response_channel, ticker, quantity=1)
             split_date = policy_info.get("effective_date") or date.today().isoformat()
             split_watch_utils.add_split_watch(ticker, split_date)
             logger.info(f"Added split watch: {ticker} @ {split_date}")
@@ -542,6 +563,8 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
     now = datetime.now()
     mon_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
     mon_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    target_channel = resolve_message_destination(bot, channel)
 
     if now.weekday() >= 5:
         days = (7 - now.weekday()) % 7 or 7
@@ -562,7 +585,7 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
     order_id = f"{ticker.upper()}_{exec_time.strftime('%Y%m%d_%H%M')}_buy"
     bot.loop.create_task(
         schedule_and_execute(
-            ctx=channel,
+            ctx=target_channel,
             action="buy",
             ticker=ticker,
             quantity=quantity,
@@ -575,7 +598,7 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         f"Scheduled autobuy: {ticker.upper()} x{quantity} at "
         f"{exec_time.strftime('%Y-%m-%d %H:%M')} ({order_id})"
     )
-    await channel.send(confirmation)
+    await target_channel.send(confirmation)
     logger.info(confirmation)
 
 
@@ -616,7 +639,7 @@ async def post_policy_summary(bot, ticker, summary):
 
     channel = None
     if DISCORD_TERTIARY_CHANNEL:
-        channel = bot.get_channel(DISCORD_TERTIARY_CHANNEL)
+        channel = resolve_reply_channel(bot, DISCORD_TERTIARY_CHANNEL)
         if not channel:
             logger.error(
                 "Tertiary channel %s not found; reverse split summary will fallback.",
@@ -624,11 +647,14 @@ async def post_policy_summary(bot, ticker, summary):
             )
 
     if not channel and DISCORD_PRIMARY_CHANNEL:
-        channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+        channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
         if channel:
             logger.warning(
                 "Posting %s reverse split summary to primary channel fallback.", ticker
             )
+
+    if not channel:
+        channel = resolve_reply_channel(bot)
 
     if not channel:
         logger.error(
