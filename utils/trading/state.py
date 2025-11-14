@@ -6,13 +6,39 @@ import json
 import logging
 import sqlite3
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 ISO_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+
+def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
+    """Parse persisted timestamps and normalise them to UTC-aware datetimes."""
+
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        parsed = datetime.strptime(value, ISO_FORMAT)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _serialise_timestamp(value: Optional[datetime]) -> Optional[str]:
+    """Convert timestamps to a stable UTC string format for storage."""
+
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.strftime(ISO_FORMAT)
 
 
 @dataclass
@@ -121,12 +147,8 @@ class TradingStateStore:
             ).fetchone()
             if not row:
                 return UltMaState()
-            pending_since = (
-                datetime.strptime(row[4], ISO_FORMAT) if row[4] else None
-            )
-            last_check_at = (
-                datetime.strptime(row[5], ISO_FORMAT) if row[5] else None
-            )
+            pending_since = _parse_timestamp(row[4])
+            last_check_at = _parse_timestamp(row[5])
             return UltMaState(
                 last_color=row[0],
                 previous_color=row[1],
@@ -157,12 +179,8 @@ class TradingStateStore:
                     state.previous_color,
                     state.last_trade_direction,
                     state.pending_color,
-                    state.pending_since.strftime(ISO_FORMAT)
-                    if state.pending_since
-                    else None,
-                    state.last_check_at.strftime(ISO_FORMAT)
-                    if state.last_check_at
-                    else None,
+                    _serialise_timestamp(state.pending_since),
+                    _serialise_timestamp(state.last_check_at),
                 ),
             )
             conn.commit()
