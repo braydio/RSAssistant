@@ -1,6 +1,7 @@
 """Unit tests for the ULT-MA trading controller."""
 
 import asyncio
+import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -109,6 +110,43 @@ def test_trend_safeguard_requires_confirmation():
         pending_state = store.load_state()
         assert pending_state.pending_color == "red"
         assert pending_state.pending_since is not None
+        assert pending_state.pending_since.tzinfo is timezone.utc
+
+
+def test_naive_pending_timestamp_is_normalised():
+    with tempfile.TemporaryDirectory() as tmp:
+        provider = StubDataProvider(price_sequence=[90, 88])
+        bot = _create_bot(Path(tmp), provider)
+        store = bot.store
+        executor: DummyExecutor = bot.executor  # type: ignore[assignment]
+
+        # Seed a pending confirmation with a naive timestamp via direct SQL to mimic legacy data.
+        state = store.load_state()
+        state.last_color = "green"
+        state.previous_color = "green"
+        state.pending_color = "red"
+        state.pending_since = datetime.utcnow() - timedelta(hours=5)
+        store.save_state(state)
+        with sqlite3.connect(store.db_path) as conn:
+            conn.execute(
+                "UPDATE ult_ma_state SET pending_since = ? WHERE id = 1",
+                (state.pending_since.strftime("%Y-%m-%dT%H:%M:%S"),),
+            )
+            conn.commit()
+
+        # Evaluate with a naive timestamp to ensure both values are aligned to UTC before subtraction.
+        asyncio.run(
+            bot._evaluate_color(
+                "red",
+                price=88,
+                timestamp=datetime.utcnow(),
+            )
+        )
+
+        assert any(call[0] == "buy" and call[1] == "SQQQ" for call in executor.calls)
+        updated = store.load_state()
+        assert updated.last_color == "red"
+        assert updated.pending_since is None
 
 
 def test_take_profit_closes_position():
