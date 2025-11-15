@@ -190,3 +190,23 @@ def test_execute_trade_uses_configured_brokers():
             ("sell", "SQQQ", "all", "Fidelity"),
             ("sell", "SQQQ", "all", "Schwab"),
         ]
+
+
+def test_execute_trade_defaults_to_all_when_no_brokers():
+    with tempfile.TemporaryDirectory() as tmp:
+        provider = StubDataProvider(price_sequence=[100])
+        bot = _create_bot(Path(tmp), provider)
+        executor: DummyExecutor = bot.executor  # type: ignore[assignment]
+
+        bot._configured_brokers = []
+
+        asyncio.run(
+            bot._execute_trade(
+                color="red",
+                price=100,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
+        sell_calls = [call for call in executor.calls if call[0] == "sell"]
+        assert sell_calls == [("sell", "TQQQ", "all", None)]

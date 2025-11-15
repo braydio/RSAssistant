@@ -369,8 +369,12 @@ class UltMaTradingBot:
         sell request.
         """
 
-        brokers = self._configured_brokers or [None]
-        for broker in brokers:
+        if not self._configured_brokers:
+            # Legacy behaviour – issue a single sell that targets all brokers.
+            self.executor.sell(symbol, amount)
+            return
+
+        for broker in self._configured_brokers:
             self.executor.sell(symbol, amount, broker=broker)
 
     # ------------------------------------------------------------------
