@@ -20,8 +20,8 @@ class DummyExecutor:
     def buy(self, symbol, amount, use_percent=True):
         self.calls.append(("buy", symbol, amount, use_percent))
 
-    def sell(self, symbol, amount_or_all="all"):
-        self.calls.append(("sell", symbol, amount_or_all))
+    def sell(self, symbol, amount_or_all="all", broker=None):
+        self.calls.append(("sell", symbol, amount_or_all, broker))
 
     def set_tp_sl(self, symbol, tp, sl):
         self.calls.append(("brackets", symbol, tp, sl))
@@ -167,3 +167,46 @@ def test_extended_trend_trailing_stop():
         asyncio.run(bot._check_position())
         assert any(call[0] == "sell" and call[1] == "TQQQ" for call in executor.calls)
         assert store.load_active_position() is None
+
+
+def test_execute_trade_uses_configured_brokers():
+    with tempfile.TemporaryDirectory() as tmp:
+        provider = StubDataProvider(price_sequence=[100])
+        bot = _create_bot(Path(tmp), provider)
+        executor: DummyExecutor = bot.executor  # type: ignore[assignment]
+
+        bot._configured_brokers = ["Fidelity", "Schwab"]
+
+        asyncio.run(
+            bot._execute_trade(
+                color="green",
+                price=100,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
+        sell_calls = [call for call in executor.calls if call[0] == "sell"]
+        assert sell_calls == [
+            ("sell", "SQQQ", "all", "Fidelity"),
+            ("sell", "SQQQ", "all", "Schwab"),
+        ]
+
+
+def test_execute_trade_defaults_to_all_when_no_brokers():
+    with tempfile.TemporaryDirectory() as tmp:
+        provider = StubDataProvider(price_sequence=[100])
+        bot = _create_bot(Path(tmp), provider)
+        executor: DummyExecutor = bot.executor  # type: ignore[assignment]
+
+        bot._configured_brokers = []
+
+        asyncio.run(
+            bot._execute_trade(
+                color="red",
+                price=100,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
+        sell_calls = [call for call in executor.calls if call[0] == "sell"]
+        assert sell_calls == [("sell", "TQQQ", "all", None)]

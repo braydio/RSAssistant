@@ -73,7 +73,9 @@ class TradeExecutor:
             )
 
     # --- Public API -----------------------------------------------------
-    def buy(self, symbol: str, amount: Union[float, int], use_percent: bool = True) -> ExecutorResponse:
+    def buy(
+        self, symbol: str, amount: Union[float, int], use_percent: bool = True
+    ) -> ExecutorResponse:
         """Place a market buy order via auto-rsa.
 
         Args:
@@ -87,19 +89,31 @@ class TradeExecutor:
         payload = {"symbol": symbol, "amount": amount, "use_percent": use_percent}
         return self._dispatch("POST", "/orders/buy", payload)
 
-    def sell(self, symbol: str, amount_or_all: Union[float, int, str] = "all") -> ExecutorResponse:
+    def sell(
+        self,
+        symbol: str,
+        amount_or_all: Union[float, int, str] = "all",
+        broker: Optional[str] = None,
+    ) -> ExecutorResponse:
         """Close a position for ``symbol``.
 
         Args:
             symbol: Ticker symbol to close.
             amount_or_all: Either ``"all"`` to liquidate or the quantity to
                 reduce.
+            broker: Optional broker identifier required by auto-rsa when
+                directing a sell to a specific brokerage. When omitted the
+                request targets all brokers.
         """
 
         payload = {"symbol": symbol, "amount": amount_or_all}
+        if broker:
+            payload["broker"] = broker
         return self._dispatch("POST", "/orders/sell", payload)
 
-    def set_tp_sl(self, symbol: str, take_profit: float, stop_loss: float) -> ExecutorResponse:
+    def set_tp_sl(
+        self, symbol: str, take_profit: float, stop_loss: float
+    ) -> ExecutorResponse:
         """Attach take-profit and stop-loss orders for ``symbol``."""
 
         payload = {

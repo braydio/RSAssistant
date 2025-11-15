@@ -152,6 +152,17 @@ with one broker name per line.
 
 De-duplication state is stored at `config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
 
+### Automated trading (ULT-MA)
+
+Set `ENABLE_AUTOMATED_TRADING=true` to start the optional ULT-MA trading task.
+Provide `AUTO_RSA_BASE_URL` and `AUTO_RSA_API_KEY` so the bot can dispatch
+orders to auto-rsa.
+
+- `TRADING_BROKERS` (CSV, optional): Ordered list of broker identifiers used
+  when the strategy issues auto-sell requests. Example:
+  `TRADING_BROKERS=Fidelity,Schwab`. When omitted the bot falls back to the
+  legacy behaviour of sending sells to `all` brokers.
+
 ### Docker
 
 Alternatively, build and run with Docker:

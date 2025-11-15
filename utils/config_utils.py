@@ -120,25 +120,19 @@ AUTO_SELL_LIVE = os.getenv("AUTO_SELL_LIVE", "false").strip().lower() == "true"
 # or a custom path via IGNORE_TICKERS_FILE.
 
 # Persistence layer toggles (enabled by default)
-CSV_LOGGING_ENABLED = (
-    os.getenv("CSV_LOGGING_ENABLED", "true").strip().lower() == "true"
-)
+CSV_LOGGING_ENABLED = os.getenv("CSV_LOGGING_ENABLED", "true").strip().lower() == "true"
 EXCEL_LOGGING_ENABLED = (
     os.getenv("EXCEL_LOGGING_ENABLED", "true").strip().lower() == "true"
 )
-SQL_LOGGING_ENABLED = (
-    os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
-)
+SQL_LOGGING_ENABLED = os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
 ENABLE_AUTOMATED_TRADING = (
     os.getenv("ENABLE_AUTOMATED_TRADING", "false").strip().lower() == "true"
 )
 TRADING_ALLOW_EXTENDED_TREND = (
-    os.getenv("TRADING_ALLOW_EXTENDED_TREND", "false").strip().lower()
-    == "true"
+    os.getenv("TRADING_ALLOW_EXTENDED_TREND", "false").strip().lower() == "true"
 )
 TRADING_TREND_SAFEGUARD_ENABLED = (
-    os.getenv("TRADING_TREND_SAFEGUARD_ENABLED", "true").strip().lower()
-    == "true"
+    os.getenv("TRADING_TREND_SAFEGUARD_ENABLED", "true").strip().lower() == "true"
 )
 TRADING_LOGGING_ENABLED = (
     os.getenv("TRADING_LOGGING_ENABLED", "true").strip().lower() == "true"
@@ -160,6 +154,39 @@ IGNORE_BROKERS_FILE = Path(
 TAGGED_ALERTS_FILE = Path(
     os.getenv("TAGGED_ALERTS_FILE", str(CONFIG_DIR / "tagged_alerts.txt"))
 ).resolve()
+
+
+def _parse_trading_brokers(raw_value: str) -> list[str]:
+    """Return an ordered list of broker identifiers for automated trading.
+
+    Parameters
+    ----------
+    raw_value:
+        Comma-separated string sourced from the ``TRADING_BROKERS`` environment
+        variable.
+
+    Returns
+    -------
+    list[str]
+        Sanitized broker identifiers in the order provided. Empty segments are
+        ignored.
+    """
+
+    if not raw_value:
+        return []
+
+    return [broker.strip() for broker in raw_value.split(",") if broker.strip()]
+
+
+TRADING_BROKERS = _parse_trading_brokers(os.getenv("TRADING_BROKERS", ""))
+if TRADING_BROKERS:
+    logger.info(
+        "Configured %d trading broker(s) for auto-rsa sells: %s",
+        len(TRADING_BROKERS),
+        ", ".join(TRADING_BROKERS),
+    )
+else:
+    logger.info("No trading brokers configured; sell requests will target 'all'.")
 
 
 def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
@@ -231,7 +258,9 @@ IGNORE_BROKERS = _compute_ignore_brokers()
 # --- Mentions ---
 
 
-def _parse_tagged_alert_entry(raw_value: str, source: str) -> tuple[str, float | None] | None:
+def _parse_tagged_alert_entry(
+    raw_value: str, source: str
+) -> tuple[str, float | None] | None:
     """Return a ticker and optional quantity threshold from ``raw_value``.
 
     Parameters
@@ -342,7 +371,9 @@ def _compute_tagged_alert_requirements() -> dict[str, float | None]:
 
     merged: dict[str, float | None] = {}
 
-    env_entries = [item.strip() for item in os.getenv("TAGGED_ALERT_TICKERS", "").split(",")]
+    env_entries = [
+        item.strip() for item in os.getenv("TAGGED_ALERT_TICKERS", "").split(",")
+    ]
     for entry in env_entries:
         parsed = _parse_tagged_alert_entry(entry, "TAGGED_ALERT_TICKERS")
         if not parsed:
@@ -382,7 +413,11 @@ def _parse_user_ids(raw_value: str) -> list[str]:
     return [value for value in (item.strip() for item in raw_value.split(",")) if value]
 
 
-_raw_mentions = os.getenv("MENTION_USER_IDS") or os.getenv("MENTION_USER_ID") or os.getenv("MY_ID", "")
+_raw_mentions = (
+    os.getenv("MENTION_USER_IDS")
+    or os.getenv("MENTION_USER_ID")
+    or os.getenv("MY_ID", "")
+)
 # Discord user IDs to mention in alerts (e.g., 123456789012345678)
 MENTION_USER_IDS = _parse_user_ids(_raw_mentions)
 # Maintain backward compatibility for single-ID usage
