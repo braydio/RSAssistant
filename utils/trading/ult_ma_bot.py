@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 TZ_UTC = timezone.utc
 
 
+def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalise datetimes to timezone-aware UTC values."""
+
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=TZ_UTC)
+    return dt.astimezone(TZ_UTC)
+
+
 @dataclass
 class StrategyMetrics:
     """Light-weight snapshot used by the Discord UI."""
@@ -191,9 +201,11 @@ class UltMaTradingBot:
     async def _evaluate_color(
         self, color: str, price: float, timestamp: datetime, forced: bool = False
     ) -> None:
+        timestamp = _ensure_utc(timestamp)  # Normalise external timestamps.
         state = self.store.load_state()
         settings = self.store.load_settings()
         state.last_check_at = timestamp
+        state.pending_since = _ensure_utc(state.pending_since)
 
         if color not in {"green", "red"}:
             logger.debug("Invalid colour %s", color)
