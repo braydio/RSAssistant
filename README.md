@@ -1,6 +1,6 @@
 # RSAssistant
 
-RSAssistant is a Discord bot that monitors corporate actions and automates trading tasks around reverse stock splits. It parses NASDAQ and SEC alerts, tracks watchlists, and schedules orders to run through [autoRSA by NelsonDane](https://github.com/NelsonDane/auto-rsa).
+RSAssistant is a Discord bot that monitors corporate actions and automates trading tasks around reverse stock splits. It parses NASDAQ and SEC alerts, tracks watchlists, and schedules orders to run through [autoRSA by NelsonDane](https://github.com/NelsonDane/auto-rsa) in SQLite under `volumes/db` by default.
 
 ## Features
 
@@ -97,10 +97,42 @@ desired path.
 python RSAssistant.py
 ```
 
-The bot's `..all` command now audits your holdings against the watchlist,
+The bot's `..all` command audits your holdings against the watchlist,
 summarizes any tickers that are missing from your accounts, and consolidates
 broker holdings status into a single embed.
 
+### PostgreSQL quick start (optional)
+
+SQLite covers day-to-day persistence. If you prefer PostgreSQL for external
+analytics or future migrations, you can run a local instance and keep your data
+in sync:
+
+1. Start PostgreSQL (Docker example):
+
+```bash
+docker run --name rsassistant-postgres \
+  -e POSTGRES_PASSWORD=rsassistant \
+  -e POSTGRES_USER=rsassistant \
+  -e POSTGRES_DB=rsassistant \
+  -p 5432:5432 \
+  -v $(pwd)/volumes/db:/var/lib/postgresql/data \
+  -d postgres:16
+```
+
+2. Connect with `psql` and create any schemas or roles you need:
+
+```bash
+psql postgresql://rsassistant:rsassistant@localhost:5432/rsassistant
+```
+
+3. Save the connection string (for example,
+`postgresql://rsassistant:rsassistant@localhost:5432/rsassistant`) so
+ETL jobs or notebooks can read RSAssistant outputs alongside the default
+SQLite files.
+
+See the [PostgreSQL docs](https://www.postgresql.org/docs/) and
+[Docker Hub image notes](https://hub.docker.com/_/postgres) for more options
+on storage, backups, and authentication.
 ### Discord channel configuration
 
 RSAssistant differentiates between three Discord channels so information lands
