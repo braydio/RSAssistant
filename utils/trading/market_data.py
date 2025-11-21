@@ -39,6 +39,25 @@ class YahooMarketDataProvider:
         self.max_retries = max_retries
         self.backoff_seconds = backoff_seconds
 
+    def _calculate_backoff(self, attempt: int, retry_after: Optional[str]) -> float:
+        """Return the backoff delay for the given attempt.
+
+        Args:
+            attempt: Zero-based attempt counter.
+            retry_after: Optional ``Retry-After`` header value from Yahoo.
+
+        Returns:
+            Number of seconds to sleep before retrying.
+        """
+
+        if retry_after:
+            try:
+                delay = float(retry_after)
+                return max(delay, self.backoff_seconds)
+            except (TypeError, ValueError):
+                pass
+        return self.backoff_seconds * max(1, attempt + 1)
+
     def fetch_candles(
         self,
         symbol: str,
@@ -48,12 +67,26 @@ class YahooMarketDataProvider:
         """Return OHLC candles for ``symbol``."""
 
         params = {"interval": interval, "range": range_}
-        attempt = 0
-        while True:
+        for attempt in range(self.max_retries):
             try:
                 response = requests.get(
                     self.BASE_URL.format(symbol=symbol), params=params, timeout=10
                 )
+                if response.status_code == 429:
+                    delay = self._calculate_backoff(
+                        attempt, response.headers.get("Retry-After")
+                    )
+                    logger.warning(
+                        "Yahoo Finance rate limit hit (attempt %s/%s); sleeping %.2fs",
+                        attempt + 1,
+                        self.max_retries,
+                        delay,
+                    )
+                    if attempt + 1 == self.max_retries:
+                        response.raise_for_status()
+                    time.sleep(delay)
+                    continue
+
                 response.raise_for_status()
                 payload = response.json()
                 result = payload.get("chart", {}).get("result", [])
@@ -81,14 +114,18 @@ class YahooMarketDataProvider:
                         continue
                 return candles
             except requests.RequestException as exc:  # pragma: no cover - network
-                attempt += 1
-                if attempt >= self.max_retries:
+                if attempt + 1 >= self.max_retries:
                     logger.error("Yahoo Finance fetch failed: %s", exc)
                     raise
+                delay = self.backoff_seconds * (attempt + 1)
                 logger.warning(
-                    "Yahoo Finance fetch failed (attempt %s/%s): %s", attempt, self.max_retries, exc
+                    "Yahoo Finance fetch failed (attempt %s/%s): %s; retrying in %.2fs",
+                    attempt + 1,
+                    self.max_retries,
+                    exc,
+                    delay,
                 )
-                time.sleep(self.backoff_seconds * attempt)
+                time.sleep(delay)
 
     def fetch_last_price(self, symbol: str) -> Optional[float]:
         """Return the latest closing price for ``symbol``."""
