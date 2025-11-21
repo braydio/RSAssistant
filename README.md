@@ -91,7 +91,17 @@ If you want RSAssistant to store data in an external location, set the
 `VOLUMES_DIR` variable in your environment (for local and Docker) to your
 desired path.
 
-3. Launch the bot:
+3. Point your Discord RSS relay (e.g., MonitoRSS) at the reverse split feeds
+   so RSAssistant can parse new notices from your secondary channel:
+
+   - `https://nasdaqtrader.com/Rss.aspx?feed=currentheadlines&categorylist=105`
+   - `https://www.revrss.com/newswires.xml`
+
+   Post these feeds into the channel mapped to `DISCORD_SECONDARY_CHANNEL`; the
+   bot will mirror parsed reverse split summaries and policy notes to the
+   tertiary channel when configured.
+
+4. Launch the bot:
 
 ```bash
 python RSAssistant.py
