@@ -1,6 +1,10 @@
 """Tests for helper utilities in :mod:`utils.on_message_utils`."""
 
-from utils.on_message_utils import format_mentions, _resolve_round_up_snippet
+from utils.on_message_utils import (
+    _format_account_label,
+    _resolve_round_up_snippet,
+    format_mentions,
+)
 
 
 def test_format_mentions_respects_enabled_flag():
@@ -40,3 +44,13 @@ def test_resolve_round_up_snippet_returns_none_when_absent():
 
     body_text = "Fractional shares will be settled in cash."
     assert _resolve_round_up_snippet({"body_text": body_text}, max_length=100) is None
+
+
+def test_format_account_label_skips_duplicate_broker_prefix():
+    """Account label generation should include the broker prefix only once."""
+
+    assert (
+        _format_account_label("Schwab", "Schwab 1 8745")
+        == "Schwab 1 8745"
+    )
+    assert _format_account_label("Schwab", "1 8745") == "Schwab 1 8745"

@@ -696,7 +696,41 @@ def main_embed_message(embed_list):
     return all_holdings
 
 
+def _build_account_name(broker_name: str, account_nickname: str) -> str:
+    """Return an account label without duplicating broker prefixes.
+
+    Args:
+        broker_name (str): The broker associated with the holdings entry.
+        account_nickname (str): The nickname resolved from account mappings.
+
+    Returns:
+        str: Account name that contains the broker prefix at most once.
+    """
+
+    broker_prefix = (broker_name or "").strip()
+    nickname = (account_nickname or "").strip()
+
+    if not broker_prefix:
+        return nickname
+
+    if nickname.lower().startswith(broker_prefix.lower()):
+        return nickname
+
+    if not nickname:
+        return broker_prefix
+
+    return f"{broker_prefix} {nickname}".strip()
+
+
 def parse_general_embed_message(embed):
+    """Parse holdings from general broker embeds.
+
+    Args:
+        embed (discord.embeds.Embed): Embed payload containing holdings data.
+
+    Returns:
+        list[dict]: Normalized holdings entries extracted from the embed fields.
+    """
     parsed_holdings = []
 
     for field in embed.fields:
@@ -726,7 +760,7 @@ def parse_general_embed_message(embed):
         account_nickname = get_account_nickname_or_default(
             broker_name, group_number, account_number
         )
-        account_key = f"{broker_name} {account_nickname}"
+        account_name = _build_account_name(broker_name, account_nickname)
 
         new_holdings = []
         account_total = None
@@ -743,7 +777,7 @@ def parse_general_embed_message(embed):
                 total_value = match.group(4)
                 new_holdings.append(
                     {
-                        "account_name": account_key,
+                        "account_name": account_name,
                         "broker": broker_name,
                         "group": group_number,
                         "account": account_number,
@@ -774,6 +808,14 @@ def parse_general_embed_message(embed):
 
 
 def parse_webull_embed_message(embed):
+    """Parse holdings from Webull-specific embed payloads.
+
+    Args:
+        embed (discord.embeds.Embed): Embed payload containing Webull holdings.
+
+    Returns:
+        list[dict]: Normalized holdings entries extracted from the embed fields.
+    """
     parsed_holdings = []
 
     for field in embed.fields:
@@ -795,7 +837,7 @@ def parse_webull_embed_message(embed):
         account_nickname = get_account_nickname_or_default(
             broker_name, group_number, account_number
         )
-        account_key = f"{broker_name} {account_nickname}"
+        account_name = _build_account_name(broker_name, account_nickname)
 
         new_holdings = []
         account_total = None
@@ -812,7 +854,7 @@ def parse_webull_embed_message(embed):
                 total_value = match.group(4)
                 new_holdings.append(
                     {
-                        "account_name": account_key,
+                        "account_name": account_name,
                         "broker": broker_name,
                         "group": group_number,
                         "account": account_number,
