@@ -113,6 +113,32 @@ def _should_tag_entries(entries) -> bool:
     return False
 
 
+def _format_account_label(broker: str, account_name: str) -> str:
+    """Return an account label without repeating the broker prefix.
+
+    Args:
+        broker (str): Broker name associated with the holdings entry.
+        account_name (str): Nickname parsed from holdings data.
+
+    Returns:
+        str: Combined account label with a single broker prefix.
+    """
+
+    broker_prefix = (broker or "").strip()
+    normalized_account = (account_name or "").strip()
+
+    if not broker_prefix:
+        return normalized_account
+
+    if normalized_account.lower().startswith(broker_prefix.lower()):
+        return normalized_account
+
+    if not normalized_account:
+        return broker_prefix
+
+    return f"{broker_prefix} {normalized_account}".strip()
+
+
 def _resolve_round_up_snippet(policy_info, max_length: int):
     """Return a trimmed snippet describing the round-up policy if present."""
 
@@ -404,8 +430,9 @@ async def handle_primary_channel(bot, message):
                     account_name = alert["account_name"]
                     price = alert["price"]
                     price_fragment = f" @ ${price:.2f}" if price else ""
+                    account_label = _format_account_label(broker, account_name)
                     lines.append(
-                        f"- {broker} {account_name}: {qty:.2f} shares{price_fragment}"
+                        f"- {account_label}: {qty:.2f} shares{price_fragment}"
                     )
                 body = "\n".join(lines)
                 await response_channel.send(header + body)
@@ -430,10 +457,11 @@ async def handle_primary_channel(bot, message):
 
                 lines = []
                 for (broker, account_name), items in grouped.items():
+                    account_label = _format_account_label(broker, account_name)
                     details = ", ".join(
                         f"{it['ticker']} @ ${it['price']:.2f} (qty {it['quantity']})" for it in items
                     )
-                    lines.append(f"- {broker} {account_name}: {details}")
+                    lines.append(f"- {account_label}: {details}")
 
                 mention = _mention_prefix(tag_enabled=_should_tag_entries(alert_entries))
                 header = (

@@ -151,3 +151,85 @@ def test_alert_channel_message_remote_ticker_failure(monkeypatch):
 
     assert result["ticker"] is None
     assert result["reverse_split_confirmed"] is False
+
+
+def test_parse_general_embed_account_name_without_duplicate_broker(monkeypatch):
+    """General embed parsing should avoid duplicating broker names in account labels."""
+
+    class DummyField:
+        def __init__(self, name, value):
+            self.name = name
+            self.value = value
+
+    class DummyEmbed:
+        def __init__(self, fields):
+            self.fields = fields
+
+    monkeypatch.setattr(
+        parsing_utils,
+        "account_mapping",
+        {"Schwab": {"1": {"8745": "Schwab 1 8745"}}},
+        raising=False,
+    )
+
+    class DummySplitWatch:
+        @staticmethod
+        def get_status(_ticker):
+            return False
+
+        @staticmethod
+        def mark_account_bought(_ticker, _account_name):
+            return None
+
+    monkeypatch.setattr(parsing_utils, "split_watch_utils", DummySplitWatch)
+
+    embed = DummyEmbed(
+        [DummyField("Schwab 1 (8745)", "ABC: 1.00 @ $2.00 = $2.00\nTotal: $2.00")]
+    )
+
+    holdings = parsing_utils.parse_general_embed_message(embed)
+
+    assert len(holdings) == 1
+    assert holdings[0]["account_name"] == "Schwab 1 8745"
+    assert holdings[0]["broker"] == "Schwab"
+
+
+def test_parse_webull_embed_account_name_without_duplicate_broker(monkeypatch):
+    """Webull embed parsing should not prepend the broker when nickname already includes it."""
+
+    class DummyField:
+        def __init__(self, name, value):
+            self.name = name
+            self.value = value
+
+    class DummyEmbed:
+        def __init__(self, fields):
+            self.fields = fields
+
+    monkeypatch.setattr(
+        parsing_utils,
+        "account_mapping",
+        {"Webull": {"1": {"AB12": "Webull Flex"}}},
+        raising=False,
+    )
+
+    class DummySplitWatch:
+        @staticmethod
+        def get_status(_ticker):
+            return False
+
+        @staticmethod
+        def mark_account_bought(_ticker, _account_name):
+            return None
+
+    monkeypatch.setattr(parsing_utils, "split_watch_utils", DummySplitWatch)
+
+    embed = DummyEmbed(
+        [DummyField("Webull 1 xxxxAB12", "XYZ: 2.00 @ $3.00 = $6.00\nTotal: $6.00")]
+    )
+
+    holdings = parsing_utils.parse_webull_embed_message(embed)
+
+    assert len(holdings) == 1
+    assert holdings[0]["account_name"] == "Webull Flex"
+    assert holdings[0]["broker"] == "Webull"
