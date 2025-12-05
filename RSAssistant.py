@@ -82,6 +82,8 @@ from utils.on_message_utils import (
     enable_audit,
     disable_audit,
     get_audit_summary,
+    start_refresh_window,
+    REFRESH_WINDOW_DURATION,
 )
 from utils.watch_utils import (
     periodic_check,
@@ -1305,7 +1307,9 @@ async def show_reminder(ctx):
     holdings against the watchlist as the data is received. After all
     brokers complete, a summary of missing tickers is posted followed by
     a single embed consolidating broker holdings status for each
-    watchlist ticker.
+    watchlist ticker. Holdings alerts detected during the refresh are
+    buffered and emitted once after a 30-minute window to avoid noisy
+    interim notifications.
     """
     await ctx.send("Clearing the current holdings for refresh.")
     await clear_holdings(ctx)
@@ -1313,6 +1317,7 @@ async def show_reminder(ctx):
     if channel:
         await send_reminder_message_embed(channel)
         enable_audit()
+        start_refresh_window(bot, channel, REFRESH_WINDOW_DURATION)
         await ctx.send("!rsa holdings all")
 
         def check(message: discord.Message) -> bool:
