@@ -55,6 +55,9 @@ _missing_summary = defaultdict(set)
 _refresh_active = False
 _pending_alerts_by_broker = defaultdict(dict)  # broker -> ticker -> quantity
 _pending_sell_commands = []  # queued auto-sell commands during refresh
+_refresh_summary_task = None
+_refresh_channel = None
+REFRESH_WINDOW_DURATION = timedelta(minutes=30)
 
 AREB_TICKER = "AREB"
 AREB_QUANTITY_THRESHOLD = 50
@@ -160,23 +163,37 @@ def _resolve_round_up_snippet(policy_info, max_length: int):
     return extracted.strip()[:max_length]
 
 
-def _reset_refresh_state():
-    """Clear any buffered holdings refresh state."""
+def _reset_refresh_state(cancel_timer: bool = True):
+    """Clear buffered holdings refresh state and any pending timers."""
 
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
+    global _refresh_summary_task, _refresh_channel
+
+    if cancel_timer and _refresh_summary_task and not _refresh_summary_task.done():
+        _refresh_summary_task.cancel()
+
     _refresh_active = False
     _pending_alerts_by_broker = defaultdict(dict)
     _pending_sell_commands = []
+    _refresh_summary_task = None
+    _refresh_channel = None
 
 
-async def _handle_refresh_completion(
-    bot, message, lowered_content: str
-) -> None:
-    """Flush buffered alerts when AutoRSA signals holdings completion."""
+def _record_refresh_channel(channel) -> None:
+    """Persist the target channel for the refresh summary."""
 
-    global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
+    global _refresh_channel
+    _refresh_channel = channel
 
-    if not _refresh_active or "all commands complete in all brokers" not in lowered_content:
+
+async def _emit_refresh_summary(bot) -> None:
+    """Send a consolidated holdings summary after the refresh window ends."""
+
+    global _pending_alerts_by_broker, _pending_sell_commands
+
+    if not _pending_alerts_by_broker:
+        logger.info("No buffered alerts captured during holdings refresh window.")
+        _reset_refresh_state(cancel_timer=False)
         return
 
     try:
@@ -184,37 +201,67 @@ async def _handle_refresh_completion(
     except Exception:
         threshold = 1.0
 
-    if _pending_alerts_by_broker:
-        pending_entries = [
-            {"ticker": ticker, "quantity": quantity}
-            for ticker_map in _pending_alerts_by_broker.values()
-            for ticker, quantity in ticker_map.items()
-        ]
-        mention = _mention_prefix(tag_enabled=_should_tag_entries(pending_entries))
-        lines = []
-        for broker in sorted(_pending_alerts_by_broker.keys()):
-            tickers = ", ".join(sorted(_pending_alerts_by_broker[broker].keys()))
-            lines.append(f"- {broker}: {tickers}")
+    pending_entries = [
+        {"ticker": ticker, "quantity": quantity}
+        for ticker_map in _pending_alerts_by_broker.values()
+        for ticker, quantity in ticker_map.items()
+    ]
+    mention = _mention_prefix(tag_enabled=_should_tag_entries(pending_entries))
+    lines = []
+    for broker in sorted(_pending_alerts_by_broker.keys()):
+        tickers = ", ".join(sorted(_pending_alerts_by_broker[broker].keys()))
+        lines.append(f"- {broker}: {tickers}")
 
-        header = (
-            f"{mention}Detected holdings >= ${threshold:.2f} across {len(_pending_alerts_by_broker)} broker(s):\n"
-        )
-        max_len = 2000
-        body = "\n".join(lines)
-        first_msg = (header + body)[:max_len]
-        response_channel = resolve_message_destination(bot, message.channel)
-        await response_channel.send(first_msg)
+    header = (
+        f"{mention}Holdings >= ${threshold:.2f} detected across {len(_pending_alerts_by_broker)} broker(s) during refresh:\n"
+    )
+    max_len = 2000
+    body = "\n".join(lines)
+    first_msg = (header + body)[:max_len]
 
-        remaining = body[len(first_msg) - len(header) :]
-        while remaining:
-            chunk = remaining[: max_len - 1]
-            await response_channel.send(chunk)
-            remaining = remaining[len(chunk) :]
+    channel = resolve_message_destination(bot, _refresh_channel)
+    if channel is None:
+        logger.error("Unable to resolve channel for holdings refresh summary.")
+        _reset_refresh_state(cancel_timer=False)
+        return
 
-        for cmd in _pending_sell_commands:
-            await response_channel.send(cmd)
+    await channel.send(first_msg)
+
+    remaining = body[len(first_msg) - len(header) :]
+    while remaining:
+        chunk = remaining[: max_len - 1]
+        await channel.send(chunk)
+        remaining = remaining[len(chunk) :]
+
+    for cmd in _pending_sell_commands:
+        await channel.send(cmd)
+
+    _reset_refresh_state(cancel_timer=False)
+
+
+async def _await_refresh_window(bot, duration: timedelta) -> None:
+    """Wait for the refresh window to elapse before emitting a summary."""
+
+    try:
+        await asyncio.sleep(duration.total_seconds())
+        await _emit_refresh_summary(bot)
+    except asyncio.CancelledError:
+        logger.info("Holdings refresh summary window cancelled before completion.")
+        raise
+    finally:
+        _reset_refresh_state(cancel_timer=False)
+
+
+def start_refresh_window(bot, channel, duration: timedelta) -> None:
+    """Begin buffering holdings alerts and schedule a consolidated summary."""
+
+    global _refresh_active, _refresh_summary_task
 
     _reset_refresh_state()
+    _refresh_active = True
+    _record_refresh_channel(channel)
+    loop = getattr(bot, "loop", None) or asyncio.get_event_loop()
+    _refresh_summary_task = loop.create_task(_await_refresh_window(bot, duration))
 
 
 def is_broker_ignored(broker: str) -> bool:
@@ -320,19 +367,15 @@ async def handle_primary_channel(bot, message):
     heartbeat responsive even if broker APIs respond slowly.
     """
 
-    # Detect completion message regardless of author to flush buffered alerts
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
     lowered_content = message.content.lower().strip()
-    await _handle_refresh_completion(bot, message, lowered_content)
 
     response_channel = resolve_message_destination(bot, message.channel)
 
     # Detect start of holdings refresh to buffer alerts until completion
     if "!rsa holdings" in lowered_content:
-        _refresh_active = True
-        _pending_alerts_by_broker = defaultdict(dict)
-        _pending_sell_commands = []
-        logger.info("Detected start of holdings refresh; buffering alerts.")
+        start_refresh_window(bot, message.channel, REFRESH_WINDOW_DURATION)
+        logger.info("Detected start of holdings refresh; buffering alerts with timer.")
 
     if message.content.startswith(BOT_PREFIX):
         logger.warning(f"Detected message with command prefix: {BOT_PREFIX}")
