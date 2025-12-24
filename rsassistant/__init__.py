@@ -1,0 +1,1 @@
+"""RSAssistant package namespace."""

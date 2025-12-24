@@ -193,6 +193,8 @@ To run locally with a custom env file path instead of `config/.env`, prefix comm
 ENV_FILE=config/.env python RSAssistant.py
 ```
 
+`RSAssistant.py` now launches the modular bot implementation under `rsassistant/bot`. To run the legacy monolith for comparison, set `RSASSISTANT_ENTRYPOINT=legacy`.
+
 ## Default Account Nicknames
 
 When an account has no nickname in `account_mapping.json`, RSAssistant falls

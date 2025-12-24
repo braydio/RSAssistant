@@ -18,6 +18,16 @@ from datetime import datetime, timedelta
 import itertools
 from typing import Optional, Any
 
+if __name__ == "__main__" and os.getenv("RSASSISTANT_ENTRYPOINT", "modular").lower() in (
+    "1",
+    "true",
+    "modular",
+):
+    from rsassistant.bot.core import run_bot
+
+    run_bot()
+    sys.exit(0)
+
 # Third-party imports
 import discord
 import discord.gateway

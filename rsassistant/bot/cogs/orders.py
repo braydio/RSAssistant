@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from discord.ext import commands
 
+from utils.csv_utils import sell_all_position
 from utils.order_exec import schedule_and_execute
 from utils.order_queue_manager import list_order_queue
 
@@ -118,6 +119,7 @@ class OrdersCog(commands.Cog):
 
                 if execution_time < now:
                     execution_time += timedelta(days=1)
+                execution_time = next_open(execution_time)
             else:
                 if market_open <= now <= market_close and now.weekday() < 5:
                     execution_time = now
@@ -149,6 +151,20 @@ class OrdersCog(commands.Cog):
                 add_to_queue=True,
             )
         )
+
+    @commands.command(
+        name="liquidate",
+        help="Liquidate holdings for a brokerage.",
+        usage="<broker> [test_mode]",
+        extras={"category": "Orders"},
+    )
+    async def liquidate(self, ctx: commands.Context, broker: str, test_mode: str = "false") -> None:
+        """Liquidate holdings for a specific brokerage."""
+
+        try:
+            await sell_all_position(ctx, broker, test_mode)
+        except Exception as exc:
+            await ctx.send(f"An error occurred: {exc}")
 
 
 async def setup(bot: commands.Bot) -> None:

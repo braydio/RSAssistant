@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import discord
 from discord.ext import commands
 
 from utils.watch_utils import watch as handle_watch_command
@@ -67,6 +68,47 @@ class WatchlistCog(commands.Cog):
     )
     async def watched_ticker(self, ctx: commands.Context, ticker: str) -> None:
         await watch_list_manager.stop_watching(ctx, ticker)
+
+    @commands.command(
+        name="selling",
+        help="View the current sell queue.",
+        usage="",
+        extras={"category": "Watchlist"},
+    )
+    async def view_sell_list(self, ctx: commands.Context) -> None:
+        """Display queued sell orders stored by the bot."""
+
+        sell_list = watch_list_manager.get_sell_list()
+        if not sell_list:
+            await ctx.send("The sell list is empty.")
+            return
+
+        embed = discord.Embed(
+            title="Sell List",
+            description="Tickers flagged for selling:",
+            color=discord.Color.red(),
+        )
+        for ticker, details in sell_list.items():
+            added_on = details.get("added_on", "N/A")
+            embed.add_field(name=ticker, value=f"Added on: {added_on}", inline=False)
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="unsell",
+        help="Remove a ticker from the sell queue.",
+        usage="<ticker>",
+        extras={"category": "Watchlist"},
+    )
+    async def remove_sell_order(self, ctx: commands.Context, ticker: str) -> None:
+        """Remove a queued sell order for ``ticker`` from the sell list."""
+
+        normalized_ticker = ticker.upper()
+        removed = watch_list_manager.remove_from_sell_list(normalized_ticker)
+
+        if removed:
+            await ctx.send(f"{normalized_ticker} removed from the sell list.")
+        else:
+            await ctx.send(f"{normalized_ticker} was not found in the sell list.")
 
 
 async def setup(bot: commands.Bot) -> None:
