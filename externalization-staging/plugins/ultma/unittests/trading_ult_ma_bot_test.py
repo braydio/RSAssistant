@@ -1,14 +1,19 @@
 """Unit tests for the ULT-MA trading controller."""
 
 import asyncio
+import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List
 
-from utils.trading.market_data import Candle
-from utils.trading.state import TradePosition, TradingStateStore
-from utils.trading.ult_ma_bot import UltMaTradingBot
+STAGING_ROOT = Path(__file__).resolve().parents[3]
+if str(STAGING_ROOT) not in sys.path:
+    sys.path.insert(0, str(STAGING_ROOT))
+
+from plugins.ultma.market_data import Candle
+from plugins.ultma.state import TradePosition, TradingStateStore
+from plugins.ultma.ult_ma_bot import UltMaTradingBot
 
 
 class DummyExecutor:

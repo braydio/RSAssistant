@@ -3,7 +3,7 @@
 ## Project Structure & Modules
 - `RSAssistant.py`: main entrypoint for the assistant/bot.
 - `utils/`: reusable modules (config, parsing, orders, cache, I/O).
-- `pr_watcher.py`: lightweight PR status watcher.
+- `externalization-staging/`: staged plugins/utilities slated for extraction.
 - `unittests/`: unit tests grouped by feature (e.g., `*_test.py`).
 - `config/`: single source for settings and `.env`.
 - `volumes/`: docker-mounted db/excel/logs data.
@@ -13,7 +13,7 @@
 - Setup venv: `python -m venv .venv && source .venv/bin/activate`
 - Install deps: `pip install -r requirements.txt`
 - Run app: `python RSAssistant.py`
-- Run PR watcher: `python pr_watcher.py`
+- Run PR watcher: `python externalization-staging/devops/pr_watcher.py`
 - Run tests: `python -m unittest discover -s unittests -p '*_test.py'`
 - Docker build/run: `docker build -t rsassistant .` then `docker compose up`
 

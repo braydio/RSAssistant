@@ -16,7 +16,7 @@ import sys
 import logging
 from datetime import datetime, timedelta
 import itertools
-from typing import Optional
+from typing import Optional, Any
 
 # Third-party imports
 import discord
@@ -93,7 +93,14 @@ from utils.watch_utils import (
     watch as handle_watch_command,
 )
 from utils.refresh_scheduler import compute_next_refresh_datetime, MARKET_TZ
-from utils.trading import TradeExecutor, TradingStateStore, UltMaTradingBot
+try:
+    from utils.trading import TradeExecutor, TradingStateStore, UltMaTradingBot
+    TRADING_MODULE_AVAILABLE = True
+except ModuleNotFoundError:
+    TradeExecutor = None  # type: ignore[assignment]
+    TradingStateStore = None  # type: ignore[assignment]
+    UltMaTradingBot = None  # type: ignore[assignment]
+    TRADING_MODULE_AVAILABLE = False
 from utils.channel_resolver import resolve_reply_channel
 
 bot_info = (
@@ -111,9 +118,14 @@ else:
 logger.info(f"Holdings Log CSV file: {HOLDINGS_LOG_CSV}")
 logger.info(f"Orders Log CSV file: {ORDERS_LOG_CSV}")
 
-TRADING_MODE_ENABLED = ENABLE_AUTOMATED_TRADING
-trading_bot: Optional[UltMaTradingBot] = None
+TRADING_MODE_ENABLED = ENABLE_AUTOMATED_TRADING and TRADING_MODULE_AVAILABLE
+trading_bot: Optional[Any] = None
 _trading_tasks_started = False
+
+if ENABLE_AUTOMATED_TRADING and not TRADING_MODULE_AVAILABLE:
+    logger.warning(
+        "Automated trading is enabled, but the trading module is not installed."
+    )
 
 
 class CategoryHelpCommand(commands.MinimalHelpCommand):
@@ -234,6 +246,9 @@ async def ensure_trading_mode() -> None:
     """Instantiate and start the optional trading automation."""
 
     global trading_bot, _trading_tasks_started
+    if not TRADING_MODULE_AVAILABLE:
+        logger.warning("Trading module unavailable; skipping trading startup.")
+        return
     if not TRADING_MODE_ENABLED:
         return
     if trading_bot is not None and _trading_tasks_started:
@@ -264,6 +279,8 @@ async def ensure_trading_mode() -> None:
 
 
 def _trading_disabled_message() -> str:
+    if not TRADING_MODULE_AVAILABLE:
+        return "Trading module is not installed. Install the ULT-MA plugin to enable trading commands."
     if not TRADING_MODE_ENABLED:
         return "Automated trading mode is disabled. Launch with --enable-trading or set ENABLE_AUTOMATED_TRADING=true."
     return "Trading module has not finished initialising."

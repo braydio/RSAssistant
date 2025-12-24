@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import requests
 
-from utils.trading.market_data import YahooMarketDataProvider
+STAGING_ROOT = Path(__file__).resolve().parents[3]
+if str(STAGING_ROOT) not in sys.path:
+    sys.path.insert(0, str(STAGING_ROOT))
+
+from plugins.ultma.market_data import YahooMarketDataProvider
 
 
 class FakeResponse:
@@ -28,7 +34,7 @@ class FakeResponse:
 
 class YahooMarketDataProviderTest(unittest.TestCase):
     @mock.patch("time.sleep")
-    @mock.patch("utils.trading.market_data.requests.get")
+    @mock.patch("plugins.ultma.market_data.requests.get")
     def test_fetch_candles_retries_on_rate_limit(self, get_mock, sleep_mock):
         rate_limited = FakeResponse(status_code=429, headers={"Retry-After": "2"})
         successful = FakeResponse(
@@ -63,7 +69,7 @@ class YahooMarketDataProviderTest(unittest.TestCase):
         sleep_mock.assert_called_with(2.0)
 
     @mock.patch("time.sleep")
-    @mock.patch("utils.trading.market_data.requests.get")
+    @mock.patch("plugins.ultma.market_data.requests.get")
     def test_rate_limit_exhausts_retries(self, get_mock, sleep_mock):
         get_mock.return_value = FakeResponse(status_code=429)
 
