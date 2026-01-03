@@ -1,5 +1,6 @@
 """Discord message handlers used by RSAssistant."""
 
+import json
 import re
 import asyncio
 from datetime import datetime, timedelta, date
@@ -22,7 +23,8 @@ from utils.watch_utils import (
     watch_list_manager,
 )
 from utils.update_utils import update_and_restart, revert_and_restart
-from utils.order_exec import schedule_and_execute
+from utils.order_exec import schedule_and_execute, send_sell_command
+from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
 from utils.monitor_utils import has_acted_today, record_action_today
 from utils.config_utils import (
     AUTO_SELL_LIVE,
@@ -163,6 +165,17 @@ def _resolve_round_up_snippet(policy_info, max_length: int):
     return extracted.strip()[:max_length]
 
 
+def _format_watch_date(split_date: str) -> str:
+    """Normalize split_date to M/D for watch command compatibility."""
+    if not split_date:
+        return split_date
+    try:
+        parsed = datetime.fromisoformat(split_date).date()
+        return f"{parsed.month}/{parsed.day}"
+    except ValueError:
+        return split_date
+
+
 def _reset_refresh_state(cancel_timer: bool = True):
     """Clear buffered holdings refresh state and any pending timers."""
 
@@ -234,7 +247,7 @@ async def _emit_refresh_summary(bot) -> None:
         remaining = remaining[len(chunk) :]
 
     for cmd in _pending_sell_commands:
-        await channel.send(cmd)
+        await send_sell_command(channel, cmd, bot=bot)
 
     _reset_refresh_state(cancel_timer=False)
 
@@ -525,7 +538,7 @@ async def handle_primary_channel(bot, message):
 
                 # After summary, send any queued auto-sell commands
                 for cmd in sell_commands:
-                    await response_channel.send(cmd)
+                    await send_sell_command(response_channel, cmd, bot=bot)
             if _audit_active:
                 await _audit_holdings(bot, message, parsed_holdings)
         except Exception as e:
@@ -622,34 +635,43 @@ async def handle_secondary_channel(bot, message):
             )
 
         if policy_info.get("round_up_confirmed"):
-            await attempt_autobuy(bot, response_channel, ticker, quantity=1)
             split_date = policy_info.get("effective_date") or date.today().isoformat()
-            split_watch_utils.add_split_watch(ticker, split_date)
-            logger.info(f"Added split watch: {ticker} @ {split_date}")
+            split_ratio = policy_info.get("split_ratio") or "N/A"
+            watch_date = _format_watch_date(split_date)
+
+            if not watch_list_manager.ticker_exists(ticker):
+                watch_command = (
+                    f"{BOT_PREFIX}watch {ticker.upper()} {watch_date} {split_ratio}"
+                )
+                logger.info("Auto watch command: %s", watch_command)
+                await watch_list_manager.watch_ticker(
+                    response_channel, ticker, watch_date, split_ratio
+                )
+
+            existing = split_watch_utils.get_status(ticker)
+            if existing:
+                logger.info(
+                    "Split watch already exists for %s; skipping autobuy.",
+                    ticker,
+                )
+            else:
+                split_watch_utils.add_split_watch(ticker, split_date)
+                logger.info("Added split watch: %s @ %s", ticker, split_date)
+                await attempt_autobuy(bot, response_channel, ticker, quantity=1)
     except Exception:
         logger.exception("Error during policy analysis secondary channel")
 
 
 async def attempt_autobuy(bot, channel, ticker, quantity=1):
-    now = datetime.now()
-    mon_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    mon_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    now = datetime.now(MARKET_TZ)
 
     target_channel = resolve_message_destination(bot, channel)
 
-    if now.weekday() >= 5:
-        days = (7 - now.weekday()) % 7 or 7
-        exec_time = (now + timedelta(days=days)).replace(
-            hour=9, minute=30, second=0, microsecond=0
-        )
-        logger.warning("Scheduling autobuy next Monday")
-    elif mon_open <= now <= mon_close:
+    if is_market_open_at(now):
         exec_time = now
         logger.info("Market open – immediate autobuy")
     else:
-        exec_time = (now + timedelta(days=1)).replace(
-            hour=9, minute=30, second=0, microsecond=0
-        )
+        exec_time = next_market_open(now)
         logger.info("Market closed – scheduling next market open")
 
     # Prepare scheduling details and enqueue
@@ -662,6 +684,7 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
             quantity=quantity,
             broker="all",
             execution_time=exec_time,
+            bot=bot,
             order_id=order_id,
         )
     )
@@ -686,12 +709,26 @@ def build_policy_summary(ticker, policy_info, fallback_url):
     if effective_date:
         summary += f"**Effective Date:** {effective_date}\n"
 
+    split_ratio = policy_info.get("split_ratio")
+    if split_ratio:
+        summary += f"**Split Ratio:** {split_ratio}\n"
+
     policy_text = policy_info.get("sec_policy") or policy_info.get("policy")
     summary += f"**Fractional Share Policy:** {policy_text}"
+
+    fractional_policy = policy_info.get("fractional_share_policy")
+    if fractional_policy:
+        summary += f"\n**Fractional Share Policy (LLM):** {fractional_policy}"
 
     snippet = policy_info.get("snippet")
     if snippet:
         summary += f"\n> {snippet}"
+
+    llm_details = policy_info.get("llm_details")
+    if llm_details:
+        summary += "\n```json\n"
+        summary += json.dumps(llm_details, sort_keys=True)
+        summary += "\n```"
 
     return summary
 

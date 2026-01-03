@@ -13,6 +13,7 @@ from utils.logging_setup import logger
 from utils.sec_policy_fetcher import SECPolicyFetcher
 from utils.config_utils import VOLUMES_DIR
 from utils.text_normalization import normalize_cash_in_lieu_phrases
+from utils.openai_utils import extract_reverse_split_details
 
 
 class SplitPolicyResolver:
@@ -127,8 +128,43 @@ class SplitPolicyResolver:
             return None
 
     @staticmethod
-    def fetch_body_text(url):
-        """Retrieve cleaned body text from a webpage."""
+    def _extract_main_text(html_text: str) -> str:
+        """Return the most relevant text block from an HTML document."""
+        soup = BeautifulSoup(html_text, "html.parser")
+        for tag in soup(
+            [
+                "script",
+                "style",
+                "nav",
+                "header",
+                "footer",
+                "aside",
+                "form",
+                "noscript",
+                "svg",
+                "canvas",
+            ]
+        ):
+            tag.decompose()
+
+        candidates = soup.find_all(["main", "article", "section", "div", "body"])
+        best_text = ""
+        best_score = 0
+        for candidate in candidates:
+            text = candidate.get_text(separator=" ", strip=True)
+            score = len(text.split())
+            if score > best_score:
+                best_score = score
+                best_text = text
+
+        if not best_text:
+            best_text = soup.get_text(separator=" ", strip=True)
+
+        return " ".join(best_text.split())
+
+    @classmethod
+    def fetch_body_text(cls, url):
+        """Retrieve cleaned main body text from a webpage."""
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
@@ -136,12 +172,7 @@ class SplitPolicyResolver:
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
 
-            soup = BeautifulSoup(response.text, "html.parser")
-            body = soup.body or soup
-            for tag in body(["script", "style"]):
-                tag.decompose()
-            text = body.get_text(separator=" ", strip=True)
-            text = " ".join(text.split())
+            text = cls._extract_main_text(response.text)
             logger.info(f"Fetched body text ({len(text)} characters) from {url}")
             return text
         except Exception as e:
@@ -390,6 +421,11 @@ class SplitPolicyResolver:
                         )
 
             source_url = nasdaq_result.get("press_url") or nasdaq_result.get("sec_url")
+            if not source_url:
+                logger.info(
+                    "No press/SEC URL found; falling back to NASDAQ notice for body text."
+                )
+                source_url = nasdaq_url
             if source_url:
                 body_text = cls.fetch_body_text(source_url)
                 if body_text:
@@ -399,6 +435,31 @@ class SplitPolicyResolver:
                         nasdaq_result["effective_date"] = cls.extract_effective_date(
                             body_text
                         )
+                    llm_details = extract_reverse_split_details(
+                        body_text, source_url=source_url, ticker=ticker
+                    )
+                    if llm_details:
+                        nasdaq_result["llm_details"] = llm_details
+                        if llm_details.get("effective_date"):
+                            nasdaq_result["effective_date"] = llm_details.get(
+                                "effective_date"
+                            )
+                        if llm_details.get("split_ratio"):
+                            nasdaq_result["split_ratio"] = llm_details.get(
+                                "split_ratio"
+                            )
+                        if llm_details.get("reverse_split_confirmed") is not None:
+                            nasdaq_result["reverse_split_confirmed"] = llm_details.get(
+                                "reverse_split_confirmed"
+                            )
+                        policy = llm_details.get("fractional_share_policy")
+                        if policy:
+                            nasdaq_result["fractional_share_policy"] = policy
+                            llm_round_up = policy in {
+                                "rounded_to_nearest_whole",
+                                "rounded_up",
+                            }
+                            nasdaq_result["round_up_confirmed"] = llm_round_up
                 else:
                     logger.warning(f"Failed to fetch body text from {source_url}")
             else:

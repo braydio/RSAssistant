@@ -7,15 +7,11 @@ from datetime import datetime, timedelta
 
 from utils.config_utils import (
     SQL_DATABASE,
-    load_config,
     get_account_nickname_or_default,
     SQL_LOGGING_ENABLED,
 )
 
 logger = logging.getLogger(__name__)
-
-# Config and setup
-config = load_config()
 
 SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 

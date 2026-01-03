@@ -9,9 +9,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Union
 
 from .executor import TradeExecutor
-from .market_data import YahooMarketDataProvider
+from .market_data import YFinanceMarketDataProvider
 from .state import TradePosition, TradingSettings, TradingStateStore
-from ..config_utils import TRADING_BROKERS
+from .config import TRADING_BROKERS
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class UltMaTradingBot:
         self,
         executor: TradeExecutor,
         state_store: TradingStateStore,
-        data_provider: Optional[YahooMarketDataProvider] = None,
+        data_provider: Optional[YFinanceMarketDataProvider] = None,
         candle_interval: timedelta = timedelta(hours=4),
         price_check_interval: timedelta = timedelta(minutes=5),
         trailing_buffer: float = 0.03,
@@ -44,7 +44,7 @@ class UltMaTradingBot:
     ) -> None:
         self.executor = executor
         self.store = state_store
-        self.data = data_provider or YahooMarketDataProvider()
+        self.data = data_provider or YFinanceMarketDataProvider()
         self.candle_interval = candle_interval
         self.price_check_interval = price_check_interval
         self.trailing_buffer = trailing_buffer

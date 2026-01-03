@@ -24,7 +24,8 @@ from utils.config_utils import (
 from utils.csv_utils import save_order_to_csv
 from utils.excel_utils import update_excel_log, record_error_message
 from utils.sql_utils import insert_order_history
-from utils.utility_utils import debug_order_data, get_last_stock_price
+from utils.utility_utils import debug_order_data
+from utils.price_fetcher import get_last_stock_price
 
 from utils import split_watch_utils
 

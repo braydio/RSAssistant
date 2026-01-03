@@ -1,0 +1,1 @@
+"""Optional RSAssistant plugin namespace."""

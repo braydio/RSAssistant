@@ -44,3 +44,21 @@ def test_detect_policy_prioritizes_round_up_over_no_fractional():
         text, SplitPolicyResolver.NASDAQ_KEYWORDS
     )
     assert policy == "Rounded up"
+
+
+def test_extract_main_text_prefers_primary_content():
+    html = """
+    <html>
+      <body>
+        <nav>Navigation links</nav>
+        <article>
+          <h1>Reverse Split Notice</h1>
+          <p>The company announced a 1-for-10 reverse stock split.</p>
+        </article>
+        <footer>Footer text</footer>
+      </body>
+    </html>
+    """
+    text = SplitPolicyResolver._extract_main_text(html)
+    assert "Reverse Split Notice" in text
+    assert "Navigation links" not in text

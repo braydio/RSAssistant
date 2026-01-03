@@ -36,7 +36,7 @@
 
 ## Security & Configuration
 - Never commit secrets. Copy `config/example.env` to `config/.env` for local dev; Docker reads from `config/.env`.
-- Primary app settings: `config/settings.yml`.
+- Primary app settings: `config/.env` (with `ENV_FILE` overrides). `config/settings.yml` is legacy/compat.
 - Redact tokens and account identifiers in logs and PRs.
 
 ## Conventions & Examples

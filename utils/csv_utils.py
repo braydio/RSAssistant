@@ -21,15 +21,13 @@ from discord import Embed
 from utils.config_utils import (
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
-    load_config,
     CSV_LOGGING_ENABLED,
 )
 from utils.sql_utils import update_holdings_live
+from utils.order_exec import send_sell_command
 
 logger = logging.getLogger(__name__)
 
-# Load configuration and mappings
-config = load_config()
 HOLDINGS_HEADERS = [
     "Key",
     "Broker Name",
@@ -536,7 +534,7 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
         # Liquidate each stock
         for ticker, quantity in tickers.items():
             sell_command = f"!rsa sell {quantity} {ticker} {broker} {live_mode}"
-            await ctx.send(sell_command)
+            await send_sell_command(ctx, sell_command, bot=getattr(ctx, "bot", None))
             logger.info(f"Executed: {sell_command}")
 
             # Wait 30 seconds before the next stock

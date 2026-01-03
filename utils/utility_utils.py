@@ -9,21 +9,14 @@ from pathlib import Path
 import discord
 import yaml
 
-from utils.price_cache import get_price
-
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     HOLDINGS_LOG_CSV,
     get_account_nickname,
     load_account_mappings,
-    load_config,
 )
 
 logger = logging.getLogger(__name__)
-
-# Load configuration and holdings data
-config = load_config()
-
 
 def check_holdings_timestamp(filename):
     """Reads the latest timestamp from the specified CSV file."""
@@ -464,33 +457,6 @@ async def all_brokers(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
         logging.error(f"Exception in all_brokers: {e}")
-
-
-# Retrieve Last Stock Price
-def get_last_stock_price(stock):
-    """Return the most recent cached price for ``stock``.
-
-    Parameters
-    ----------
-    stock : str
-        Equity ticker symbol to look up.
-
-    Returns
-    -------
-    float | None
-        Cached or freshly fetched quote value. ``None`` when pricing data is
-        unavailable even after attempting a refresh.
-
-    Notes
-    -----
-    The price is sourced from :mod:`utils.price_cache`, which queries Nasdaq's
-    quote API with retry logic and on-disk caching to avoid the throttling
-    issues encountered with the :mod:`yfinance` package.
-    """
-    price = get_price(stock)
-    if price is None:
-        logging.warning(f"No stock data found for {stock}.")
-    return price
 
 
 # -- Get Totals for Specific Broker

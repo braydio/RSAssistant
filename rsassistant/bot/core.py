@@ -30,12 +30,19 @@ from utils.config_utils import (
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
+    OPENAI_POLICY_ENABLED,
     SQL_LOGGING_ENABLED,
+    VOLUMES_DIR,
 )
 from utils.logging_setup import setup_logging
 from utils.on_message_utils import handle_on_message, set_channels
 from utils.order_queue_manager import get_order_queue
 from utils.sql_utils import init_db
+from utils.market_calendar import MARKET_TZ, is_market_day
+from utils.price_fetcher import CACHE_FILE as PRICE_CACHE_FILE
+from utils.price_fetcher import TTL_SECONDS as PRICE_CACHE_TTL_SECONDS
 
 __all__ = ["RSAssistantBot", "create_bot", "run_bot"]
 
@@ -55,6 +62,17 @@ discord.gateway.DiscordWebSocket.gateway_timeout = 60
 
 logger = logging.getLogger(__name__)
 setup_logging()
+
+logger.info(
+    "Healthcheck: openai_enabled=%s openai_key=%s model=%s plugins=%s volumes_dir=%s price_cache=%s ttl=%ss",
+    OPENAI_POLICY_ENABLED,
+    bool(OPENAI_API_KEY),
+    OPENAI_MODEL,
+    os.getenv("ENABLED_PLUGINS", ""),
+    VOLUMES_DIR,
+    PRICE_CACHE_FILE,
+    PRICE_CACHE_TTL_SECONDS,
+)
 
 if SQL_LOGGING_ENABLED:
     init_db()
@@ -167,6 +185,17 @@ class RSAssistantBot(commands.Bot):
             logger.info("Message is from myself! %s", self.user)
             return
         if message.content.startswith(BOT_PREFIX):
+            now = datetime.now(MARKET_TZ)
+            if not is_market_day(now.date()):
+                logger.info(
+                    "Skipping command on non-market day %s: %s",
+                    now.date(),
+                    message.content,
+                )
+                await message.channel.send(
+                    "Commands are paused on weekends and configured market holidays."
+                )
+                return
             logger.info("Handling command %s", message.content)
             await self.process_commands(message)
             return

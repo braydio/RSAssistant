@@ -2,15 +2,37 @@
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 
 from utils.watch_utils import watch_list_manager
+from utils.channel_resolver import resolve_reply_channel
+from utils.config_utils import (
+    DISCORD_PRIMARY_CHANNEL,
+    RSA_COMMAND_MIN_INTERVAL_SECONDS,
+)
 from utils.order_queue_manager import add_to_order_queue, remove_order
+from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
 
 logger = logging.getLogger(__name__)
 
 # Task queue for handling messages
 task_queue = asyncio.Queue()
+_rsa_command_lock = asyncio.Lock()
+_last_rsa_command_at = 0.0
+
+
+async def _await_rsa_rate_limit() -> None:
+    """Enforce a minimum interval between !rsa command sends."""
+    global _last_rsa_command_at
+    async with _rsa_command_lock:
+        now = time.monotonic()
+        elapsed = now - _last_rsa_command_at
+        delay = max(0.0, RSA_COMMAND_MIN_INTERVAL_SECONDS - elapsed)
+        if delay > 0:
+            logger.info("Rate limiting !rsa command for %.2fs.", delay)
+            await asyncio.sleep(delay)
+        _last_rsa_command_at = time.monotonic()
 
 
 async def processTasks(message):
@@ -50,13 +72,24 @@ async def processQueue():
         task_queue.task_done()
 
 
-async def send_sell_command(target, command: str, loop=None):
-    """Send an order command to a Discord context or channel."""
+async def send_sell_command(target, command: str, loop=None, bot=None):
+    """Send an order command to the configured primary channel when possible."""
 
     try:
         logger.info(f"Preparing to send command: {command}")
-        await target.send(command)
-        channel = getattr(target, "channel", target)
+        primary_channel = None
+        if bot is not None:
+            primary_channel = resolve_reply_channel(
+                bot, preferred_id=DISCORD_PRIMARY_CHANNEL
+            )
+        target_channel = primary_channel or target
+        if target_channel is None:
+            logger.error("No channel available to send order command.")
+            return
+        if command.strip().lower().startswith("!rsa"):
+            await _await_rsa_rate_limit()
+        await target_channel.send(command)
+        channel = getattr(target_channel, "channel", target_channel)
         channel_id = getattr(channel, "id", "unknown")
         logger.info(f"Sent command: {command} to channel {channel_id}")
     except Exception as e:
@@ -66,12 +99,12 @@ async def send_sell_command(target, command: str, loop=None):
 async def process_sell_list():
     while True:
         try:
-            now = datetime.now()
+            now = datetime.now(MARKET_TZ)
             for ticker, details in list(watch_list_manager.sell_list.items()):
                 scheduled_time = datetime.strptime(
                     details["scheduled_time"], "%Y-%m-%d %H:%M:%S"
-                )
-                if now >= scheduled_time:
+                ).replace(tzinfo=MARKET_TZ)
+                if now >= scheduled_time and is_market_open_at(now):
                     # Execute the sell command
                     command = f"test command {details['quantity']} {ticker} {details['broker']} false"
                     await send_sell_command(None, command)
@@ -92,6 +125,7 @@ async def schedule_and_execute(
     quantity: float,
     broker: str,
     execution_time: datetime,
+    bot=None,
     *,
     order_id: str | None = None,
     add_to_queue: bool = True,
@@ -122,14 +156,28 @@ async def schedule_and_execute(
                 scheduled_time=execution_time.strftime("%Y-%m-%d %H:%M:%S"),
             )
 
-        now = datetime.now()
+        now = datetime.now(MARKET_TZ)
+        if execution_time.tzinfo is None:
+            execution_time = execution_time.replace(tzinfo=MARKET_TZ)
+        reference_time = execution_time if execution_time > now else now
+        if not is_market_open_at(reference_time):
+            execution_time = next_market_open(reference_time)
+
         delay = max((execution_time - now).total_seconds(), 0)
         if delay > 0:
-            logger.info(f"Waiting {delay} seconds to execute {action} command.")
+            logger.info(
+                "Waiting %.0f seconds to execute %s command (scheduled for %s).",
+                delay,
+                action,
+                execution_time,
+            )
             await asyncio.sleep(delay)
 
         command = f"!rsa {action} {quantity} {ticker.upper()} {broker} false"
-        await send_sell_command(ctx, command, loop=asyncio.get_event_loop())
+        resolved_bot = bot or getattr(ctx, "bot", None)
+        await send_sell_command(
+            ctx, command, loop=asyncio.get_event_loop(), bot=resolved_bot
+        )
 
         if action.lower() == "sell":
             watch_list_manager.remove_from_sell_list(ticker)

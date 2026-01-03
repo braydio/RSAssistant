@@ -14,6 +14,7 @@ solely under ``./config``.
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 import dotenv
@@ -89,7 +90,6 @@ HOLDINGS_LOG_CSV = VOLUMES_DIR / "logs" / "holdings_log.csv"
 ORDERS_LOG_CSV = VOLUMES_DIR / "logs" / "orders_log.csv"
 SQL_DATABASE = VOLUMES_DIR / "db" / "rsa_database.db"
 ERROR_LOG_FILE = VOLUMES_DIR / "logs" / "error_log.txt"
-TRADING_DATABASE = VOLUMES_DIR / "db" / "ult_ma_trading.db"
 
 # --- Account nickname pattern ---
 DEFAULT_ACCOUNT_NICKNAME = "{broker} {group} {account}"
@@ -101,6 +101,17 @@ DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
 DISCORD_TERTIARY_CHANNEL = int(os.getenv("DISCORD_TERTIARY_CHANNEL", 0))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
+# OpenAI parsing for reverse split notices
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "20"))
+OPENAI_POLICY_ENABLED = (
+    os.getenv("OPENAI_POLICY_ENABLED", "false").strip().lower() == "true"
+)
+# Minimum interval between outbound !rsa commands (rate-limit protection)
+RSA_COMMAND_MIN_INTERVAL_SECONDS = float(
+    os.getenv("RSA_COMMAND_MIN_INTERVAL_SECONDS", "2")
+)
 # Enable scheduled ``..all`` refreshes every 15 minutes during market hours
 ENABLE_MARKET_REFRESH = (
     os.getenv("ENABLE_MARKET_REFRESH", "false").strip().lower() == "true"
@@ -125,24 +136,6 @@ EXCEL_LOGGING_ENABLED = (
     os.getenv("EXCEL_LOGGING_ENABLED", "true").strip().lower() == "true"
 )
 SQL_LOGGING_ENABLED = os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
-ENABLE_AUTOMATED_TRADING = (
-    os.getenv("ENABLE_AUTOMATED_TRADING", "false").strip().lower() == "true"
-)
-TRADING_ALLOW_EXTENDED_TREND = (
-    os.getenv("TRADING_ALLOW_EXTENDED_TREND", "false").strip().lower() == "true"
-)
-TRADING_TREND_SAFEGUARD_ENABLED = (
-    os.getenv("TRADING_TREND_SAFEGUARD_ENABLED", "true").strip().lower() == "true"
-)
-TRADING_LOGGING_ENABLED = (
-    os.getenv("TRADING_LOGGING_ENABLED", "true").strip().lower() == "true"
-)
-TRADING_TRAILING_BUFFER = float(os.getenv("TRADING_TRAILING_BUFFER", "0.03"))
-TRADING_PRICE_CHECK_INTERVAL_SECONDS = int(
-    os.getenv("TRADING_PRICE_CHECK_INTERVAL_SECONDS", str(5 * 60))
-)
-AUTO_RSA_BASE_URL = os.getenv("AUTO_RSA_BASE_URL", "")
-AUTO_RSA_API_KEY = os.getenv("AUTO_RSA_API_KEY", "")
 
 # Path to ignore list files (defaults inside config/)
 IGNORE_TICKERS_FILE = Path(
@@ -154,39 +147,9 @@ IGNORE_BROKERS_FILE = Path(
 TAGGED_ALERTS_FILE = Path(
     os.getenv("TAGGED_ALERTS_FILE", str(CONFIG_DIR / "tagged_alerts.txt"))
 ).resolve()
-
-
-def _parse_trading_brokers(raw_value: str) -> list[str]:
-    """Return an ordered list of broker identifiers for automated trading.
-
-    Parameters
-    ----------
-    raw_value:
-        Comma-separated string sourced from the ``TRADING_BROKERS`` environment
-        variable.
-
-    Returns
-    -------
-    list[str]
-        Sanitized broker identifiers in the order provided. Empty segments are
-        ignored.
-    """
-
-    if not raw_value:
-        return []
-
-    return [broker.strip() for broker in raw_value.split(",") if broker.strip()]
-
-
-TRADING_BROKERS = _parse_trading_brokers(os.getenv("TRADING_BROKERS", ""))
-if TRADING_BROKERS:
-    logger.info(
-        "Configured %d trading broker(s) for auto-rsa sells: %s",
-        len(TRADING_BROKERS),
-        ", ".join(TRADING_BROKERS),
-    )
-else:
-    logger.info("No trading brokers configured; sell requests will target 'all'.")
+MARKET_HOLIDAYS_FILE = Path(
+    os.getenv("MARKET_HOLIDAYS_FILE", str(CONFIG_DIR / "market_holidays.txt"))
+).resolve()
 
 
 def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
@@ -233,6 +196,44 @@ def _compute_ignore_tickers() -> set:
 
 
 IGNORE_TICKERS = _compute_ignore_tickers()
+
+
+def _load_market_holidays(path: Path) -> set:
+    """Return a set of holiday dates parsed from ``path``."""
+    holidays: set = set()
+    if not path.exists():
+        return holidays
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                raw = line.strip()
+                if not raw or raw.startswith("#"):
+                    continue
+                token = raw.split(" # ", 1)[0].strip()
+                if not token:
+                    continue
+                try:
+                    holidays.add(datetime.strptime(token, "%Y-%m-%d").date())
+                except ValueError:
+                    logger.warning(
+                        "Skipping invalid holiday date '%s' in %s (expected YYYY-MM-DD).",
+                        token,
+                        path,
+                    )
+    except Exception as exc:
+        logger.error("Failed reading market holidays from %s: %s", path, exc)
+    return holidays
+
+
+MARKET_HOLIDAYS = _load_market_holidays(MARKET_HOLIDAYS_FILE)
+if MARKET_HOLIDAYS:
+    logger.info(
+        "Loaded %d market holiday(s) from %s",
+        len(MARKET_HOLIDAYS),
+        MARKET_HOLIDAYS_FILE,
+    )
+else:
+    logger.info("No market holidays configured; weekend-only gating is active.")
 
 
 def _compute_ignore_brokers() -> set:

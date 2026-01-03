@@ -22,16 +22,15 @@ from utils.config_utils import (
     SELL_FILE,
     WATCH_FILE,
     load_account_mappings,
-    load_config,
     AUTO_REFRESH_ON_REMINDER,
 )
 from utils.excel_utils import add_stock_to_excel_log
-from utils.utility_utils import get_last_stock_price, send_large_message_chunks
+from utils.utility_utils import send_large_message_chunks
+from utils.price_fetcher import get_last_prices
 from utils.sql_utils import update_historical_holdings
 from utils.channel_resolver import resolve_reply_channel
+from utils.market_calendar import MARKET_TZ, is_market_day
 
-# Load configuration and paths from settings
-config = load_config()
 account_mapping = load_account_mappings()
 
 
@@ -243,12 +242,16 @@ class WatchListManager:
             color=discord.Color.blue(),
         )
 
+        prices = {}
+        if include_prices:
+            prices = get_last_prices(watch_list.keys())
+
         for ticker, data in sorted(watch_list.items()):
             split_date = data.get("split_date", "N/A")
             split_ratio = data.get("split_ratio", "N/A")
             field_name = ticker
             if include_prices:
-                last_price = get_last_stock_price(ticker)
+                last_price = prices.get(ticker)
                 price_display = (
                     f"${last_price:.2f}" if last_price is not None else "N/A"
                 )
@@ -267,9 +270,10 @@ class WatchListManager:
             await ctx.send("No tickers are being watched.")
             return
 
+        prices = get_last_prices(watch_list.keys())
         lines = []
         for ticker in sorted(watch_list.keys()):
-            last_price = get_last_stock_price(ticker)
+            last_price = prices.get(ticker)
             price_display = f"${last_price:.2f}" if last_price is not None else "N/A"
             lines.append(f"{ticker}: {price_display}")
 
@@ -388,6 +392,11 @@ def calculate_days_left(split_date_str):
 
 async def send_reminder_message(bot):
     """Sends a reminder message with upcoming split dates in the specified channel."""
+    now = datetime.now(MARKET_TZ)
+    if not is_market_day(now.date()):
+        logging.info("Skipping reminder message on non-market day: %s", now.date())
+        return
+
     # Create the embed message
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",

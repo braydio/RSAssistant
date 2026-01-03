@@ -3,7 +3,7 @@
 This staging area captures components slated for extraction into focused repositories. Move the items below into the matching paths inside `externalization-staging/` before creating the new repositories. Keep directory names aligned to preserve Git history when using `git mv` and `git subtree split` or `git filter-repo`.
 
 ## Components to Stage
-- `plugins/ultma/` (from `utils/trading/`)
+- `plugins/ultma/` (from `utils/trading/`) -> now at `plugins/ultma/`
   - **Destination repo:** `rsassistant-ultma-plugin`
   - **Notes:** Preserve state store and market data helpers; expose a `setup(bot)` entry point for plugin loading.
 - `devops/pr_watcher.py` (from `pr_watcher.py`)

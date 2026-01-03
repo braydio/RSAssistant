@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from typing import Iterable, List
-from zoneinfo import ZoneInfo
 
 from utils.config_utils import ENABLE_MARKET_REFRESH
-
-MARKET_TZ = ZoneInfo("America/New_York")
-MARKET_OPEN = time(9, 30)
-MARKET_CLOSE = time(16, 0)
+from utils.market_calendar import (
+    MARKET_CLOSE,
+    MARKET_OPEN,
+    MARKET_TZ,
+    is_market_day,
+)
 OUT_OF_HOURS_TIMES: tuple[time, ...] = (time(8, 0), time(20, 0))
 _MARKET_INTERVAL_MINUTES = 15
 
@@ -46,8 +47,11 @@ def daily_schedule(
     if market_refresh_enabled is None:
         market_refresh_enabled = ENABLE_MARKET_REFRESH
 
+    if not is_market_day(day):
+        return []
+
     times: List[time] = list(OUT_OF_HOURS_TIMES)
-    if market_refresh_enabled and day.weekday() < 5:
+    if market_refresh_enabled:
         times.extend(MARKET_REFRESH_TIMES)
     return [datetime.combine(day, entry, MARKET_TZ) for entry in sorted(times)]
 

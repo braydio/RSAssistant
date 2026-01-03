@@ -30,7 +30,7 @@ Any value other than `false` leaves the logger enabled.
 
 RSAssistant can optionally trigger a holdings refresh when a watchlist reminder is posted, then watch incoming holdings embeds and alert on positions meeting a price threshold. It can also optionally auto-sell those positions.
 
-When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total refresh command every 15 minutes during U.S. market hours while continuing to run at 8:00 AM and 8:00 PM Eastern outside of market hours. Without the toggle, the two out-of-hours runs remain so you can opt out of the higher-frequency cadence.
+When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total refresh command every 15 minutes during U.S. market hours while continuing to run at 8:00 AM and 8:00 PM Eastern outside of market hours. Without the toggle, the two out-of-hours runs remain so you can opt out of the higher-frequency cadence. Weekend and configured market-holiday dates are skipped for automated refreshes/reminders, and scheduled orders are only sent during market hours.
 
 ### Watchlist commands
 
@@ -55,7 +55,6 @@ Configure these via environment variables (see below).
 ├── RSAssistant.py           # Main bot application
 ├── utils/                   # Helper modules and order management
 ├── config/                  # Example env and settings files
-├── externalization-staging/ # Staged plugins and utilities for extraction
 ├── volumes/                 # Logs, database, and Excel output
 ├── unittests/               # Test suite
 ├── requirements.txt         # Python dependencies
@@ -64,7 +63,11 @@ Configure these via environment variables (see below).
 ```
 
 `RSAssistant.py` initializes the bot, command handlers, and scheduled tasks. Utility modules under `utils/` handle configuration, watch lists, and order execution.
-Staged utilities and plugins live under `externalization-staging/` until they are moved to their own repositories.
+
+### Code ownership
+
+- `rsassistant/`: Discord orchestration (cogs, tasks, bot startup).
+- `utils/`: Pure helpers without Discord context (parsing, storage, scheduling, config).
 
 ## Quick Start
 
@@ -109,6 +112,28 @@ The bot's `..all` command now audits your holdings against the watchlist,
 summarizes any tickers that are missing from your accounts, and consolidates
 broker holdings status into a single embed.
 
+## How to Run
+
+CLI:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp config/example.env config/.env
+python RSAssistant.py
+```
+
+Docker:
+
+```bash
+cp config/example.env config/.env
+docker compose up --build
+```
+
+Optional: set `OPENAI_POLICY_ENABLED=true` and `OPENAI_API_KEY=...` in
+`config/.env` to enable OpenAI reverse-split parsing.
+
 ### Discord channel configuration
 
 RSAssistant differentiates between three Discord channels so information lands
@@ -139,6 +164,7 @@ Add the following keys to your environment. The app now loads from a single sour
   15 minutes during market hours in addition to the 8:00 AM and 8:00 PM runs.
   Default `false` to avoid the higher-frequency cadence unless explicitly
   requested.
+- `MARKET_HOLIDAYS_FILE` (path, optional): File containing market holidays (one `YYYY-MM-DD` per line). Defaults to `config/market_holidays.txt`. Lines starting with `#` are treated as comments.
 - `IGNORE_TICKERS` (CSV): Tickers to skip for alert/auto-sell (e.g., `ABCD,EFGH`). Default empty.
 - `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
 - `IGNORE_BROKERS` (CSV): Brokers to skip for alert/auto-sell (e.g., `Fidelity,Schwab`). Default empty.
@@ -155,21 +181,17 @@ echo "MSFT  # Long-term" >> config/ignore_tickers.txt
 Apply the same approach for brokers by creating `config/ignore_brokers.txt`
 with one broker name per line.
 
+To configure market holidays, copy the example list and add your dates:
+
+```
+cp config/market_holidays.example.txt config/market_holidays.txt
+echo "2025-01-01  # New Year's Day" >> config/market_holidays.txt
+```
+
 - `MENTION_USER_ID` / `MENTION_USER_IDS` (string or CSV): Discord user ID(s) to @-mention in alerts (e.g., `123456789012345678` or `123...,987...`). Optional.
 - `MENTION_ON_ALERTS` (bool): Enable/disable mentions on alerts. Default `true`.
 
 De-duplication state is stored at `config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
-
-### Automated trading (ULT-MA)
-
-Set `ENABLE_AUTOMATED_TRADING=true` to start the optional ULT-MA trading task.
-Provide `AUTO_RSA_BASE_URL` and `AUTO_RSA_API_KEY` so the bot can dispatch
-orders to auto-rsa.
-
-- `TRADING_BROKERS` (CSV, optional): Ordered list of broker identifiers used
-  when the strategy issues auto-sell requests. Example:
-  `TRADING_BROKERS=Fidelity,Schwab`. When omitted the bot falls back to the
-  legacy behaviour of sending sells to `all` brokers.
 
 ### Docker
 
@@ -193,52 +215,13 @@ To run locally with a custom env file path instead of `config/.env`, prefix comm
 ENV_FILE=config/.env python RSAssistant.py
 ```
 
-`RSAssistant.py` now launches the modular bot implementation under `rsassistant/bot`. To run the legacy monolith for comparison, set `RSASSISTANT_ENTRYPOINT=legacy`.
+`RSAssistant.py` launches the modular bot implementation under `rsassistant/bot`.
 
 ## Default Account Nicknames
 
 When an account has no nickname in `account_mapping.json`, RSAssistant falls
 back to the pattern `"{broker} {group} {account}"`. This ensures new accounts
 and orders are always logged with a deterministic identifier.
-
-## Pull Request Watcher
-
-`externalization-staging/devops/pr_watcher.py` monitors the GitHub repository for merged pull requests. When a merge is detected, it stops the running bot, executes `git pull`, and restarts the bot with the latest code.
-
-Run the watcher with:
-
-```bash
-python externalization-staging/devops/pr_watcher.py
-```
-
-Set the following environment variables to customize behavior:
-
-- `GITHUB_REPO`: repository in `owner/name` form (default: `braydio/RSAssistant`)
-- `GITHUB_TOKEN`: optional token for authenticated requests
-- `PR_WATCH_INTERVAL`: polling interval in seconds (default: 60)
-
-## DeepSource Monitor
-
-`externalization-staging/devops/deepsource_monitor.py` polls the GitHub checks API for the latest DeepSource
-run on the repository's default branch. The script logs whenever the
-DeepSource status changes, making it easy to host the monitor alongside the
-bot or as a standalone health check.
-
-Run the monitor with:
-
-```bash
-python externalization-staging/devops/deepsource_monitor.py
-```
-
-Configuration relies on the same GitHub settings used by the PR watcher and
-accepts two additional environment variables:
-
-- `DEEPSOURCE_APP_NAME`: GitHub check app name to match (default: `DeepSource`)
-- `DEEPSOURCE_POLL_INTERVAL`: polling cadence in seconds (default: 300)
-
-The monitor logs informational messages for successful runs, escalates to an
-error log when DeepSource fails, and raises a warning if no DeepSource run is
-found on the latest commit.
 
 ## Testing
 

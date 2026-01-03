@@ -18,7 +18,7 @@ from utils.config_utils import BOT_PREFIX, DISCORD_PRIMARY_CHANNEL, ENABLE_MARKE
 from utils.order_exec import schedule_and_execute
 from utils.order_queue_manager import get_order_queue
 from utils.refresh_scheduler import MARKET_TZ, compute_next_refresh_datetime
-from utils.watch_utils import periodic_check, send_reminder_message
+from utils.watch_utils import send_reminder_message
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,6 @@ _total_refresh_lock = asyncio.Lock()
 class BackgroundTasks:
     """Container for running background task handles."""
 
-    periodic_task: Optional[asyncio.Task] = None
     total_refresh_task: Optional[asyncio.Task] = None
     reschedule_task: Optional[asyncio.Task] = None
     reminder_scheduler: Optional[BackgroundScheduler] = None
@@ -152,7 +151,6 @@ def _start_reminder_scheduler(bot: commands.Bot) -> BackgroundScheduler:
 async def start_background_tasks(bot: commands.Bot) -> BackgroundTasks:
     """Start recurring tasks and return handles for shutdown."""
 
-    periodic = asyncio.create_task(periodic_check(bot))
     reminder_scheduler = _start_reminder_scheduler(bot)
     total_refresh: Optional[asyncio.Task] = None
     if ENABLE_MARKET_REFRESH:
@@ -160,7 +158,6 @@ async def start_background_tasks(bot: commands.Bot) -> BackgroundTasks:
     rescheduler = asyncio.create_task(reschedule_queued_orders(bot))
 
     return BackgroundTasks(
-        periodic_task=periodic,
         total_refresh_task=total_refresh,
         reschedule_task=rescheduler,
         reminder_scheduler=reminder_scheduler,
@@ -171,7 +168,6 @@ async def stop_background_tasks(tasks: BackgroundTasks) -> None:
     """Gracefully shut down running tasks and schedulers."""
 
     for task in (
-        tasks.periodic_task,
         tasks.total_refresh_task,
         tasks.reschedule_task,
     ):

@@ -25,82 +25,60 @@ def test_public_incomplete_message(monkeypatch):
     assert pytest.approx(order["quantity"]) == 0.10937
 
 
-def _setup_price_none(monkeypatch, call_tracker):
-    """Helper to patch dependencies when price lookup returns None."""
+def _setup_price_fetch(monkeypatch, captured, price):
+    """Helper to patch price lookup and persistence."""
 
-    monkeypatch.setattr(parsing_utils, "get_last_stock_price", lambda s: None)
+    monkeypatch.setattr(parsing_utils, "get_last_stock_price", lambda s: price)
 
-    def rec(msg, details):
-        call_tracker["record"] = call_tracker.get("record", 0) + 1
+    def save_order_to_csv(order_data):
+        captured["order_data"] = order_data
+        return True
 
-    monkeypatch.setattr(parsing_utils, "record_error_message", rec)
+    def record_error_message(*_args, **_kwargs):
+        captured["error_called"] = True
 
-    def csv_save(data):
-        call_tracker["csv"] = call_tracker.get("csv", 0) + 1
-
-    monkeypatch.setattr(parsing_utils, "save_order_to_csv", csv_save)
-    monkeypatch.setattr(parsing_utils, "insert_order_history", lambda *a, **k: None)
-    monkeypatch.setattr(parsing_utils, "update_excel_log", lambda *a, **k: None)
+    monkeypatch.setattr(parsing_utils, "save_order_to_csv", save_order_to_csv)
+    monkeypatch.setattr(parsing_utils, "insert_order_history", lambda *a, **k: True)
+    monkeypatch.setattr(parsing_utils, "update_excel_log", lambda *a, **k: True)
+    monkeypatch.setattr(parsing_utils, "record_error_message", record_error_message)
 
 
 def test_handle_complete_order_price_none(monkeypatch):
     """handle_complete_order should log an error and skip saves when price is None."""
 
-    calls = {}
-    _setup_price_none(monkeypatch, calls)
+    captured = {}
+    _setup_price_fetch(monkeypatch, captured, None)
 
     parsing_utils.parse_order_message("BBAE 1: buy 1 of ABC in xxxx1234: Success")
 
-    assert calls.get("record", 0) == 1
-    assert calls.get("csv") is None
+    assert captured.get("error_called") is True
+    assert "order_data" not in captured
+
+
+def test_handle_complete_order_price_success(monkeypatch):
+    """handle_complete_order should persist with the fetched price."""
+
+    captured = {}
+    _setup_price_fetch(monkeypatch, captured, 12.5)
+
+    parsing_utils.parse_order_message("BBAE 1: buy 1 of ABC in xxxx1234: Success")
+
+    assert captured.get("order_data"), "order should be saved"
+    assert captured["order_data"]["Price"] == 12.5
+    assert "error_called" not in captured
 
 
 def test_process_verified_orders_price_none(monkeypatch):
     """process_verified_orders should log an error and skip saves when price is None."""
 
-    calls = {}
-    _setup_price_none(monkeypatch, calls)
+    captured = {}
+    _setup_price_fetch(monkeypatch, captured, None)
 
     order = {"action": "buy", "quantity": 1, "stock": "ABC"}
     parsing_utils.process_verified_orders("BBAE", "1", "1234", order)
 
-    assert calls.get("record", 0) == 1
-    assert calls.get("csv") is None
-
-
-def test_complete_order_price_fetch_failure(monkeypatch):
-    """Orders should not be saved when price lookup fails."""
-
-    calls = []
-    monkeypatch.setattr(parsing_utils, "get_last_stock_price", lambda stock: None)
-    monkeypatch.setattr(parsing_utils, "record_error_message", lambda *args: calls.append(args))
-    saved = []
-    monkeypatch.setattr(parsing_utils, "save_order_to_csv", lambda *a, **k: saved.append(True))
-
-    parsing_utils.parse_order_message("Robinhood 1: buy 1 of ABC in xxxx1234: Success")
-
-    assert calls, "record_error_message should be called"
-    assert not saved, "order should not be saved to CSV"
-
-
-def test_process_verified_orders_price_fetch_failure(monkeypatch):
-    """Verified orders skip saving when price lookup fails."""
-
-    calls = []
-    monkeypatch.setattr(parsing_utils, "get_last_stock_price", lambda stock: None)
-    monkeypatch.setattr(parsing_utils, "record_error_message", lambda *args: calls.append(args))
-    saved = []
-    monkeypatch.setattr(parsing_utils, "save_order_to_csv", lambda *a, **k: saved.append(True))
-
-    parsing_utils.process_verified_orders(
-        "Robinhood",
-        "1",
-        "1234",
-        {"action": "buy", "quantity": 1, "stock": "ABC"},
-    )
-
-    assert calls, "record_error_message should be called"
-    assert not saved, "order should not be saved to CSV"
+    assert captured.get("error_called") is True
+    assert "order_data" not in captured
 
 
 def test_alert_channel_message_remote_ticker(monkeypatch):

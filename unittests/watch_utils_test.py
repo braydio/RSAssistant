@@ -39,9 +39,8 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
             "TEST": {"split_date": "01/02", "split_ratio": "1-10"}
         }
 
-        with patch("utils.watch_utils.get_last_stock_price") as price_mock:
+        with patch("utils.watch_utils.get_last_prices") as price_mock:
             await self.manager.list_watched_tickers(self.ctx, include_prices=False)
-
         price_mock.assert_not_called()
         self.assertEqual(len(self.ctx.sent_messages), 1)
         embed = self.ctx.sent_messages[0]["embed"]
@@ -57,11 +56,10 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         }
 
         with patch(
-            "utils.watch_utils.get_last_stock_price", return_value=12.34
+            "utils.watch_utils.get_last_prices", return_value={"TEST": 12.34}
         ) as price_mock:
             await self.manager.list_watched_tickers(self.ctx, include_prices=True)
-
-        price_mock.assert_called_once_with("TEST")
+        price_mock.assert_called_once_with(self.manager.watch_list.keys())
         embed = self.ctx.sent_messages[0]["embed"]
         self.assertEqual(embed.fields[0].name, "TEST — $12.34")
         self.assertIn("Split Ratio: N/A", embed.fields[0].value)
@@ -75,7 +73,7 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         chunk_mock = AsyncMock()
         with patch(
             "utils.watch_utils.send_large_message_chunks", chunk_mock
-        ), patch("utils.watch_utils.get_last_stock_price", return_value=8.9):
+        ), patch("utils.watch_utils.get_last_prices", return_value={"TEST": 8.9}):
             await self.manager.send_watchlist_prices(self.ctx)
 
         chunk_mock.assert_awaited_once_with(self.ctx, "TEST: $8.90")

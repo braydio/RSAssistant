@@ -1,8 +1,9 @@
 """Helper for auto-buying tickers with market-hours awareness."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from utils.logging_setup import logger
+from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
 from utils.order_exec import schedule_and_execute
 
 
@@ -12,31 +13,16 @@ async def autobuy_ticker(bot, ctx, ticker, quantity=1, broker="all"):
     or schedules it for next market open if closed.
     """
     try:
-        now = datetime.now()
-        weekday = now.weekday()  # 0=Monday, 6=Sunday
-        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-        if market_open <= now <= market_close and weekday < 5:
-            # Market is open
+        now = datetime.now(MARKET_TZ)
+        if is_market_open_at(now):
             execution_time = now
-            logger.info(f"Market is OPEN - executing autobuy immediately for {ticker}.")
+            logger.info("Market is OPEN - executing autobuy immediately for %s.", ticker)
         else:
-            # Market closed or weekend, schedule for next trading day 9:30 AM
-            if weekday >= 5:  # Saturday (5) or Sunday (6)
-                days_until_monday = 7 - weekday
-                execution_time = (now + timedelta(days=days_until_monday)).replace(
-                    hour=9, minute=30, second=0, microsecond=0
-                )
-            elif now > market_close:
-                execution_time = (now + timedelta(days=1)).replace(
-                    hour=9, minute=30, second=0, microsecond=0
-                )
-            else:  # Before market open today
-                execution_time = market_open
-
+            execution_time = next_market_open(now)
             logger.info(
-                f"Market CLOSED - scheduling autobuy for {ticker} at {execution_time}."
+                "Market CLOSED - scheduling autobuy for %s at %s.",
+                ticker,
+                execution_time,
             )
 
         order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_buy"
@@ -48,6 +34,7 @@ async def autobuy_ticker(bot, ctx, ticker, quantity=1, broker="all"):
                 quantity=quantity,
                 broker=broker,
                 execution_time=execution_time,
+                bot=bot,
                 order_id=order_id,
             )
         )
