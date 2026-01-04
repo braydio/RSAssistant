@@ -63,6 +63,8 @@ discord.gateway.DiscordWebSocket.gateway_timeout = 60
 logger = logging.getLogger(__name__)
 setup_logging()
 
+_market_closed_notice_by_channel: dict[int, datetime.date] = {}
+
 logger.info(
     "Healthcheck: openai_enabled=%s openai_key=%s model=%s plugins=%s volumes_dir=%s price_cache=%s ttl=%ss",
     OPENAI_POLICY_ENABLED,
@@ -185,18 +187,21 @@ class RSAssistantBot(commands.Bot):
             logger.info("Message is from myself! %s", self.user)
             return
         if message.content.startswith(BOT_PREFIX):
+            logger.info("Handling command %s", message.content)
             now = datetime.now(MARKET_TZ)
             if not is_market_day(now.date()):
                 logger.info(
-                    "Skipping command on non-market day %s: %s",
-                    now.date(),
+                    "Non-market day command received; orders will schedule for next open: %s",
                     message.content,
                 )
-                await message.channel.send(
-                    "Commands are paused on weekends and configured market holidays."
-                )
-                return
-            logger.info("Handling command %s", message.content)
+                channel_id = getattr(message.channel, "id", None)
+                if channel_id is not None:
+                    last_notice = _market_closed_notice_by_channel.get(channel_id)
+                    if last_notice != now.date():
+                        await message.channel.send(
+                            "Market is closed today; any orders will be scheduled for the next market open."
+                        )
+                        _market_closed_notice_by_channel[channel_id] = now.date()
             await self.process_commands(message)
             return
         await handle_on_message(self, message)
