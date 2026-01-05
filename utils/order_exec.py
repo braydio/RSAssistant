@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 task_queue = asyncio.Queue()
 _rsa_command_lock = asyncio.Lock()
 _last_rsa_command_at = 0.0
+_ORDER_COMMANDS = {"buy", "sell"}
 
 
 async def _await_rsa_rate_limit() -> None:
@@ -33,6 +34,74 @@ async def _await_rsa_rate_limit() -> None:
             logger.info("Rate limiting !rsa command for %.2fs.", delay)
             await asyncio.sleep(delay)
         _last_rsa_command_at = time.monotonic()
+
+
+async def _schedule_closed_market_order(target_channel, command: str, bot=None) -> bool:
+    """Schedule !rsa order commands if the market is currently closed."""
+
+    text = command.strip()
+    parts = text.split()
+    if len(parts) < 2:
+        return False
+
+    action = parts[1].lower()
+    if action not in _ORDER_COMMANDS:
+        return False
+
+    now = datetime.now(MARKET_TZ)
+    if is_market_open_at(now):
+        return False
+
+    if len(parts) < 4:
+        await target_channel.send(
+            "Market is closed. Unable to parse the order details; please retry when markets reopen."
+        )
+        logger.warning(
+            "Closed-market order missing arguments, skipping send: %s", command
+        )
+        return True
+
+    quantity_str = parts[2]
+    ticker = parts[3]
+    broker = parts[4] if len(parts) > 4 else "all"
+
+    try:
+        quantity = float(quantity_str)
+    except ValueError:
+        await target_channel.send(
+            "Market is closed. Unable to interpret the order quantity; please retry when markets reopen."
+        )
+        logger.warning(
+            "Closed-market order has invalid quantity, skipping send: %s", command
+        )
+        return True
+
+    execution_time = next_market_open(now)
+    scheduled_label = execution_time.strftime("%H:%M on %A %m/%d")
+    await target_channel.send(
+        f"Market is closed. Scheduling {text} for {scheduled_label}."
+    )
+    logger.info(
+        "Market closed – scheduling command %s for %s.",
+        text,
+        scheduled_label,
+    )
+
+    order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_{action}"
+    loop = asyncio.get_running_loop()
+    loop.create_task(
+        schedule_and_execute(
+            target_channel,
+            action=action,
+            ticker=ticker,
+            quantity=quantity,
+            broker=broker,
+            execution_time=execution_time,
+            bot=bot,
+            order_id=order_id,
+        )
+    )
+    return True
 
 
 async def processTasks(message):
@@ -86,7 +155,12 @@ async def send_sell_command(target, command: str, loop=None, bot=None):
         if target_channel is None:
             logger.error("No channel available to send order command.")
             return
+        resolved_bot = bot or getattr(target_channel, "bot", None)
         if command.strip().lower().startswith("!rsa"):
+            if await _schedule_closed_market_order(
+                target_channel, command, resolved_bot
+            ):
+                return
             await _await_rsa_rate_limit()
         await target_channel.send(command)
         channel = getattr(target_channel, "channel", target_channel)
