@@ -1,6 +1,6 @@
-"""Tests for helper utilities in :mod:`utils.on_message_utils`."""
+"""Tests for helper utilities in :mod:`rsassistant.bot.handlers.on_message`."""
 
-from utils.on_message_utils import (
+from rsassistant.bot.handlers.on_message import (
     _format_account_label,
     _resolve_round_up_snippet,
     format_mentions,

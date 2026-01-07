@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from utils import config_utils
-from utils import on_message_utils
+from rsassistant.bot.handlers import on_message as on_message_utils
 
 
 class TaggedAlertConfigTests(unittest.TestCase):

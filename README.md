@@ -15,6 +15,21 @@ RSAssistant is a Discord bot that monitors corporate actions and automates tradi
   the `VOLUMES_DIR` environment variable to use a different location (e.g.
   `/mnt/netstorage/volumes`).
 
+## Architecture Overview
+
+- `RSAssistant.py` is a thin wrapper that launches `rsassistant.bot.core`, the
+  modular runtime entrypoint.
+- `rsassistant/` owns the Discord-facing pieces: cogs, bot setup, and background
+  tasks that orchestrate commands, reminders, and plugin loading.
+- `utils/` contains pure helpers such as parsing, configuration, scheduling, and
+  persistence helpers that are shared across the cogs.
+- Runtime state (CSV logs, Excel sheets, the SQLite database, and
+  `split_watchlist.json`) lives under `volumes/` (default `VOLUMES_DIR`) so
+  deployments can centralize data in a single managed directory.
+- The split watch file now resides specifically at `volumes/db/split_watchlist.json`
+  (or `VOLUMES_DIR/db/split_watchlist.json` when overridden) so it shares the
+  same persistence layer as the SQLite database and order queue.
+
 ### Persistent logging toggles
 
 CSV, Excel, and SQL persistence are enabled by default. To disable any of
@@ -48,6 +63,12 @@ When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total re
 
 Configure these via environment variables (see below).
 
+## Policy Decision Flow
+
+1. **Local parsing first** – secondary-channel alerts are sent through `alert_channel_message`, and confirmed reverse split notices feed into `SplitPolicyResolver.full_analysis`. It steps through NASDAQ notice extraction, SEC filing analysis, press-release fallbacks, and keyword heuristics (e.g., `rounded up`, `no fractional shares`) to populate `fractional_share_policy`, `round_up_confirmed`, `effective_date`, and other policy metadata early in the pipeline.
+2. **LLM tie-breaker when needed** – once body text is available, `extract_reverse_split_details` calls the configured OpenAI model (only when `OPENAI_POLICY_ENABLED=true` and `OPENAI_API_KEY` is set) to normalize the ticker, split ratio, effective date, and fractional-share policy, then writes those findings back into the shared `policy_info` dictionary alongside `llm_details`.
+3. **Action layer** – `build_policy_summary` posts the URLs, dates, ratios, and resolved policy to the tertiary channel (or primary fallback) plus a snippet for quick review. When `round_up_confirmed` is true the bot automatically adds the ticker to `watch_list_manager`, records it in `split_watch_utils`, and triggers `attempt_autobuy`, which calls `schedule_and_execute` immediately if the market is open (or at the next open otherwise) to place the preconfigured buy order.
+
 ## Directory Overview
 
 ```
@@ -68,6 +89,13 @@ Configure these via environment variables (see below).
 
 - `rsassistant/`: Discord orchestration (cogs, tasks, bot startup).
 - `utils/`: Pure helpers without Discord context (parsing, storage, scheduling, config).
+
+## Contributing
+
+Follow the project-wide contribution guidance in `AGENTS.md`. In particular,
+create Discord-facing code under `rsassistant/`, keep helpers that lack bot
+context inside `utils/`, and document any new persistence requirements so other
+contributors know where runtime state should live.
 
 ## Quick Start
 

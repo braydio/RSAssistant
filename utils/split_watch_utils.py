@@ -1,8 +1,10 @@
-import json
-import os
 import datetime
+import json
 
-SPLIT_WATCH_FILE = "split_watchlist.json"
+from utils.config_utils import VOLUMES_DIR
+
+SPLIT_WATCH_DIR = VOLUMES_DIR / "db"
+SPLIT_WATCH_FILE = SPLIT_WATCH_DIR / "split_watchlist.json"
 
 # Main data structure
 data = {
@@ -13,13 +15,14 @@ data = {
 # Load/save utils
 def load_data():
     global data
-    if os.path.exists(SPLIT_WATCH_FILE):
-        with open(SPLIT_WATCH_FILE, "r") as f:
+    if SPLIT_WATCH_FILE.exists():
+        with SPLIT_WATCH_FILE.open("r") as f:
             data = json.load(f)
 
 
 def save_data():
-    with open(SPLIT_WATCH_FILE, "w") as f:
+    SPLIT_WATCH_DIR.mkdir(parents=True, exist_ok=True)
+    with SPLIT_WATCH_FILE.open("w") as f:
         json.dump(data, f, indent=2)
 
 

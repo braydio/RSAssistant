@@ -37,7 +37,7 @@ from utils.config_utils import (
     VOLUMES_DIR,
 )
 from utils.logging_setup import setup_logging
-from utils.on_message_utils import handle_on_message, set_channels
+from rsassistant.bot.handlers.on_message import handle_on_message, set_channels
 from utils.order_queue_manager import get_order_queue
 from utils.sql_utils import init_db
 from utils.market_calendar import MARKET_TZ, is_market_day

@@ -11,7 +11,7 @@ from utils.channel_resolver import resolve_reply_channel
 from utils.config_utils import DISCORD_PRIMARY_CHANNEL, HOLDINGS_LOG_CSV
 from utils.csv_utils import clear_holdings_log
 from utils.utility_utils import track_ticker_summary
-from utils.on_message_utils import (
+from rsassistant.bot.handlers.on_message import (
     REFRESH_WINDOW_DURATION,
     disable_audit,
     enable_audit,

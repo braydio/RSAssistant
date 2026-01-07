@@ -332,7 +332,7 @@ def set_channels(primary_id, secondary_id, tertiary_id):
     DISCORD_SECONDARY_CHANNEL = secondary_id
     DISCORD_TERTIARY_CHANNEL = tertiary_id
     logger.info(
-        f"on_message_utils loaded with primary={primary_id}, secondary={secondary_id}, tertiary={tertiary_id}"
+        f"rsassistant.bot.handlers.on_message loaded with primary={primary_id}, secondary={secondary_id}, tertiary={tertiary_id}"
     )
 
 

@@ -30,3 +30,15 @@ ENABLED_PLUGINS=ultma
 ```
 
 If the plugin directory is missing, RSAssistant continues to run without ULT-MA.
+
+## Discord Commands
+
+When the plugin is enabled in RSAssistant the `..ultma` command group becomes
+available. Use it to inspect status and control the trading bot:
+
+- `..ultma status`: Show the latest indicator colors, pending trade, and whether
+  the bot is paused.
+- `..ultma start` / `..ultma stop`: Start or stop the monitoring tasks manually.
+- `..ultma pause` / `..ultma resume`: Temporarily pause trading without
+  stopping the scheduler.
+- `..ultma force <long|short>`: Force an entry in the provided direction.
