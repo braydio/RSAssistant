@@ -17,6 +17,7 @@ class SplitMonitorCog(commands.Cog):
 
     @commands.command(
         name="splitwatch",
+        aliases=["sw"],
         help="Add a ticker to the reverse-split watchlist.",
         usage="<ticker> <yyyy-mm-dd>",
         extras={"category": "Split Monitor"},
@@ -33,6 +34,7 @@ class SplitMonitorCog(commands.Cog):
 
     @commands.command(
         name="splitstatus",
+        aliases=["ss"],
         help="Show reverse-split progress for a ticker.",
         usage="<ticker>",
         extras={"category": "Split Monitor"},
@@ -52,6 +54,7 @@ class SplitMonitorCog(commands.Cog):
 
     @commands.command(
         name="splitlist",
+        aliases=["sl"],
         help="List tickers under reverse-split monitoring.",
         extras={"category": "Split Monitor"},
     )
@@ -70,6 +73,7 @@ class SplitMonitorCog(commands.Cog):
 
     @commands.command(
         name="splitcleanup",
+        aliases=["sc"],
         help="Advance phases and remove completed reverse splits.",
         extras={"category": "Split Monitor"},
     )

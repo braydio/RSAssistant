@@ -21,6 +21,7 @@ class AccountsCog(commands.Cog):
 
     @commands.command(
         name="brokerlist",
+        aliases=["bl"],
         help="List all active brokers or accounts for a broker.",
         usage="[broker]",
         extras={"category": "Accounts"},
@@ -33,6 +34,7 @@ class AccountsCog(commands.Cog):
 
     @commands.command(
         name="addmap",
+        aliases=["am"],
         help="Add account mapping details.",
         usage="<brokerage> <broker_no> <account> <nickname>",
         extras={"category": "Accounts"},
@@ -49,6 +51,7 @@ class AccountsCog(commands.Cog):
 
     @commands.command(
         name="loadmap",
+        aliases=["lm"],
         help="Map account details from Excel to JSON.",
         extras={"category": "Accounts"},
     )
@@ -61,6 +64,7 @@ class AccountsCog(commands.Cog):
 
     @commands.command(
         name="loadlog",
+        aliases=["ll"],
         help="Update Excel log with mapped accounts.",
         extras={"category": "Accounts"},
     )
@@ -71,6 +75,7 @@ class AccountsCog(commands.Cog):
 
     @commands.command(
         name="clearmap",
+        aliases=["cm"],
         help="Remove all saved account mappings.",
         extras={"category": "Accounts"},
     )

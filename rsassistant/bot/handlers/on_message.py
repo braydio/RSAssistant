@@ -336,6 +336,33 @@ def set_channels(primary_id, secondary_id, tertiary_id):
     )
 
 
+def on_message_ready(bot):
+    """Compatibility helper: reapply channel IDs when the bot becomes ready."""
+
+    set_channels(
+        DISCORD_PRIMARY_CHANNEL,
+        DISCORD_SECONDARY_CHANNEL,
+        DISCORD_TERTIARY_CHANNEL,
+    )
+    logger.debug("on_message_ready hook executed.")
+
+
+def on_message_refresh_status():
+    """Return the current refresh/audit state for diagnostic use."""
+
+    return {
+        "refresh_active": _refresh_active,
+        "audit_active": _audit_active,
+        "refresh_channel_id": getattr(_refresh_channel, "id", None),
+    }
+
+
+def on_message_set_channels(primary_id, secondary_id, tertiary_id):
+    """Alias to `set_channels` that matches the legacy export."""
+
+    set_channels(primary_id, secondary_id, tertiary_id)
+
+
 def get_account_nickname_or_default(broker_name, group_number, account_number):
     try:
         broker_accounts = account_mapping.get(broker_name, {})

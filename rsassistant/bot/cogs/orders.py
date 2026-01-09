@@ -10,7 +10,7 @@ from utils.csv_utils import sell_all_position
 from utils.order_exec import schedule_and_execute
 from utils.order_queue_manager import list_order_queue
 
-ORD_COMMAND_USAGE = "..ord <buy/sell> <ticker> [broker] [quantity] [time]"
+ORDER_COMMAND_USAGE = "..order <buy/sell> <ticker> [broker] [quantity] [time]"
 
 
 class OrdersCog(commands.Cog):
@@ -21,6 +21,7 @@ class OrdersCog(commands.Cog):
 
     @commands.command(
         name="queue",
+        aliases=["qu"],
         help="View all scheduled orders.",
         usage="",
         extras={"category": "Orders"},
@@ -34,7 +35,8 @@ class OrdersCog(commands.Cog):
         await ctx.send(message)
 
     @commands.command(
-        name="ord",
+        name="order",
+        aliases=["ord"],
         help="Schedule a buy or sell order.",
         usage="<buy/sell> <ticker> [broker] [quantity] [time]",
         extras={"category": "Orders"},
@@ -50,7 +52,7 @@ class OrdersCog(commands.Cog):
     ) -> None:
         """Validate input and schedule an order for execution."""
 
-        invalid_usage_message = f"Invalid arguments. Expected format: `{ORD_COMMAND_USAGE}`"
+        invalid_usage_message = f"Invalid arguments. Expected format: `{ORDER_COMMAND_USAGE}`"
 
         if not action or action.lower() not in {"buy", "sell"}:
             await ctx.send(invalid_usage_message)
@@ -154,6 +156,7 @@ class OrdersCog(commands.Cog):
 
     @commands.command(
         name="liquidate",
+        aliases=["liq"],
         help="Liquidate holdings for a brokerage.",
         usage="<broker> [test_mode]",
         extras={"category": "Orders"},

@@ -54,7 +54,7 @@ _CORE_COGS: tuple[str, ...] = (
     "rsassistant.bot.cogs.holdings",
     "rsassistant.bot.cogs.split_monitor",
     "rsassistant.bot.cogs.reporting",
-    "rsassistant.bot.cogs.utilities",
+    "rsassistant.bot.cogs.aliases",
 )
 
 discord.gateway.DiscordWebSocket.resume_timeout = 60
@@ -154,7 +154,7 @@ class RSAssistantBot(commands.Bot):
             ready_message = (
                 account_setup_message
                 if not ACCOUNT_MAPPING
-                else "Watching for order activity o.O"
+                else f"\nWatching for order activity...   q(o.O)P"
             )
         except (FileNotFoundError, json.JSONDecodeError):
             ready_message = account_setup_message

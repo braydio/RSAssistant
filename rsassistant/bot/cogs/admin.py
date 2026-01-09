@@ -15,7 +15,7 @@ class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="restart", extras={"category": "Admin"})
+    @commands.command(name="restart", aliases=["rs"], extras={"category": "Admin"})
     async def restart(self, ctx: commands.Context) -> None:
         await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
         await ctx.send(
@@ -31,6 +31,7 @@ class AdminCog(commands.Cog):
 
     @commands.command(
         name="clear",
+        aliases=["clr"],
         help="Batch clears excess messages.",
         usage="<limit>",
         extras={"category": "Admin"},
@@ -52,6 +53,7 @@ class AdminCog(commands.Cog):
 
     @commands.command(
         name="shutdown",
+        aliases=["sd"],
         help="Gracefully shuts down the bot.",
         extras={"category": "Admin"},
     )

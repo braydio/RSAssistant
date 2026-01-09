@@ -804,31 +804,6 @@ def get_fennel_account_number(account_str):
     return account_str  # Default behavior for non-Fennel accounts
 
 
-# Function to print lines from a file to Discord
-async def print_to_discord(ctx, file_path="todiscord.txt", delay=1):
-    """
-    Reads a file line by line and sends each line as a message to Discord.
-    Args:
-        ctx: The context of the Discord command.
-        file_path: The file to read and print to Discord.
-        delay: The time (in seconds) to wait between sending each line.
-    """
-    try:
-        # Open the file
-        with open(file_path, "r") as file:
-            # Read the file line by line
-            for line in file:
-                # Send each line to Discord
-                await ctx.send(line.strip())
-
-                # Delay between sending lines
-                await asyncio.sleep(delay)
-    except FileNotFoundError:
-        await ctx.send(f"Error: The file {file_path} was not found.")
-    except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
-
-
 async def send_large_message_chunks(ctx, message):
     logger.warning("send_large_message_chunks is deprecated.")
 

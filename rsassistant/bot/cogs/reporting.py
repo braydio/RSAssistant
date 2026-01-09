@@ -19,11 +19,11 @@ class ReportingCog(commands.Cog):
         self.bot = bot
 
     @commands.command(
-        name="bw",
-        help="Show which brokers hold a given ticker.",
+        name="brokerwith",
+        aliases=["bw"],
+        help="Show which brokers hold a given ticker. Alias: ..bw.",
         usage="<ticker> [broker]",
         extras={"category": "Reporting"},
-        aliases=["brokerwith"],
     )
     async def broker_has(self, ctx: commands.Context, ticker: str, *args: str) -> None:
         specific_broker = args[0] if args else None
@@ -36,6 +36,7 @@ class ReportingCog(commands.Cog):
 
     @commands.command(
         name="grouplist",
+        aliases=["gl"],
         help="Summary by account owner.",
         usage="[broker]",
         extras={"category": "Reporting"},
@@ -50,6 +51,7 @@ class ReportingCog(commands.Cog):
 
     @commands.command(
         name="ownersummary",
+        aliases=["os"],
         help="Shows total holdings for each owner across all brokers.",
         extras={"category": "Reporting"},
     )

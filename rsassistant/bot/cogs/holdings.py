@@ -33,6 +33,7 @@ class HoldingsCog(commands.Cog):
 
     @commands.command(
         name="clearholdings",
+        aliases=["ch"],
         help="Clear entries in holdings_log.csv",
         extras={"category": "Admin"},
     )
