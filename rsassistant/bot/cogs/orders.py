@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from utils.csv_utils import sell_all_position
 from utils.order_exec import schedule_and_execute
-from utils.order_queue_manager import list_order_queue
+from utils.order_queue_manager import list_order_queue_items, remove_order
 
 ORDER_COMMAND_USAGE = "..order <buy/sell> <ticker> [broker] [quantity] [time]"
 
@@ -27,11 +27,18 @@ class OrdersCog(commands.Cog):
         extras={"category": "Orders"},
     )
     async def show_order_queue(self, ctx: commands.Context) -> None:
-        queue = list_order_queue()
-        if not queue:
+        queue_items = list_order_queue_items()
+        if not queue_items:
             await ctx.send("There are no scheduled orders.")
             return
-        message = "**Scheduled Orders:**\n" + "\n".join(queue)
+        lines = [
+            (
+                f"{index}. {order_id} → {data['action']} {data['quantity']} "
+                f"{data['ticker']} via {data['broker']} at {data['time']}"
+            )
+            for index, (order_id, data) in enumerate(queue_items, start=1)
+        ]
+        message = "**Scheduled Orders:**\n" + "\n".join(lines)
         await ctx.send(message)
 
     @commands.command(
@@ -168,6 +175,47 @@ class OrdersCog(commands.Cog):
             await sell_all_position(ctx, broker, test_mode)
         except Exception as exc:
             await ctx.send(f"An error occurred: {exc}")
+
+    @commands.command(
+        name="remove",
+        aliases=["rm"],
+        help="Remove a scheduled order by its queue number.",
+        usage="<number>",
+        extras={"category": "Orders"},
+    )
+    async def remove_queued_order(self, ctx: commands.Context, number: str) -> None:
+        """Remove a queued order by its 1-based list index."""
+
+        try:
+            index = int(number)
+        except (TypeError, ValueError):
+            await ctx.send("Invalid number. Usage: `..remove <number>`.")
+            return
+
+        if index <= 0:
+            await ctx.send("Invalid number. Usage: `..remove <number>`.")
+            return
+
+        queue_items = list_order_queue_items()
+        if not queue_items:
+            await ctx.send("There are no scheduled orders.")
+            return
+
+        if index > len(queue_items):
+            await ctx.send(
+                f"Invalid number. Use `..queue` to view items (1-{len(queue_items)})."
+            )
+            return
+
+        order_id, data = queue_items[index - 1]
+        removed = remove_order(order_id)
+        if removed:
+            await ctx.send(
+                f"Removed {order_id} → {data['action']} {data['quantity']} "
+                f"{data['ticker']} via {data['broker']} at {data['time']}."
+            )
+            return
+        await ctx.send("That order could not be found. Please run `..queue` and retry.")
 
 
 async def setup(bot: commands.Bot) -> None:

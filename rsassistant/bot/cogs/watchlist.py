@@ -18,7 +18,7 @@ class WatchlistCog(commands.Cog):
         name="watch",
         aliases=["wa"],
         help="Add ticker(s) to the watchlist.",
-        usage="<ticker> <split_date> [split_ratio] | <ticker ratio (purchase by mm/dd)>",
+        usage="<ticker> <split_date> [split_ratio] | -t <ticker> -d <mm/dd> [-r <ratio>] | <ticker ratio (purchase by mm/dd)>",
         extras={"category": "Watchlist"},
     )
     async def watch(self, ctx: commands.Context, *, text: str) -> None:

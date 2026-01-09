@@ -64,3 +64,9 @@ def list_order_queue():
         f"{oid} → {data['action']} {data['quantity']} {data['ticker']} via {data['broker']} at {data['time']}"
         for oid, data in queue.items()
     ]
+
+
+def list_order_queue_items():
+    """Returns the queued orders as a list of (order_id, data) tuples."""
+    queue = _load_queue()
+    return list(queue.items())

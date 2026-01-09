@@ -502,6 +502,57 @@ def _is_valid_split_date(date_token: str) -> bool:
     return False
 
 
+def _parse_watch_flags(text: str):
+    """Parse flag-based watch arguments from a text string."""
+    tokens = text.split()
+    if not tokens or not tokens[0].startswith("-"):
+        return None, None
+
+    ticker = None
+    split_date = None
+    split_ratio = None
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        value = None
+        if "=" in token:
+            flag, value = token.split("=", 1)
+        else:
+            flag = token
+
+        if flag in ("-t", "--ticker"):
+            if value is None:
+                i += 1
+                if i >= len(tokens):
+                    return None, "Missing value for --ticker."
+                value = tokens[i]
+            ticker = value
+        elif flag in ("-d", "--date"):
+            if value is None:
+                i += 1
+                if i >= len(tokens):
+                    return None, "Missing value for --date."
+                value = tokens[i]
+            split_date = value
+        elif flag in ("-r", "--ratio"):
+            if value is None:
+                i += 1
+                if i >= len(tokens):
+                    return None, "Missing value for --ratio."
+                value = tokens[i]
+            split_ratio = value
+        else:
+            return None, f"Unknown flag: {flag}"
+        i += 1
+
+    return {
+        "ticker": ticker,
+        "split_date": split_date,
+        "split_ratio": split_ratio,
+    }, None
+
+
 async def watch(ctx, *, text: str):
     """Discord command handler for ``..watch``.
 
@@ -516,10 +567,36 @@ async def watch(ctx, *, text: str):
         await ctx.send(f"Added {count} tickers to watchlist.")
         return
 
+    parsed_flags, flag_error = _parse_watch_flags(text)
+    if flag_error:
+        await ctx.send(f"{flag_error} Usage: `..watch -t TICKER -d mm/dd [-r X-Y]`.")
+        return
+    if parsed_flags:
+        ticker = parsed_flags["ticker"]
+        split_date = parsed_flags["split_date"]
+        split_ratio = parsed_flags["split_ratio"]
+
+        if not ticker or not split_date:
+            await ctx.send("Usage: `..watch -t TICKER -d mm/dd [-r X-Y]`.")
+            return
+
+        if not _is_valid_split_date(split_date):
+            await ctx.send(
+                "Invalid date format. Please use mm/dd, mm/dd/yy, or mm/dd/yyyy."
+            )
+            return
+
+        if split_ratio and split_ratio.count("-") != 1:
+            await ctx.send("Invalid split ratio format. Use 'X-Y' (e.g., 1-10).")
+            return
+
+        await watch_list_manager.watch_ticker(ctx, ticker, split_date, split_ratio)
+        return
+
     parts = text.split()
     if len(parts) < 2:
         await ctx.send(
-            "Usage: '..watch TICKER mm/dd [ratio]' or paste multiple lines in the new format."
+            "Usage: '..watch TICKER mm/dd [ratio]' or '..watch -t TICKER -d mm/dd [-r X-Y]' or paste multiple lines."
         )
         return
 
