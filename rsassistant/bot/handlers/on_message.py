@@ -9,7 +9,7 @@ from typing import Sequence
 import requests
 
 from utils.logging_setup import logger
-from utils.config_utils import BOT_PREFIX
+from utils.config_utils import BOT_PREFIX, load_account_mappings
 from utils.parsing_utils import (
     alert_channel_message,
     parse_embed_message,
@@ -60,6 +60,14 @@ _pending_sell_commands = []  # queued auto-sell commands during refresh
 _refresh_summary_task = None
 _refresh_channel = None
 REFRESH_WINDOW_DURATION = timedelta(minutes=30)
+BROKER_DISCOVERY_WINDOW = timedelta(seconds=20)
+
+_configured_brokers = set()
+_configured_brokers_source = None
+_refresh_seen_brokers = set()
+_refresh_discovered_brokers = set()
+_refresh_completion_event = None
+_refresh_discovery_task = None
 
 AREB_TICKER = "AREB"
 AREB_QUANTITY_THRESHOLD = 50
@@ -176,6 +184,47 @@ def _format_watch_date(split_date: str) -> str:
         return split_date
 
 
+def _normalize_broker_name(broker: str) -> str:
+    """Return a normalized broker name for comparisons."""
+
+    return (broker or "").strip().upper()
+
+
+def _load_configured_brokers_from_mappings() -> set[str]:
+    mappings = load_account_mappings()
+    return {_normalize_broker_name(broker) for broker in mappings.keys() if broker}
+
+
+def _ensure_configured_brokers_loaded() -> None:
+    global _configured_brokers, _configured_brokers_source
+
+    mapped_brokers = _load_configured_brokers_from_mappings()
+    if mapped_brokers:
+        if _configured_brokers != mapped_brokers or _configured_brokers_source != "account_mapping":
+            _configured_brokers = mapped_brokers
+            _configured_brokers_source = "account_mapping"
+            logger.info(
+                "Configured brokers loaded from account mapping (%d).",
+                len(_configured_brokers),
+            )
+        return
+    if _configured_brokers:
+        return
+
+
+def _set_configured_brokers_from_discovery(brokers: set[str]) -> None:
+    global _configured_brokers, _configured_brokers_source
+
+    if not brokers:
+        return
+    _configured_brokers = set(brokers)
+    _configured_brokers_source = "discovered"
+    logger.info(
+        "Configured brokers discovered from holdings refresh (%d).",
+        len(_configured_brokers),
+    )
+
+
 def _reset_refresh_state(cancel_timer: bool = True):
     """Clear buffered holdings refresh state and any pending timers."""
 
@@ -192,11 +241,109 @@ def _reset_refresh_state(cancel_timer: bool = True):
     _refresh_channel = None
 
 
+def _reset_completion_state() -> None:
+    global _refresh_seen_brokers, _refresh_discovered_brokers
+    global _refresh_completion_event, _refresh_discovery_task
+
+    _refresh_seen_brokers = set()
+    _refresh_discovered_brokers = set()
+    _refresh_completion_event = None
+    if _refresh_discovery_task and not _refresh_discovery_task.done():
+        _refresh_discovery_task.cancel()
+    _refresh_discovery_task = None
+
+
 def _record_refresh_channel(channel) -> None:
     """Persist the target channel for the refresh summary."""
 
     global _refresh_channel
     _refresh_channel = channel
+
+
+async def _finalize_discovered_brokers_after_idle() -> None:
+    try:
+        await asyncio.sleep(BROKER_DISCOVERY_WINDOW.total_seconds())
+    except asyncio.CancelledError:
+        return
+
+    if not _refresh_completion_event or _refresh_completion_event.is_set():
+        return
+    if not _refresh_discovered_brokers:
+        return
+    _set_configured_brokers_from_discovery(_refresh_discovered_brokers)
+    _refresh_completion_event.set()
+
+
+def _reset_discovery_timer(bot) -> None:
+    global _refresh_discovery_task
+
+    if _refresh_discovery_task and not _refresh_discovery_task.done():
+        _refresh_discovery_task.cancel()
+    loop = getattr(bot, "loop", None) or asyncio.get_event_loop()
+    _refresh_discovery_task = loop.create_task(_finalize_discovered_brokers_after_idle())
+
+
+def start_holdings_completion_tracking(bot, force: bool = True) -> None:
+    """Begin tracking holdings brokers for refresh completion."""
+
+    global _refresh_completion_event, _refresh_seen_brokers, _refresh_discovered_brokers
+    global _refresh_discovery_task
+
+    if not force and _refresh_completion_event and not _refresh_completion_event.is_set():
+        return
+
+    _ensure_configured_brokers_loaded()
+    _refresh_seen_brokers = set()
+    _refresh_discovered_brokers = set()
+    if _refresh_completion_event is None or _refresh_completion_event.is_set():
+        _refresh_completion_event = asyncio.Event()
+    else:
+        _refresh_completion_event.clear()
+    if _refresh_discovery_task and not _refresh_discovery_task.done():
+        _refresh_discovery_task.cancel()
+    _refresh_discovery_task = None
+
+
+def reset_holdings_completion_tracking() -> None:
+    """Clear holdings refresh completion tracking state."""
+
+    _reset_completion_state()
+
+
+async def wait_for_holdings_completion(timeout: float) -> bool:
+    """Wait for holdings refresh to complete based on broker tracking."""
+
+    if not _refresh_completion_event:
+        return False
+    try:
+        await asyncio.wait_for(_refresh_completion_event.wait(), timeout=timeout)
+        return True
+    except asyncio.TimeoutError:
+        return False
+
+
+def record_holdings_brokers(bot, brokers: set[str]) -> None:
+    """Track seen brokers during a holdings refresh."""
+
+    if not brokers or not _refresh_completion_event or _refresh_completion_event.is_set():
+        return
+
+    normalized = {_normalize_broker_name(broker) for broker in brokers if broker}
+    if not normalized:
+        return
+
+    if _configured_brokers:
+        matched = normalized & _configured_brokers
+        if not matched:
+            return
+        _refresh_seen_brokers.update(matched)
+        if _configured_brokers.issubset(_refresh_seen_brokers):
+            _refresh_completion_event.set()
+        return
+
+    _refresh_seen_brokers.update(normalized)
+    _refresh_discovered_brokers.update(normalized)
+    _reset_discovery_timer(bot)
 
 
 async def _emit_refresh_summary(bot) -> None:
@@ -415,6 +562,7 @@ async def handle_primary_channel(bot, message):
     # Detect start of holdings refresh to buffer alerts until completion
     if "!rsa holdings" in lowered_content:
         start_refresh_window(bot, message.channel, REFRESH_WINDOW_DURATION)
+        start_holdings_completion_tracking(bot, force=False)
         logger.info("Detected start of holdings refresh; buffering alerts with timer.")
 
     if message.content.startswith(BOT_PREFIX):
@@ -429,6 +577,9 @@ async def handle_primary_channel(bot, message):
             if not parsed_holdings:
                 logger.error("Failed to parse embedded holdings")
                 return
+
+            brokers_seen = {str(h.get("broker", "")).strip() for h in parsed_holdings}
+            record_holdings_brokers(bot, brokers_seen)
 
             for holding in parsed_holdings:
                 holding["Key"] = (

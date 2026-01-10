@@ -16,7 +16,10 @@ from rsassistant.bot.handlers.on_message import (
     disable_audit,
     enable_audit,
     get_audit_summary,
+    reset_holdings_completion_tracking,
     start_refresh_window,
+    start_holdings_completion_tracking,
+    wait_for_holdings_completion,
 )
 from utils.watch_utils import send_reminder_message_embed, watch_list_manager
 
@@ -53,18 +56,12 @@ class HoldingsCog(commands.Cog):
             await send_reminder_message_embed(channel)
             enable_audit()
             start_refresh_window(self.bot, channel, REFRESH_WINDOW_DURATION)
+            start_holdings_completion_tracking(self.bot)
             await ctx.send("!rsa holdings all")
-
-            def check(message: discord.Message) -> bool:
-                author_ok = message.author.bot or message.author.name.lower() == "auto-rsa"
-                return (
-                    message.channel == ctx.channel
-                    and author_ok
-                    and "All commands complete in all brokers" in message.content
-                )
-
             try:
-                await self.bot.wait_for("message", check=check, timeout=600)
+                completed = await wait_for_holdings_completion(timeout=600)
+                if not completed:
+                    raise asyncio.TimeoutError
                 summary = get_audit_summary()
                 disable_audit()
                 if summary:
@@ -103,6 +100,8 @@ class HoldingsCog(commands.Cog):
             except asyncio.TimeoutError:
                 disable_audit()
                 await ctx.send("Timed out waiting for AutoRSA response.")
+            finally:
+                reset_holdings_completion_tracking()
         else:
             await ctx.send("Primary channel not found; unable to run holdings refresh.")
 

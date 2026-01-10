@@ -180,11 +180,33 @@ class OrdersCog(commands.Cog):
         name="remove",
         aliases=["rm"],
         help="Remove a scheduled order by its queue number.",
-        usage="<number>",
+        usage="[number]",
         extras={"category": "Orders"},
     )
-    async def remove_queued_order(self, ctx: commands.Context, number: str) -> None:
+    async def remove_queued_order(
+        self, ctx: commands.Context, number: str | None = None
+    ) -> None:
         """Remove a queued order by its 1-based list index."""
+
+        if not number:
+            queue_items = list_order_queue_items()
+            if not queue_items:
+                await ctx.send("There are no scheduled orders.")
+                return
+            lines = [
+                (
+                    f"{index}. {order_id} → {data['action']} {data['quantity']} "
+                    f"{data['ticker']} via {data['broker']} at {data['time']}"
+                )
+                for index, (order_id, data) in enumerate(queue_items, start=1)
+            ]
+            message = (
+                "**Scheduled Orders:**\n"
+                + "\n".join(lines)
+                + "\nType `..remove <number>` to remove an order."
+            )
+            await ctx.send(message)
+            return
 
         try:
             index = int(number)
