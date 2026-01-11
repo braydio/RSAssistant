@@ -1,104 +1,39 @@
 # RSAssistant
 
-RSAssistant is a Discord bot that monitors corporate actions and automates trading tasks around reverse stock splits. It parses NASDAQ and SEC alerts, tracks watchlists, and schedules orders to run through [autoRSA by NelsonDane](https://github.com/NelsonDane/auto-rsa).
+RSAssistant is a Discord bot that monitors reverse split announcements and automates trading workflows around them. It parses NASDAQ/SEC alerts, maintains watchlists, and sends `!rsa` commands to autoRSA for execution.
 
-## Features
+## What it does
 
-- Monitors NASDAQ and SEC feeds for reverse split announcements.
-- Parses filings and press releases for fractional share policies and effective dates.
-- Maintains watch and sell lists with automatic reminders.
-- Schedules buy or sell orders and executes them via autoRSA.
-- The `..all` command refreshes holdings, audits them against the watchlist,
-  and posts a summary of any missing tickers alongside a consolidated broker
-  holdings status embed.
-- Stores logs and a SQLite database under `volumes/` for persistence. Set
-  the `VOLUMES_DIR` environment variable to use a different location (e.g.
-  `/mnt/netstorage/volumes`).
+- Monitors secondary-channel alert feeds for reverse split announcements.
+- Extracts dates, ratios, and fractional share policies from filings.
+- Maintains watch and sell lists, reminders, and scheduled orders.
+- Refreshes holdings via `..all`, audits them against the watchlist, and posts consolidated summaries.
+- Persists logs, Excel output, and a SQLite database under `volumes/` (override with `VOLUMES_DIR`).
 
-## Architecture Overview
+## Minimal configuration quickstart
 
-- `RSAssistant.py` is a thin wrapper that launches `rsassistant.bot.core`, the
-  modular runtime entrypoint.
-- `rsassistant/` owns the Discord-facing pieces: cogs, bot setup, and background
-  tasks that orchestrate commands, reminders, and plugin loading.
-- `utils/` contains pure helpers such as parsing, configuration, scheduling, and
-  persistence helpers that are shared across the cogs.
-- Runtime state (CSV logs, Excel sheets, the SQLite database, and
-  `split_watchlist.json`) lives under `volumes/` (default `VOLUMES_DIR`) so
-  deployments can centralize data in a single managed directory.
-- The split watch file now resides specifically at `volumes/db/split_watchlist.json`
-  (or `VOLUMES_DIR/db/split_watchlist.json` when overridden) so it shares the
-  same persistence layer as the SQLite database and order queue.
+1. Copy the example env file:
 
-### Persistent logging toggles
-
-CSV, Excel, and SQL persistence are enabled by default. To disable any of
-these logging layers, set the corresponding environment variable to `false`:
-
-- `CSV_LOGGING_ENABLED`
-- `EXCEL_LOGGING_ENABLED`
-- `SQL_LOGGING_ENABLED`
-
-Any value other than `false` leaves the logger enabled.
-
-### Daily Holdings Refresh + Over-$1 Monitor
-
-RSAssistant can optionally trigger a holdings refresh when a watchlist reminder is posted, then watch incoming holdings embeds and alert on positions meeting a price threshold. It can also optionally auto-sell those positions.
-
-When `ENABLE_MARKET_REFRESH=true`, the bot also schedules the ``..all`` total refresh command every 15 minutes during U.S. market hours while continuing to run at 8:00 AM and 8:00 PM Eastern outside of market hours. Without the toggle, the two out-of-hours runs remain so you can opt out of the higher-frequency cadence. Weekend and configured market-holiday dates are skipped for automated refreshes/reminders, and scheduled orders are only sent during market hours.
-
-### Watchlist commands
-
-- `..watch`: Add one or more tickers to the watchlist using either the
-  traditional ``..watch TICKER mm/dd [ratio]`` format or the bulk lines format
-  such as ``TICKER 1-10 (purchase by 10/24)``.
-- `..watchlist`: Display all tracked tickers with their split dates, ratios, and
-  latest prices.
-
-- Auto refresh on reminder: posts `!rsa holdings all` after the reminder
-- Over-threshold alert: posts a note in the primary Discord channel
-- Optional auto-sell: posts a `!rsa sell {quantity} {ticker} {broker} false`
-- Daily de-dupe: avoids repeat alerts/sells per broker/account/ticker per day
-
-Configure these via environment variables (see below).
-
-## Policy Decision Flow
-
-1. **Local parsing first** – secondary-channel alerts are sent through `alert_channel_message`, and confirmed reverse split notices feed into `SplitPolicyResolver.full_analysis`. It steps through NASDAQ notice extraction, SEC filing analysis, press-release fallbacks, and keyword heuristics (e.g., `rounded up`, `no fractional shares`) to populate `fractional_share_policy`, `round_up_confirmed`, `effective_date`, and other policy metadata early in the pipeline.
-2. **LLM tie-breaker when needed** – once body text is available, `extract_reverse_split_details` calls the configured OpenAI model (only when `OPENAI_POLICY_ENABLED=true` and `OPENAI_API_KEY` is set) to normalize the ticker, split ratio, effective date, and fractional-share policy, then writes those findings back into the shared `policy_info` dictionary alongside `llm_details`.
-3. **Action layer** – `build_policy_summary` posts the URLs, dates, ratios, and resolved policy to the tertiary channel (or primary fallback) plus a snippet for quick review. When `round_up_confirmed` is true the bot automatically adds the ticker to `watch_list_manager`, records it in `split_watch_utils`, and triggers `attempt_autobuy`, which calls `schedule_and_execute` immediately if the market is open (or at the next open otherwise) to place the preconfigured buy order.
-
-## Directory Overview
-
-```
-.
-├── RSAssistant.py           # Main bot application
-├── utils/                   # Helper modules and order management
-├── config/                  # Example env and settings files
-├── volumes/                 # Logs, database, and Excel output
-├── unittests/               # Test suite
-├── requirements.txt         # Python dependencies
-├── docker-compose.yml       # Docker setup
-└── Dockerfile
+```bash
+cp config/.env.example config/.env
 ```
 
-`RSAssistant.py` initializes the bot, command handlers, and scheduled tasks. Utility modules under `utils/` handle configuration, watch lists, and order execution.
+2. Open `config/.env` and set at least:
 
-### Code ownership
+- `BOT_TOKEN`
+- `DISCORD_PRIMARY_CHANNEL`
+- `DISCORD_SECONDARY_CHANNEL`
+- `DISCORD_TERTIARY_CHANNEL` (optional, falls back to primary)
 
-- `rsassistant/`: Discord orchestration (cogs, tasks, bot startup).
-- `utils/`: Pure helpers without Discord context (parsing, storage, scheduling, config).
+3. Start the bot:
 
-## Contributing
+```bash
+python RSAssistant.py
+```
 
-Follow the project-wide contribution guidance in `AGENTS.md`. In particular,
-create Discord-facing code under `rsassistant/`, keep helpers that lack bot
-context inside `utils/`, and document any new persistence requirements so other
-contributors know where runtime state should live.
+That is enough to run the core workflow. See the sections below for optional OpenAI parsing, holdings alerts, and refresh automation.
 
-## Quick Start
-
-1. Clone the repository and install dependencies:
+## Setup (local)
 
 ```bash
 git clone https://github.com/braydio/RSAssistant.git
@@ -106,160 +41,109 @@ cd RSAssistant
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-2. Copy the example configuration and update your Discord credentials:
-
-```bash
-\# Single source of truth for configuration
-cp config/example.env config/.env
-```
-
-If you want RSAssistant to store data in an external location, set the
-`VOLUMES_DIR` variable in your environment (for local and Docker) to your
-desired path.
-
-3. Point your Discord RSS relay (e.g., MonitoRSS) at the reverse split feeds
-   so RSAssistant can parse new notices from your secondary channel:
-
-   - `https://nasdaqtrader.com/Rss.aspx?feed=currentheadlines&categorylist=105`
-   - `https://www.revrss.com/newswires.xml`
-
-   Post these feeds into the channel mapped to `DISCORD_SECONDARY_CHANNEL`; the
-   bot will mirror parsed reverse split summaries and policy notes to the
-   tertiary channel when configured.
-
-4. Launch the bot:
-
-```bash
+cp config/.env.example config/.env
 python RSAssistant.py
 ```
 
-The bot's `..all` command now audits your holdings against the watchlist,
-summarizes any tickers that are missing from your accounts, and consolidates
-broker holdings status into a single embed.
-
-## How to Run
-
-CLI:
+## Setup (Docker)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp config/example.env config/.env
-python RSAssistant.py
-```
-
-Docker:
-
-```bash
-cp config/example.env config/.env
+cp config/.env.example config/.env
 docker compose up --build
 ```
 
-Optional: set `OPENAI_POLICY_ENABLED=true` and `OPENAI_API_KEY=...` in
-`config/.env` to enable OpenAI reverse-split parsing.
+Docker uses `config/.env` via compose `env_file`. The application does not load a `.env` file inside the container.
 
-### Discord channel configuration
+## Discord channel layout
 
-RSAssistant differentiates between three Discord channels so information lands
-where it is most actionable:
+- `DISCORD_PRIMARY_CHANNEL`: Operational commands, holdings refresh output, order confirmations.
+- `DISCORD_SECONDARY_CHANNEL`: Where NASDAQ/SEC alert feeds are posted.
+- `DISCORD_TERTIARY_CHANNEL`: Reverse split summaries and policy snippets (optional).
 
-- `DISCORD_PRIMARY_CHANNEL`: Operational commands, holdings refresh output, and
-  scheduled order confirmations.
-- `DISCORD_SECONDARY_CHANNEL`: Source feed where NASDAQ and SEC alerts arrive.
-- `DISCORD_TERTIARY_CHANNEL`: Destination for reverse split summaries and the
-  associated policy snippets parsed from filings or press releases.
+If `DISCORD_TERTIARY_CHANNEL` is not set, summaries fall back to the primary channel.
 
-Populate the corresponding environment variables in your `.env` file with the
-channel IDs for your server. When the tertiary channel ID is omitted, the bot
-falls back to the primary channel to avoid dropping critical alerts.
+## Configuration notes
 
-### Configuration: Auto Refresh + Monitor
+### Env file loading
 
-Add the following keys to your environment. The app now loads from a single source:
+- Default: `config/.env` when running locally.
+- Override: set `ENV_FILE=/path/to/your.env`.
+- Docker: process environment only (compose `env_file`).
 
-- Local default: `config/.env`
-- Override: set `ENV_FILE=/path/to/your.env` when running locally
-- Docker: compose injects variables from `config/.env`; the app does not load a file in-container
+### OpenAI policy parsing (optional)
 
-- `AUTO_REFRESH_ON_REMINDER` (bool): If `true`, send `!rsa holdings all` after the reminder fires. Default `false`.
-- `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger the alert. Default `1`.
-- `AUTO_SELL_LIVE` (bool): If `true`, also post `!rsa sell {quantity} {ticker} {broker} false`. Default `false`.
-- `ENABLE_MARKET_REFRESH` (bool): If `true`, schedule the ``..all`` command every
-  15 minutes during market hours in addition to the 8:00 AM and 8:00 PM runs.
-  Default `false` to avoid the higher-frequency cadence unless explicitly
-  requested.
-- `MARKET_HOLIDAYS_FILE` (path, optional): File containing market holidays (one `YYYY-MM-DD` per line). Defaults to `config/market_holidays.txt`. Lines starting with `#` are treated as comments.
-- `IGNORE_TICKERS` (CSV): Tickers to skip for alert/auto-sell (e.g., `ABCD,EFGH`). Default empty.
-- `IGNORE_TICKERS_FILE` (path, optional): File containing one ticker per line to ignore. Defaults to `config/ignore_tickers.txt`. Lines starting with `#` are treated as comments.
-- `IGNORE_BROKERS` (CSV): Brokers to skip for alert/auto-sell (e.g., `Fidelity,Schwab`). Default empty.
-- `IGNORE_BROKERS_FILE` (path, optional): File containing one broker name per line to ignore. Defaults to `config/ignore_brokers.txt`. Lines starting with `#` are treated as comments.
+Set these in `config/.env` to enable LLM tie-breakers:
 
-You can use either the env var, the file, or both — the sets merge. Create the file like:
+- `OPENAI_POLICY_ENABLED=true`
+- `OPENAI_API_KEY=...`
+- `OPENAI_MODEL=gpt-4o-mini` (default)
 
-```
+### Holdings refresh and alerts
+
+- `AUTO_REFRESH_ON_REMINDER` (bool): Send `!rsa holdings all` after reminders.
+- `ENABLE_MARKET_REFRESH` (bool): Run `..all` every 15 minutes during market hours.
+- `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger alerts (default `1`).
+- `AUTO_SELL_LIVE` (bool): Also post `!rsa sell {quantity} {ticker} {broker} false`.
+- `IGNORE_TICKERS` / `IGNORE_TICKERS_FILE`: Skip alert/auto-sell for tickers.
+- `IGNORE_BROKERS` / `IGNORE_BROKERS_FILE`: Skip alert/auto-sell for brokers.
+- `MENTION_USER_ID` / `MENTION_USER_IDS`: Discord user IDs to mention.
+- `MENTION_ON_ALERTS` (bool): Enable/disable mentions.
+
+Example ignore list:
+
+```bash
 cp config/ignore_tickers.example.txt config/ignore_tickers.txt
 echo "AAPL" >> config/ignore_tickers.txt
-echo "MSFT  # Long-term" >> config/ignore_tickers.txt
 ```
 
-Apply the same approach for brokers by creating `config/ignore_brokers.txt`
-with one broker name per line.
+### Market holidays
 
-To configure market holidays, copy the example list and add your dates:
-
-```
+```bash
 cp config/market_holidays.example.txt config/market_holidays.txt
 echo "2025-01-01  # New Year's Day" >> config/market_holidays.txt
 ```
 
-- `MENTION_USER_ID` / `MENTION_USER_IDS` (string or CSV): Discord user ID(s) to @-mention in alerts (e.g., `123456789012345678` or `123...,987...`). Optional.
-- `MENTION_ON_ALERTS` (bool): Enable/disable mentions on alerts. Default `true`.
+## Feeds
 
-De-duplication state is stored at `config/overdollar_actions.json`. Delete that file if you want to reset daily state immediately.
+Point your RSS relay (for example, MonitoRSS) at:
 
-### Docker
+- `https://nasdaqtrader.com/Rss.aspx?feed=currentheadlines&categorylist=105`
+- `https://www.revrss.com/newswires.xml`
 
-Alternatively, build and run with Docker:
+Post these into the channel mapped to `DISCORD_SECONDARY_CHANNEL`.
 
-```bash
-docker compose up --build
+## Architecture overview
+
+- `RSAssistant.py` launches the modular runtime in `rsassistant/bot`.
+- `rsassistant/` contains Discord cogs, handlers, and background tasks.
+- `utils/` contains configuration, parsing, scheduling, and persistence helpers.
+- Runtime state lives under `volumes/` (logs, DB, Excel, split watchlist).
+
+Directory snapshot:
+
+```
+.
+├── RSAssistant.py
+├── rsassistant/            # Bot runtime and cogs
+├── utils/                  # Shared helpers
+├── config/                 # .env and config files
+├── volumes/                # Logs, database, Excel output
+├── unittests/              # Unit tests
+├── requirements.txt
+├── docker-compose.yml
+└── Dockerfile
 ```
 
-The compose setup also includes a `watchtower` container which checks for new
-images daily and automatically updates the running `rsassistant` service.
+## Default account nicknames
 
-Environment loading behavior inside Docker:
-
-- Compose uses `env_file: config/.env` and passes variables to the container.
-- The application detects it is running in Docker and relies on the process environment only (no additional `.env` file is read inside the container).
-
-To run locally with a custom env file path instead of `config/.env`, prefix commands with:
-
-```bash
-ENV_FILE=config/.env python RSAssistant.py
-```
-
-`RSAssistant.py` launches the modular bot implementation under `rsassistant/bot`.
-
-## Default Account Nicknames
-
-When an account has no nickname in `account_mapping.json`, RSAssistant falls
-back to the pattern `"{broker} {group} {account}"`. This ensures new accounts
-and orders are always logged with a deterministic identifier.
+If a broker/account is missing from `config/account_mapping.json`, RSAssistant falls back to the pattern `"{broker} {group} {account}"` and writes it to the mapping file so tracking still works.
 
 ## Testing
 
-Run unit tests with:
-
 ```bash
-python -m pytest
+python -m unittest discover -s unittests -p '*_test.py'
 ```
 
-Tests rely on `pytest` for fixtures and discovery.
+## Contributing
 
-## License
-
-This project is released under the MIT License.
+Follow the repository guidelines in `AGENTS.md`, especially around config, logging, and where to place new code.
