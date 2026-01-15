@@ -11,9 +11,11 @@ import yaml
 
 from utils.config_utils import (
     ACCOUNT_MAPPING,
+    CONFIG_DIR,
     HOLDINGS_LOG_CSV,
     get_account_nickname,
     load_account_mappings,
+    load_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,22 @@ def debug_order_data(order_data):
 
 
 HOLDINGS_TIMESTAMP = check_holdings_timestamp(HOLDINGS_LOG_CSV)
+
+
+def _load_account_owners():
+    config = load_config()
+    group_titles = config.get("account_owners")
+    if not group_titles:
+        settings_path = CONFIG_DIR / "settings.yml"
+        if settings_path.exists():
+            with open(settings_path, "r") as file:
+                settings_data = yaml.safe_load(file) or {}
+            group_titles = settings_data.get("account_owners", {})
+        else:
+            group_titles = {}
+    if isinstance(group_titles, dict):
+        return {str(indicator): owner for indicator, owner in group_titles.items()}
+    return {}
 
 
 async def track_ticker_summary(
@@ -636,7 +654,7 @@ def all_brokers_summary_by_owner(specific_broker=None):
     Returns:
         dict: Dictionary with each broker’s total holdings grouped by owner.
     """
-    group_titles = config.get("account_owners", {})
+    group_titles = _load_account_owners()
     brokers_summary = {}
 
     # Debug: log the structure of account_mapping
