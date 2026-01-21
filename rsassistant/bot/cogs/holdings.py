@@ -7,7 +7,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-from utils.channel_resolver import resolve_reply_channel
+from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import DISCORD_PRIMARY_CHANNEL, HOLDINGS_LOG_CSV
 from utils.csv_utils import clear_holdings_log
 from utils.utility_utils import track_ticker_summary

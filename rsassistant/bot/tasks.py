@@ -13,7 +13,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from discord.ext import commands
 
-from utils.channel_resolver import resolve_reply_channel
+from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import BOT_PREFIX, DISCORD_PRIMARY_CHANNEL, ENABLE_MARKET_REFRESH
 from utils.order_exec import schedule_and_execute
 from utils.order_queue_manager import get_order_queue

@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 
 from utils.watch_utils import watch_list_manager
-from utils.channel_resolver import resolve_reply_channel
+from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     RSA_COMMAND_MIN_INTERVAL_SECONDS,

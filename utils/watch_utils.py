@@ -28,7 +28,7 @@ from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import send_large_message_chunks
 from utils.price_fetcher import get_last_prices
 from utils.sql_utils import update_historical_holdings
-from utils.channel_resolver import resolve_reply_channel
+from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.market_calendar import MARKET_TZ, is_market_day
 
 account_mapping = load_account_mappings()

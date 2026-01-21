@@ -19,7 +19,7 @@ import discord.gateway
 from discord.ext import commands
 
 from . import tasks as task_runner
-from utils.channel_resolver import resolve_reply_channel
+from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     BOT_PREFIX,

@@ -37,7 +37,7 @@ from utils.config_utils import (
     TAGGED_ALERT_REQUIREMENTS,
 )
 from utils import split_watch_utils
-from utils.channel_resolver import (
+from rsassistant.bot.channel_resolver import (
     resolve_message_destination,
     resolve_reply_channel,
 )

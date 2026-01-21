@@ -63,6 +63,14 @@ Write a short "policy decision order" section in README (or a dedicated doc):
 If it is still a staging area, document it in one place (short README in that
 folder). If not, remove it to avoid confusion.
 
+## Unification Progress
+- Completed: moved Discord channel resolution into `rsassistant/bot/channel_resolver.py`,
+  updated imports/tests, and removed the `utils/channel_resolver.py` copy so
+  bot-facing logic stays within the bot package.
+- Completed: moved holdings history Discord helpers into `rsassistant/bot/history_query.py`,
+  removing the duplicate `utils/history_query.py` module to keep bot responses
+  consolidated under the bot package.
+
 ## Suggested Next Steps
 1. Create a "Architecture Overview" section in `README.md` with a simple
    bullet diagram (entrypoint -> cogs -> utils/services -> persistence).

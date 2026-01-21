@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`utils.channel_resolver`."""
+"""Unit tests for :mod:`rsassistant.bot.channel_resolver`."""
 
 import unittest
 
@@ -30,7 +30,7 @@ class ChannelResolverTest(unittest.TestCase):
         self._original_secondary = config_utils.DISCORD_SECONDARY_CHANNEL
         self._original_tertiary = config_utils.DISCORD_TERTIARY_CHANNEL
 
-        from utils import channel_resolver
+        from rsassistant.bot import channel_resolver
 
         self.resolver = channel_resolver
 
