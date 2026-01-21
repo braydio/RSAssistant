@@ -70,6 +70,8 @@ folder). If not, remove it to avoid confusion.
 - Completed: moved holdings history Discord helpers into `rsassistant/bot/history_query.py`,
   removing the duplicate `utils/history_query.py` module to keep bot responses
   consolidated under the bot package.
+- Completed: removed unused `utils/secondary_alert_parser.py` now that secondary
+  channel handling lives in `rsassistant/bot/handlers/on_message.py`.
 
 ## Suggested Next Steps
 1. Create a "Architecture Overview" section in `README.md` with a simple

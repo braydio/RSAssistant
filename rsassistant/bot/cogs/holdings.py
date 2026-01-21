@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
+from rsassistant.bot.history_query import show_sql_holdings_history
 from utils.config_utils import DISCORD_PRIMARY_CHANNEL, HOLDINGS_LOG_CSV
 from utils.csv_utils import clear_holdings_log
 from utils.utility_utils import track_ticker_summary
@@ -104,6 +105,31 @@ class HoldingsCog(commands.Cog):
                 reset_holdings_completion_tracking()
         else:
             await ctx.send("Primary channel not found; unable to run holdings refresh.")
+
+    @commands.command(
+        name="history",
+        aliases=["hh"],
+        help="Show historical holdings from the SQL log.",
+        usage="[account] [ticker] [start_date] [end_date]",
+        extras={"category": "Reporting"},
+    )
+    async def holdings_history(
+        self,
+        ctx: commands.Context,
+        account: str | None = None,
+        ticker: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> None:
+        """Display a holdings history plot based on optional filters."""
+
+        await show_sql_holdings_history(
+            ctx,
+            account=account,
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

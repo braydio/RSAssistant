@@ -38,17 +38,18 @@ incomplete_orders = {}
 # Patterns to discover ticker symbols from remote press releases or notices.
 _REMOTE_TICKER_PATTERNS = [
     re.compile(
-        r"(?:NASDAQ(?:CM|GM|GS)?|NASDAQ CAPITAL MARKET|NASDAQ STOCK MARKET|"
+        r"\b(?:NASDAQ(?:CM|GM|GS)?|NASDAQ CAPITAL MARKET|NASDAQ STOCK MARKET|"
         r"NYSE(?: AMERICAN| ARCA| MKT)?|NYSEMKT|NYSEARCA|AMEX|OTC(?:QX|QB|MKTS|BB)?|"
-        r"TSX(?: VENTURE)?|TSXV|CSE|ASX|LSE|AIM)\s*[:=\-–]?\s*([A-Z][A-Z0-9.\-]{0,6})",
+        r"TSX(?: VENTURE)?|TSXV|CSE|ASX|LSE|AIM)\b\s*[:=\-–]\s*"
+        r"([A-Z][A-Z0-9.\-]{0,5})\b",
         re.IGNORECASE,
     ),
     re.compile(
-        r"trading under the symbol\s+[\"'“”]?([A-Z]{1,5})[\"'“”]?",
+        r"\btrading under the symbol\b\s+[\"'“”]?([A-Z][A-Z0-9.\-]{0,5})[\"'“”]?\b",
         re.IGNORECASE,
     ),
     re.compile(
-        r"ticker symbol\s+[\"'“”]?([A-Z]{1,5})[\"'“”]?",
+        r"\bticker symbol\b\s+[\"'“”]?([A-Z][A-Z0-9.\-]{0,5})[\"'“”]?\b",
         re.IGNORECASE,
     ),
 ]
@@ -77,7 +78,9 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
         )
         return None
 
-    text = re.sub(r"<[^>]+>", " ", response.text or "")
+    html = response.text or ""
+    html = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html)
+    text = re.sub(r"<[^>]+>", " ", html)
 
     for pattern in _REMOTE_TICKER_PATTERNS:
         match = pattern.search(text)
