@@ -1036,9 +1036,12 @@ def alert_channel_message(content):
     notice and scanning for common ticker annotations used in press releases.
     """
 
+    normalized_content = (content or "").replace("\u00a0", " ")
+    normalized_content = re.sub(r"\s+", " ", normalized_content).strip()
+
     # Regex pattern to extract the URL
     url_pattern = r"http[s]?://[^\s]+"
-    url_match = re.search(url_pattern, content)
+    url_match = re.search(url_pattern, normalized_content)
     url = url_match.group(0) if url_match else None
 
     if url:
@@ -1046,7 +1049,7 @@ def alert_channel_message(content):
 
     # Regex pattern to extract the ticker inside parentheses
     ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
-    ticker_match = re.search(ticker_pattern, content)
+    ticker_match = re.search(ticker_pattern, normalized_content)
     ticker = ticker_match.group(1).upper() if ticker_match else None
 
     if ticker:
@@ -1054,9 +1057,12 @@ def alert_channel_message(content):
     else:
         ticker = _extract_ticker_from_remote_source(url)
 
-    # Case-insensitive check if "Reverse Stock Split" appears anywhere in the message
+    # Case-insensitive check for "reverse split" phrases in the alert message
     reverse_split_confirm = (
-        re.search(r"reverse stock split", content, re.IGNORECASE) is not None
+        re.search(
+            r"reverse\s+(?:stock\s+)?split", normalized_content, re.IGNORECASE
+        )
+        is not None
     )
     logger.info(
         f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}"
