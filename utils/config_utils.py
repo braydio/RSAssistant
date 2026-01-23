@@ -24,6 +24,40 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+def _get_env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    logger.warning("Invalid boolean for %s=%s; using default %s.", name, raw, default)
+    return default
+
+
+def _get_env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        logger.warning("Invalid int for %s=%s; using default %s.", name, raw, default)
+        return default
+
+
+def _get_env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw.strip())
+    except ValueError:
+        logger.warning("Invalid float for %s=%s; using default %s.", name, raw, default)
+        return default
+
 # --- Early path definitions for .env loading ---
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
@@ -83,6 +117,8 @@ CONFIG_DIR = (BASE_DIR / "config").resolve()
 
 # --- Config paths ---
 ACCOUNT_MAPPING = CONFIG_DIR / "account_mapping.json"
+# Backward compatibility alias for legacy imports.
+ACCOUNT_MAPPING_FILE = ACCOUNT_MAPPING
 WATCH_FILE = CONFIG_DIR / "watch_list.json"
 SELL_FILE = CONFIG_DIR / "sell_list.json"
 EXCEL_FILE_MAIN = VOLUMES_DIR / "excel" / "ReverseSplitLog.xlsx"
@@ -96,46 +132,38 @@ DEFAULT_ACCOUNT_NICKNAME = "{broker} {group} {account}"
 
 # --- Runtime constants from env ---
 VERSION = "development 0.1"
-DISCORD_PRIMARY_CHANNEL = int(os.getenv("DISCORD_PRIMARY_CHANNEL", 0))
-DISCORD_SECONDARY_CHANNEL = int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0))
-DISCORD_TERTIARY_CHANNEL = int(os.getenv("DISCORD_TERTIARY_CHANNEL", 0))
+DISCORD_PRIMARY_CHANNEL = _get_env_int("DISCORD_PRIMARY_CHANNEL", 0)
+DISCORD_SECONDARY_CHANNEL = _get_env_int("DISCORD_SECONDARY_CHANNEL", 0)
+DISCORD_TERTIARY_CHANNEL = _get_env_int("DISCORD_TERTIARY_CHANNEL", 0)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
 # OpenAI parsing for reverse split notices
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "20"))
-OPENAI_POLICY_ENABLED = (
-    os.getenv("OPENAI_POLICY_ENABLED", "false").strip().lower() == "true"
-)
+OPENAI_TIMEOUT_SECONDS = _get_env_int("OPENAI_TIMEOUT_SECONDS", 20)
+OPENAI_POLICY_ENABLED = _get_env_bool("OPENAI_POLICY_ENABLED", False)
 # Minimum interval between outbound !rsa commands (rate-limit protection)
-RSA_COMMAND_MIN_INTERVAL_SECONDS = float(
-    os.getenv("RSA_COMMAND_MIN_INTERVAL_SECONDS", "2")
+RSA_COMMAND_MIN_INTERVAL_SECONDS = _get_env_float(
+    "RSA_COMMAND_MIN_INTERVAL_SECONDS", 2
 )
 # Enable scheduled ``..all`` refreshes every 15 minutes during market hours
-ENABLE_MARKET_REFRESH = (
-    os.getenv("ENABLE_MARKET_REFRESH", "false").strip().lower() == "true"
-)
+ENABLE_MARKET_REFRESH = _get_env_bool("ENABLE_MARKET_REFRESH", False)
 
 # --- Feature toggles and thresholds ---
 # Automatically trigger holdings refresh when the watchlist reminder is sent
-AUTO_REFRESH_ON_REMINDER = (
-    os.getenv("AUTO_REFRESH_ON_REMINDER", "false").strip().lower() == "true"
-)
+AUTO_REFRESH_ON_REMINDER = _get_env_bool("AUTO_REFRESH_ON_REMINDER", False)
 # Threshold for triggering alerts on detected holdings based on last price
-HOLDING_ALERT_MIN_PRICE = float(os.getenv("HOLDING_ALERT_MIN_PRICE", "1"))
+HOLDING_ALERT_MIN_PRICE = _get_env_float("HOLDING_ALERT_MIN_PRICE", 1)
 # If enabled, automatically place sell orders to close detected holdings
-AUTO_SELL_LIVE = os.getenv("AUTO_SELL_LIVE", "false").strip().lower() == "true"
+AUTO_SELL_LIVE = _get_env_bool("AUTO_SELL_LIVE", False)
 # Comma-separated list of tickers to ignore for alerts/auto-sell
 # Also supports a file of tickers (one per line) at CONFIG_DIR/ignore_tickers.txt
 # or a custom path via IGNORE_TICKERS_FILE.
 
 # Persistence layer toggles (enabled by default)
-CSV_LOGGING_ENABLED = os.getenv("CSV_LOGGING_ENABLED", "true").strip().lower() == "true"
-EXCEL_LOGGING_ENABLED = (
-    os.getenv("EXCEL_LOGGING_ENABLED", "true").strip().lower() == "true"
-)
-SQL_LOGGING_ENABLED = os.getenv("SQL_LOGGING_ENABLED", "true").strip().lower() == "true"
+CSV_LOGGING_ENABLED = _get_env_bool("CSV_LOGGING_ENABLED", True)
+EXCEL_LOGGING_ENABLED = _get_env_bool("EXCEL_LOGGING_ENABLED", True)
+SQL_LOGGING_ENABLED = _get_env_bool("SQL_LOGGING_ENABLED", True)
 
 # Path to ignore list files (defaults inside config/)
 IGNORE_TICKERS_FILE = Path(
@@ -162,6 +190,9 @@ def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
     entries = set()
     try:
         if not path.exists():
+            return entries
+        if path.is_dir():
+            logger.warning("Ignore %s path is a directory: %s", entry_type, path)
             return entries
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
@@ -202,6 +233,9 @@ def _load_market_holidays(path: Path) -> set:
     """Return a set of holiday dates parsed from ``path``."""
     holidays: set = set()
     if not path.exists():
+        return holidays
+    if path.is_dir():
+        logger.warning("Market holidays path is a directory: %s", path)
         return holidays
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -347,6 +381,9 @@ def _load_tagged_alerts_from_file(path: Path) -> dict[str, float | None]:
     requirements: dict[str, float | None] = {}
     if not path.exists():
         return requirements
+    if path.is_dir():
+        logger.warning("Tagged alerts path is a directory: %s", path)
+        return requirements
 
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -424,7 +461,7 @@ MENTION_USER_IDS = _parse_user_ids(_raw_mentions)
 # Maintain backward compatibility for single-ID usage
 MENTION_USER_ID = MENTION_USER_IDS[0] if MENTION_USER_IDS else ""
 # Whether to include a mention on over-threshold alerts
-MENTION_ON_ALERTS = os.getenv("MENTION_ON_ALERTS", "true").strip().lower() == "true"
+MENTION_ON_ALERTS = _get_env_bool("MENTION_ON_ALERTS", True)
 
 if MENTION_USER_IDS:
     logger.info(f"Configured {len(MENTION_USER_IDS)} mention ID(s) for alerts.")
@@ -441,7 +478,7 @@ logger.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
 logger.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
 logger.info(f"Resolved SELLING_FILE: {SELL_FILE}")
 
-ENABLE_TICKER_CLI = os.getenv("ENABLE_TICKER", "false").strip().lower() == "true"
+ENABLE_TICKER_CLI = _get_env_bool("ENABLE_TICKER", False)
 logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 
 # === Account Mapping Functions ===
@@ -471,6 +508,7 @@ def save_account_mappings(mappings: dict) -> None:
     """Persist account nickname mappings to disk."""
 
     logger.debug(f"Saving account mappings to {ACCOUNT_MAPPING}")
+    ACCOUNT_MAPPING.parent.mkdir(parents=True, exist_ok=True)
     with open(ACCOUNT_MAPPING, "w", encoding="utf-8") as f:
         json.dump(mappings, f, indent=4)
     logger.info(f"Account mappings saved to {ACCOUNT_MAPPING}")
@@ -560,7 +598,7 @@ def load_config():
                 "LOG_FILE",
                 str(VOLUMES_DIR / "logs" / "rsassistant.log"),
             ),
-            "backup_count": int(os.getenv("LOG_BACKUP_COUNT", 2)),
+            "backup_count": _get_env_int("LOG_BACKUP_COUNT", 2),
         },
         "environment": {
             "mode": os.getenv("ENV", "production"),
@@ -568,16 +606,16 @@ def load_config():
         "discord": {
             "token": os.getenv("BOT_TOKEN", ""),
             "prefix": os.getenv("BOT_PREFIX", ".."),
-            "primary_channel": int(os.getenv("DISCORD_PRIMARY_CHANNEL", 0)),
-            "secondary_channel": int(os.getenv("DISCORD_SECONDARY_CHANNEL", 0)),
+            "primary_channel": _get_env_int("DISCORD_PRIMARY_CHANNEL", 0),
+            "secondary_channel": _get_env_int("DISCORD_SECONDARY_CHANNEL", 0),
         },
         "heartbeat": {
-            "enabled": os.getenv("HEARTBEAT_ENABLED", "true").lower() == "true",
+            "enabled": _get_env_bool("HEARTBEAT_ENABLED", True),
             "path": os.getenv(
                 "HEARTBEAT_PATH",
                 str(VOLUMES_DIR / "logs" / "heartbeat.txt"),
             ),
-            "interval": int(os.getenv("HEARTBEAT_INTERVAL", 60)),
+            "interval": _get_env_int("HEARTBEAT_INTERVAL", 60),
         },
         "persistence": {
             "csv": CSV_LOGGING_ENABLED,

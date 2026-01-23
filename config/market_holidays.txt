@@ -1,0 +1,4 @@
+# One date per line in YYYY-MM-DD format.
+# Lines starting with # are ignored.
+# Example:
+# 2024-12-25

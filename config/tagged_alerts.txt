@@ -1,0 +1,4 @@
+# One entry per line: TICKER or TICKER:QUANTITY
+# Lines starting with # are ignored.
+# Example:
+# ABC:100

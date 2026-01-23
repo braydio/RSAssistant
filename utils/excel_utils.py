@@ -6,9 +6,9 @@ import os
 import shutil
 from copy import copy
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import openpyxl
-from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 # Import configuration and functions from init.py
@@ -16,16 +16,14 @@ from utils.config_utils import (
     ACCOUNT_MAPPING,
     ERROR_LOG_FILE,
     EXCEL_FILE_MAIN,
-    HOLDINGS_LOG_CSV,
     get_account_nickname_or_default,
     load_account_mappings,
-    load_config,
     EXCEL_LOGGING_ENABLED,
 )
 
-EXCEL_FILE_DIRECTORY = str(EXCEL_FILE_MAIN.parent) + "/"
-EXCEL_FILE_NAME = "ReverseSplitLog"
-BASE_EXCEL_FILE = "ReverseSplitLog.xlsx"
+EXCEL_FILE_DIRECTORY = EXCEL_FILE_MAIN.parent
+EXCEL_FILE_NAME = EXCEL_FILE_MAIN.stem
+BASE_EXCEL_FILE = EXCEL_FILE_MAIN.name
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +37,11 @@ account_start_column = 1
 days_keep_backup = 2
 
 
-today = datetime.now().strftime("%m-%d")  # Format the date as MM-DD
-tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m-%d")
+def _get_backup_dates(now=None):
+    current = now or datetime.now()
+    today_str = current.strftime("%m-%d")
+    tomorrow_str = (current + timedelta(days=1)).strftime("%m-%d")
+    return today_str, tomorrow_str
 
 
 def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME):
@@ -50,20 +51,20 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
     returns the base path without creating or verifying backups.
     """
 
-    base_excel_file_path = os.path.join(os.path.normpath(directory), BASE_EXCEL_FILE)
+    base_dir = Path(directory)
+    base_excel_file_path = base_dir / BASE_EXCEL_FILE
 
     if not EXCEL_LOGGING_ENABLED:
-        return base_excel_file_path
+        return os.fspath(base_excel_file_path)
 
     logger.debug(f"directory={directory}, filename={filename}")
 
-    archive_dir = os.path.join(str(directory), "archive")
+    archive_dir = base_dir / "archive"
     logger.debug(f"archive_dir={archive_dir}")
 
-    today_excel_file = os.path.join(archive_dir, f"Backup_{filename}.{today}.xlsx")
-    tomorrow_excel_file = os.path.join(
-        archive_dir, f"Backup_{filename}.{tomorrow}.xlsx"
-    )
+    today_str, tomorrow_str = _get_backup_dates()
+    today_excel_file = archive_dir / f"Backup_{filename}.{today_str}.xlsx"
+    tomorrow_excel_file = archive_dir / f"Backup_{filename}.{tomorrow_str}.xlsx"
 
     if not os.path.exists(archive_dir):
         os.makedirs(archive_dir)
@@ -83,7 +84,7 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
         else:
             logger.error(f"Today's backup file {today_excel_file} not found.")
 
-    return base_excel_file_path
+    return os.fspath(base_excel_file_path)
 
 
 EXCEL_FILE_PATH = get_excel_file_path()
@@ -154,8 +155,6 @@ def load_excel_workbook(file_path):
     return openpyxl.load_workbook(file_path)
 
 
-EXCEL_FILE_LIVE = load_excel_workbook(EXCEL_FILE_PATH)
-
 # -- Update Account Mappings
 
 
@@ -167,6 +166,9 @@ async def index_account_details(
     # Load the Excel workbook and select the 'Account Details' sheet
     try:
         wb = load_excel_workbook(excel_main_path)
+        if not wb:
+            await ctx.send(f"Workbook not found at `{excel_main_path}`.")
+            return
         if "Account Details" not in wb.sheetnames:
             await ctx.send("Sheet 'Account Details' not found.")
             return
@@ -176,7 +178,7 @@ async def index_account_details(
         return
 
     # Load the existing account mappings using the function from config_utils
-    account_mappings = ACCOUNT_MAPPING
+    account_mappings = load_account_mappings()
 
     # Keep track of changes
     changes = []
@@ -188,17 +190,22 @@ async def index_account_details(
         ):  # Start from row 2 (assuming row 1 has headers)
             broker_name = ws[f"A{row}"].value  # Broker name in column A
             group_number = ws[f"B{row}"].value  # Group number in column B
-            account_number = str(ws[f"C{row}"].value).zfill(
-                4
-            )  # Account number in column C, padded to 4 digits
+            account_number_raw = ws[f"C{row}"].value  # Account number in column C
             account_nickname = ws[f"D{row}"].value  # Account nickname in column D
+
+            if account_number_raw is None:
+                continue
+
+            account_number = str(account_number_raw).zfill(
+                4
+            )  # Account number padded to 4 digits
 
             if not account_nickname:
                 account_nickname = generate_account_nickname(
                     broker_name,
                     group_number,
                     account_number,
-                    mapping_file=ACCOUNT_MAPPING,
+                    mapping_file=mapping_file,
                 )
             if (
                 not broker_name
@@ -254,7 +261,7 @@ async def index_account_details(
 
     # Save the updated mappings back to the JSON file
     try:
-        with open(mapping_file, "w") as f:
+        with open(mapping_file, "w", encoding="utf-8") as f:
             json.dump(account_mappings, f, indent=4)
         await ctx.send(f"Updated mappings saved to `{mapping_file}`.")
 
@@ -269,11 +276,16 @@ async def map_accounts_in_excel_log(
 
     # Load the Excel workbook and the Reverse Split Log sheet
     wb = load_excel_workbook(filename)
+    if not wb:
+        await ctx.send(f"Workbook not found at `{filename}`.")
+        return
+    if "Reverse Split Log" not in wb.sheetnames:
+        await ctx.send("Sheet 'Reverse Split Log' not found.")
+        return
     reverse_split_log = wb["Reverse Split Log"]
 
     # Load the account mappings from the JSON file
-    with open(mapped_accounts_json, "r") as f:
-        account_mappings = json.load(f)
+    account_mappings = load_account_mappings()
 
     try:
         # Step 1: Find rows that contain 'Totals' (case-insensitive) and mark them as protected
@@ -309,6 +321,23 @@ async def map_accounts_in_excel_log(
 
         # Insert the required number of new rows above the start row
         reverse_split_log.insert_rows(account_start_row, total_accounts)
+        protected_rows = {
+            row + total_accounts if row >= account_start_row else row
+            for row in protected_rows
+        }
+
+        # Build a lookup of existing account rows after insertion
+        existing_rows = {}
+        for row in range(
+            account_start_row + total_accounts, reverse_split_log.max_row + 1
+        ):
+            if row in protected_rows:
+                continue
+            account_in_log = reverse_split_log.cell(
+                row=row, column=account_start_column
+            ).value
+            if account_in_log:
+                existing_rows[str(account_in_log).strip()] = row
 
         current_row = account_start_row
 
@@ -328,21 +357,13 @@ async def map_accounts_in_excel_log(
                     )
 
                     # Look for the matching account in the original rows and transfer log data
-                    account_found = False
-                    for row in range(
-                        account_start_row + total_accounts,
-                        reverse_split_log.max_row + 1,
-                    ):
-                        account_in_log = reverse_split_log.cell(
-                            row=row, column=account_start_column
-                        ).value
-                        if account_in_log == f"{broker} {nickname}":
-                            # Ensure we don't overwrite protected rows during copying
-                            if row not in protected_rows:
-                                account_found = True
-                                # Copy both values and formatting from the original row to the new row
-                                copy_complete_row(reverse_split_log, row, current_row)
-                            break
+                    account_key = f"{broker} {nickname}"
+                    source_row = existing_rows.get(account_key)
+                    if source_row:
+                        account_found = True
+                        copy_complete_row(reverse_split_log, source_row, current_row)
+                    else:
+                        account_found = False
 
                     if not account_found:
                         # If no matching log data is found, leave the log data empty or set a default
@@ -383,7 +404,7 @@ async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
 
     try:
         # Clear the account mappings by writing an empty dictionary to the file
-        with open(mapping_file, "w") as f:
+        with open(mapping_file, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=4)
 
         # Notify the user that the file has been cleared
@@ -397,8 +418,7 @@ async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
     try:
         # Load the account mappings
         account_mappings_file = ACCOUNT_MAPPING  # Path to account mappings file
-        with open(account_mappings_file, "r") as f:
-            account_mappings = json.load(f)
+        account_mappings = load_account_mappings()
 
         # Ensure the structure exists for the brokerage and broker_no
         if brokerage not in account_mappings:
@@ -410,7 +430,7 @@ async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
         account_mappings[brokerage][broker_no][account] = nickname
 
         # Save the updated mappings
-        with open(account_mappings_file, "w") as f:
+        with open(account_mappings_file, "w", encoding="utf-8") as f:
             json.dump(account_mappings, f, indent=4)
 
         # Confirmation message
@@ -458,11 +478,12 @@ def generate_account_nickname(
     """
 
     # Load current account mappings from JSON file
+    mapping_path = Path(mapping_file)
     try:
-        with open(ACCOUNT_MAPPING, "r") as f:
+        with open(mapping_path, "r", encoding="utf-8") as f:
             account_mappings = json.load(f)
     except FileNotFoundError:
-        logger.info(f"")
+        logger.info(f"Account mapping file not found at {mapping_path}; creating new.")
         account_mappings = {}  # Initialize empty if file doesn't exist
 
     # Ensure structure for broker and group exists
@@ -493,7 +514,7 @@ def generate_account_nickname(
     account_mappings[broker_name][group_number][account_number] = new_nickname
 
     # Write updated mappings back to JSON
-    with open(mapping_file, "w") as f:
+    with open(mapping_path, "w", encoding="utf-8") as f:
         json.dump(account_mappings, f, indent=4)
 
     return new_nickname
@@ -504,6 +525,7 @@ def generate_account_nickname(
 
 async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
     """Add the given stock ticker to the next available spot in the Excel log and copy formatting from the previous columns."""
+    wb = None
     try:
         # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
         wb = load_excel_workbook(EXCEL_FILE_PATH)
@@ -532,9 +554,13 @@ async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
         )
 
         # Copy the previous columns to maintain formatting
-        copy_column(ws, cost_col, spacer_col)
-        copy_column(ws, cost_col, proceeds_col)
-        copy_column(ws, cost_col, spacer_col)
+        previous_cost_col = last_filled_column
+        previous_proceeds_col = last_filled_column + 1
+        previous_spacer_col = last_filled_column + 2
+
+        copy_column(ws, previous_cost_col, cost_col)
+        copy_column(ws, previous_proceeds_col, proceeds_col)
+        copy_column(ws, previous_spacer_col, spacer_col)
 
         # Set ticker, date, ratio, values in the new columns
         ws.cell(row=stock_row, column=cost_col).value = ticker
@@ -619,6 +645,7 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
                 f"Invalid order format, expected dict but got {type(order)}: {order}"
             )
             continue  # Skip malformed entries
+        order_identifier = "unknown"
         try:
             # Extract order details
             broker_name = order["Broker Name"]
@@ -629,6 +656,9 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
             quantity = order["Quantity"]
             price = float(order["Price"])
             date = order["Date"]
+            order_identifier = (
+                f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
+            )
 
             # Log the extracted details
             logger.debug(f"Processing order: {order}")
@@ -662,34 +692,23 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
                     # logger.info(f"Saved excel log workboodk: {wb} filename: {EXCEL_FILE_PATH}")
 
                     # Remove error logs on success
-                    identifier = f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
-                    remove_error_from_log(ERROR_LOG_FILE, identifier)
+                    remove_error_from_log(ERROR_LOG_FILE, order_identifier)
                 else:
                     # Record the error if the stock is not found
                     error_message = (
                         f"Stock {stock} not found for account {account_nickname}."
                     )
-                    record_error_message(
-                        error_message,
-                        f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}",
-                    )
+                    record_error_message(error_message, order_identifier)
             else:
                 # Record an error if the account row is not found
                 error_message = (
                     f"{broker_name} - {account_nickname} not found in Excel."
                 )
-                record_error_message(
-                    error_message,
-                    f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}",
-                )
+                record_error_message(error_message, order_identifier)
 
-        except ValueError as e:
-            # Log a ValueError specifically
-            error_message = f"ValueError: {str(e)}"
-            record_error_message(
-                error_message,
-                f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}",
-            )
+        except (KeyError, TypeError, ValueError) as e:
+            error_message = f"{type(e).__name__}: {str(e)}"
+            record_error_message(error_message, order_identifier)
 
     # Save the workbook and close it after processing
     save_workbook(wb, EXCEL_FILE_PATH)
@@ -722,10 +741,10 @@ def log_error_order_details(order_details):
 def remove_error_from_log(file_path, identifier):
     # Remove a block containing the identifier from the specified log file.
     try:
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding="utf-8") as file:
             lines = file.readlines()
 
-        with open(file_path, "w") as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             block_to_skip = False
             for line in lines:
                 if "--- Error at" in line.strip():
@@ -753,15 +772,7 @@ def delete_stale_backups(
     # Debugging: Print directory and archive_folder values
 
     # Target the archive directory within the specified directory
-    archive_dir = os.path.join(str(directory), str(archive_folder))
-
-    # Ensure the archive directory exists
-    if not os.path.exists(archive_dir):
-        logger.warning(f"Archive directory does not exist: {archive_dir}")
-        return
-
-    # Target the archive directory within the specified directory
-    archive_dir = os.path.join(str(directory), str(archive_folder))
+    archive_dir = os.path.join(os.fspath(directory), str(archive_folder))
 
     # Ensure the archive directory exists
     if not os.path.exists(archive_dir):
@@ -865,7 +876,7 @@ def save_workbook(wb, filename):
 def check_log_for_entry(log_file_path, entry):
     """Check if the entry already exists in the log file."""
     try:
-        with open(log_file_path, "r") as log_file:
+        with open(log_file_path, "r", encoding="utf-8") as log_file:
             return entry in log_file.read()
     except FileNotFoundError:
         return False
@@ -873,7 +884,7 @@ def check_log_for_entry(log_file_path, entry):
 
 def append_to_log(log_file_path, message):
     """Append a message to the specified log file."""
-    with open(log_file_path, "a") as log_file:
+    with open(log_file_path, "a", encoding="utf-8") as log_file:
         log_file.write(message)
     logger.info(f"Appended to log: {log_file_path}")
 

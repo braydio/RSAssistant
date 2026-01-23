@@ -1047,6 +1047,10 @@ def alert_channel_message(content):
     if url:
         logger.info(f"URL detected in alert message: {url}")
 
+    if normalized_content:
+        preview = normalized_content[:240]
+        logger.info("Alert content preview (normalized): %s", preview)
+
     # Regex pattern to extract the ticker inside parentheses
     ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
     ticker_match = re.search(ticker_pattern, normalized_content)
@@ -1065,7 +1069,9 @@ def alert_channel_message(content):
         is not None
     )
     logger.info(
-        f"Returning parsed info. Reverse split confirmed: {reverse_split_confirm}"
+        "Reverse split detected=%s pattern=%s",
+        reverse_split_confirm,
+        r"reverse\s+(?:stock\s+)?split",
     )
 
     # Return the parsed information
