@@ -58,6 +58,42 @@ def _get_env_float(name: str, default: float) -> float:
         logger.warning("Invalid float for %s=%s; using default %s.", name, raw, default)
         return default
 
+
+def _resolve_path_env(name: str, default: Path) -> Path:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default.resolve()
+    candidate = Path(raw.strip())
+    if not candidate.is_absolute():
+        candidate = (BASE_DIR / candidate).resolve()
+    if candidate.is_dir():
+        logger.warning(
+            "%s points to a directory (%s); falling back to default %s.",
+            name,
+            candidate,
+            default,
+        )
+        return default.resolve()
+    return candidate
+
+
+def _resolve_dir_env(name: str, default: Path) -> Path:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default.resolve()
+    candidate = Path(raw.strip())
+    if not candidate.is_absolute():
+        candidate = (BASE_DIR / candidate).resolve()
+    if candidate.exists() and not candidate.is_dir():
+        logger.warning(
+            "%s points to a non-directory path (%s); falling back to default %s.",
+            name,
+            candidate,
+            default,
+        )
+        return default.resolve()
+    return candidate
+
 # --- Early path definitions for .env loading ---
 UTILS_DIR = Path(__file__).resolve().parent
 BASE_DIR = UTILS_DIR.parent
@@ -111,7 +147,7 @@ def load_env():
 load_env()
 
 # --- Directories (after .env loaded) ---
-VOLUMES_DIR = Path(os.getenv("VOLUMES_DIR", str(BASE_DIR / "volumes"))).resolve()
+VOLUMES_DIR = _resolve_dir_env("VOLUMES_DIR", BASE_DIR / "volumes")
 # Single source of truth for configuration
 CONFIG_DIR = (BASE_DIR / "config").resolve()
 
@@ -166,18 +202,18 @@ EXCEL_LOGGING_ENABLED = _get_env_bool("EXCEL_LOGGING_ENABLED", True)
 SQL_LOGGING_ENABLED = _get_env_bool("SQL_LOGGING_ENABLED", True)
 
 # Path to ignore list files (defaults inside config/)
-IGNORE_TICKERS_FILE = Path(
-    os.getenv("IGNORE_TICKERS_FILE", str(CONFIG_DIR / "ignore_tickers.txt"))
-).resolve()
-IGNORE_BROKERS_FILE = Path(
-    os.getenv("IGNORE_BROKERS_FILE", str(CONFIG_DIR / "ignore_brokers.txt"))
-).resolve()
-TAGGED_ALERTS_FILE = Path(
-    os.getenv("TAGGED_ALERTS_FILE", str(CONFIG_DIR / "tagged_alerts.txt"))
-).resolve()
-MARKET_HOLIDAYS_FILE = Path(
-    os.getenv("MARKET_HOLIDAYS_FILE", str(CONFIG_DIR / "market_holidays.txt"))
-).resolve()
+IGNORE_TICKERS_FILE = _resolve_path_env(
+    "IGNORE_TICKERS_FILE", CONFIG_DIR / "ignore_tickers.txt"
+)
+IGNORE_BROKERS_FILE = _resolve_path_env(
+    "IGNORE_BROKERS_FILE", CONFIG_DIR / "ignore_brokers.txt"
+)
+TAGGED_ALERTS_FILE = _resolve_path_env(
+    "TAGGED_ALERTS_FILE", CONFIG_DIR / "tagged_alerts.txt"
+)
+MARKET_HOLIDAYS_FILE = _resolve_path_env(
+    "MARKET_HOLIDAYS_FILE", CONFIG_DIR / "market_holidays.txt"
+)
 
 
 def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
@@ -594,9 +630,10 @@ def load_config():
         },
         "logging": {
             "level": os.getenv("LOG_LEVEL", "INFO"),
-            "file": os.getenv(
-                "LOG_FILE",
-                str(VOLUMES_DIR / "logs" / "rsassistant.log"),
+            "file": os.fspath(
+                _resolve_path_env(
+                    "LOG_FILE", VOLUMES_DIR / "logs" / "rsassistant.log"
+                )
             ),
             "backup_count": _get_env_int("LOG_BACKUP_COUNT", 2),
         },
@@ -611,9 +648,10 @@ def load_config():
         },
         "heartbeat": {
             "enabled": _get_env_bool("HEARTBEAT_ENABLED", True),
-            "path": os.getenv(
-                "HEARTBEAT_PATH",
-                str(VOLUMES_DIR / "logs" / "heartbeat.txt"),
+            "path": os.fspath(
+                _resolve_path_env(
+                    "HEARTBEAT_PATH", VOLUMES_DIR / "logs" / "heartbeat.txt"
+                )
             ),
             "interval": _get_env_int("HEARTBEAT_INTERVAL", 60),
         },
