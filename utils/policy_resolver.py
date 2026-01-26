@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 from utils.logging_setup import logger
 from utils.sec_policy_fetcher import SECPolicyFetcher
-from utils.config_utils import VOLUMES_DIR
+from utils.config_utils import VOLUMES_DIR, PROGRAMMATIC_POLICY_ENABLED
 from utils.text_normalization import normalize_cash_in_lieu_phrases
 from utils.openai_utils import extract_reverse_split_details
 
@@ -365,17 +365,28 @@ class SplitPolicyResolver:
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
             ticker = cls.extract_ticker_from_url(nasdaq_url)
-            nasdaq_result = cls.analyze_nasdaq_notice(nasdaq_url, ticker=ticker)
+            if PROGRAMMATIC_POLICY_ENABLED:
+                nasdaq_result = cls.analyze_nasdaq_notice(nasdaq_url, ticker=ticker)
+            else:
+                logger.info(
+                    "Programmatic policy analysis disabled; using LLM parsing only."
+                )
+                nasdaq_result = {
+                    "nasdaq_url": nasdaq_url,
+                    "policy": "Programmatic policy parsing disabled.",
+                    "sec_url": None,
+                    "press_url": None,
+                }
             if not nasdaq_result:
                 logger.warning("NASDAQ notice analysis failed or returned no result.")
                 return None
 
-            if nasdaq_result.get("sec_url"):
+            if PROGRAMMATIC_POLICY_ENABLED and nasdaq_result.get("sec_url"):
                 sec_result = cls.analyze_sec_filing(nasdaq_result["sec_url"])
                 nasdaq_result.update(sec_result)
 
             # Press Release fallback if SEC failed
-            if (
+            if PROGRAMMATIC_POLICY_ENABLED and (
                 not nasdaq_result.get("sec_policy")
                 or nasdaq_result["sec_policy"] == "Unable to retrieve SEC filing."
             ):
@@ -399,26 +410,29 @@ class SplitPolicyResolver:
                         )
 
             # SEC Policy Fallback Search if no good info
-            if not nasdaq_result.get("sec_policy") or nasdaq_result["sec_policy"] in [
-                "Unable to retrieve SEC filing.",
-                "No text content available.",
-                "Policy not clearly stated.",
-            ]:
-                if ticker:
-                    logger.info(
-                        f"Attempting SECPolicyFetcher fallback for ticker: {ticker}"
-                    )
-                    fallback_policy = cls.sec_fetcher.fetch_policy(ticker)
-                    if fallback_policy:
-                        nasdaq_result.update(fallback_policy)
-
-                        # Round-Up Check
-                        policy_text = nasdaq_result.get(
-                            "sec_policy"
-                        ) or nasdaq_result.get("policy")
-                        nasdaq_result["round_up_confirmed"] = cls.is_round_up_policy(
-                            policy_text
+            if PROGRAMMATIC_POLICY_ENABLED:
+                if not nasdaq_result.get("sec_policy") or nasdaq_result[
+                    "sec_policy"
+                ] in [
+                    "Unable to retrieve SEC filing.",
+                    "No text content available.",
+                    "Policy not clearly stated.",
+                ]:
+                    if ticker:
+                        logger.info(
+                            f"Attempting SECPolicyFetcher fallback for ticker: {ticker}"
                         )
+                        fallback_policy = cls.sec_fetcher.fetch_policy(ticker)
+                        if fallback_policy:
+                            nasdaq_result.update(fallback_policy)
+
+                            # Round-Up Check
+                            policy_text = nasdaq_result.get(
+                                "sec_policy"
+                            ) or nasdaq_result.get("policy")
+                            nasdaq_result["round_up_confirmed"] = cls.is_round_up_policy(
+                                policy_text
+                            )
 
             source_url = nasdaq_result.get("press_url") or nasdaq_result.get("sec_url")
             if not source_url:

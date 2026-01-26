@@ -178,6 +178,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_TIMEOUT_SECONDS = _get_env_int("OPENAI_TIMEOUT_SECONDS", 20)
 OPENAI_POLICY_ENABLED = _get_env_bool("OPENAI_POLICY_ENABLED", False)
+# Toggle programmatic policy parsing (keyword-based NASDAQ/SEC analysis).
+PROGRAMMATIC_POLICY_ENABLED = _get_env_bool("PROGRAMMATIC_POLICY_ENABLED", True)
 # Minimum interval between outbound !rsa commands (rate-limit protection)
 RSA_COMMAND_MIN_INTERVAL_SECONDS = _get_env_float(
     "RSA_COMMAND_MIN_INTERVAL_SECONDS", 2

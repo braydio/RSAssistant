@@ -29,6 +29,13 @@ from utils.price_fetcher import get_last_stock_price
 
 from utils import split_watch_utils
 
+_REMOTE_FETCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+}
+
 # Load account mappings once at import time
 account_mapping = load_account_mappings()
 
@@ -70,7 +77,7 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
         return None
 
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=_REMOTE_FETCH_HEADERS, timeout=10)
         response.raise_for_status()
     except RequestException as exc:
         logger.warning(

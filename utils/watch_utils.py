@@ -116,6 +116,7 @@ class WatchListManager:
         """Move tickers with past split dates to the sell list."""
         today = datetime.now().date()
         to_remove = []
+        expired_entries = []
         for ticker, data in list(self.watch_list.items()):
             split_str = data.get("split_date")
             if not split_str:
@@ -143,12 +144,20 @@ class WatchListManager:
                         scheduled_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     )
                 to_remove.append(ticker.upper())
+                expired_entries.append(
+                    {
+                        "ticker": ticker.upper(),
+                        "split_date": split_str,
+                        "split_ratio": data.get("split_ratio", "N/A"),
+                    }
+                )
 
         for ticker in to_remove:
             if ticker in self.watch_list:
                 del self.watch_list[ticker]
         if to_remove:
             self.save_watch_list()
+        return expired_entries
 
     def add_ticker(self, ticker, split_date, split_ratio="N/A"):
         """Add or update a ticker in the watch list."""
@@ -301,7 +310,17 @@ async def send_reminder_message_embed(ctx):
     # Create the embed message
     logging.info(f"Sending reminder message at {datetime.now()}")
     update_historical_holdings()
-    watch_list_manager.move_expired_to_sell()
+    expired_entries = watch_list_manager.move_expired_to_sell()
+    if expired_entries:
+        lines = [
+            f"- {entry['ticker']} (Split Date: {entry['split_date']}, Ratio: {entry['split_ratio']})"
+            for entry in expired_entries
+        ]
+        notice = (
+            "Removed expired reverse split tickers from watchlist:\n"
+            + "\n".join(lines)
+        )
+        await ctx.send(notice)
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
@@ -393,20 +412,9 @@ def calculate_days_left(split_date_str):
 async def send_reminder_message(bot):
     """Sends a reminder message with upcoming split dates in the specified channel."""
     now = datetime.now(MARKET_TZ)
-    if not is_market_day(now.date()):
-        logging.info("Skipping reminder message on non-market day: %s", now.date())
-        return
-
-    # Create the embed message
-    embed = discord.Embed(
-        title="**Watchlist - Upcoming Split Dates: **",
-        description=" ",
-        color=discord.Color.blue(),
-    )
-
     logging.info(f"Automated reminder message for {datetime.now()}")
     update_historical_holdings()
-    watch_list_manager.move_expired_to_sell()
+    expired_entries = watch_list_manager.move_expired_to_sell()
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()
@@ -426,16 +434,6 @@ async def send_reminder_message(bot):
     # Sort the list by days_left (first element of the tuple)
     sorted_tickers.sort(key=lambda x: x[0])
 
-    # Add the sorted tickers to the embed
-    for days_left, ticker, split_date_str in sorted_tickers:
-        embed.add_field(
-            name=f"**| {ticker}** - Effective on {split_date_str}",
-            value=f"*|>* Must purchase within **{days_left}** day(s).\n",
-            inline=False,
-        )
-
-    embed.set_footer(text="Automated message will repeat.")
-
     channel = resolve_reply_channel(bot, DISCORD_SECONDARY_CHANNEL)
     if not channel:
         channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
@@ -443,6 +441,37 @@ async def send_reminder_message(bot):
         channel = resolve_reply_channel(bot)
 
     if channel:
+        if expired_entries:
+            lines = [
+                f"- {entry['ticker']} (Split Date: {entry['split_date']}, Ratio: {entry['split_ratio']})"
+                for entry in expired_entries
+            ]
+            notice = (
+                "Removed expired reverse split tickers from watchlist:\n"
+                + "\n".join(lines)
+            )
+            await channel.send(notice)
+
+        if not is_market_day(now.date()):
+            logging.info("Skipping reminder message on non-market day: %s", now.date())
+            return
+
+        # Create the embed message
+        embed = discord.Embed(
+            title="**Watchlist - Upcoming Split Dates: **",
+            description=" ",
+            color=discord.Color.blue(),
+        )
+
+        # Add the sorted tickers to the embed
+        for days_left, ticker, split_date_str in sorted_tickers:
+            embed.add_field(
+                name=f"**| {ticker}** - Effective on {split_date_str}",
+                value=f"*|>* Must purchase within **{days_left}** day(s).\n",
+                inline=False,
+            )
+
+        embed.set_footer(text="Automated message will repeat.")
         await channel.send(embed=embed)
     else:
         logging.error("No configured channel available for reminder message.")

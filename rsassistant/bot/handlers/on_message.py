@@ -184,6 +184,65 @@ def _format_watch_date(split_date: str) -> str:
         return split_date
 
 
+def _resolve_round_up_confirmation(policy_info: dict) -> bool:
+    """Resolve round-up confirmation, preferring LLM when available."""
+    llm_details = policy_info.get("llm_details") or {}
+    llm_policy = llm_details.get("fractional_share_policy")
+    if llm_policy:
+        return llm_policy in {"rounded_to_nearest_whole", "rounded_up"}
+    return bool(policy_info.get("round_up_confirmed"))
+
+
+async def _process_round_up_flow(
+    bot,
+    channel,
+    ticker: str,
+    split_date: str,
+    split_ratio: str,
+    watch_date: str,
+) -> None:
+    """Unified flow for confirmed round-up reverse splits."""
+    ticker = (ticker or "").upper()
+    if not ticker:
+        logger.error("Round-up flow aborted: empty ticker.")
+        return
+
+    # Refresh cached watchlists to avoid stale ticker data.
+    watch_list_manager.load_watch_list()
+    split_watch_utils.load_data()
+
+    watchlist_updated = False
+    if not watch_list_manager.ticker_exists(ticker):
+        await watch_list_manager.watch_ticker(channel, ticker, watch_date, split_ratio)
+        watchlist_updated = True
+    else:
+        existing = watch_list_manager.get_watch_list().get(ticker, {})
+        existing_ratio = existing.get("split_ratio")
+        if split_ratio and split_ratio != existing_ratio:
+            watch_list_manager.add_ticker(ticker, watch_date, split_ratio)
+            watchlist_updated = True
+            await channel.send(
+                f"Updated watchlist entry for {ticker} to {watch_date} ({split_ratio})."
+            )
+
+    scheduled_autobuy = False
+    existing_split_watch = split_watch_utils.get_status(ticker)
+    if existing_split_watch:
+        logger.info("Split watch already exists for %s; skipping autobuy.", ticker)
+    else:
+        split_watch_utils.add_split_watch(ticker, split_date)
+        logger.info("Added split watch: %s @ %s", ticker, split_date)
+        await attempt_autobuy(bot, channel, ticker, quantity=1)
+        scheduled_autobuy = True
+
+    summary = (
+        f"Round-up confirmed for {ticker}. "
+        f"Watchlist {'updated' if watchlist_updated else 'already tracked'}; "
+        f"autobuy {'scheduled' if scheduled_autobuy else 'already tracked'}."
+    )
+    await channel.send(summary)
+
+
 def _normalize_broker_name(broker: str) -> str:
     """Return a normalized broker name for comparisons."""
 
@@ -758,11 +817,12 @@ async def handle_secondary_channel(bot, message):
         return
 
     response_channel = resolve_message_destination(bot, message.channel)
-    ticker = result.get("ticker")
+    alert_ticker = result.get("ticker")
     url = result.get("url")
-    if not ticker or not url:
+    if not alert_ticker or not url:
         logger.error("Missing ticker or URL")
         return
+    ticker = alert_ticker.upper()
 
     try:
         logger.info(f"Policy resolution for {url}")
@@ -770,6 +830,14 @@ async def handle_secondary_channel(bot, message):
         if not policy_info:
             logger.warning(f"No policy info for {ticker}")
             return
+
+        llm_ticker = (policy_info.get("llm_details") or {}).get("ticker")
+        if llm_ticker and llm_ticker != ticker:
+            logger.warning(
+                "LLM ticker mismatch (alert=%s, llm=%s); using alert ticker.",
+                ticker,
+                llm_ticker,
+            )
 
         summary = build_policy_summary(ticker, policy_info, url)
         await post_policy_summary(bot, ticker, summary)
@@ -812,30 +880,23 @@ async def handle_secondary_channel(bot, message):
                 "No round-up snippet found in body text for %s; skipping post.", ticker
             )
 
-        if policy_info.get("round_up_confirmed"):
+        if _resolve_round_up_confirmation(policy_info):
             split_date = policy_info.get("effective_date") or date.today().isoformat()
             split_ratio = policy_info.get("split_ratio") or "N/A"
             watch_date = _format_watch_date(split_date)
 
-            if not watch_list_manager.ticker_exists(ticker):
-                watch_command = (
-                    f"{BOT_PREFIX}watch {ticker.upper()} {watch_date} {split_ratio}"
-                )
-                logger.info("Auto watch command: %s", watch_command)
-                await watch_list_manager.watch_ticker(
-                    response_channel, ticker, watch_date, split_ratio
-                )
-
-            existing = split_watch_utils.get_status(ticker)
-            if existing:
-                logger.info(
-                    "Split watch already exists for %s; skipping autobuy.",
-                    ticker,
-                )
-            else:
-                split_watch_utils.add_split_watch(ticker, split_date)
-                logger.info("Added split watch: %s @ %s", ticker, split_date)
-                await attempt_autobuy(bot, response_channel, ticker, quantity=1)
+            watch_command = (
+                f"{BOT_PREFIX}watch {ticker.upper()} {watch_date} {split_ratio}"
+            )
+            logger.info("Auto watch command: %s", watch_command)
+            await _process_round_up_flow(
+                bot,
+                response_channel,
+                ticker,
+                split_date,
+                split_ratio,
+                watch_date,
+            )
     except Exception:
         logger.exception("Error during policy analysis secondary channel")
 
