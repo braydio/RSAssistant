@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from discord.ext import commands
+from discord.abc import Messageable
 
+from rsassistant.bot.channel_resolver import resolve_watchlist_channel
 from utils.watch_utils import watch as handle_watch_command
 from utils.watch_utils import watch_list_manager
 
@@ -14,6 +16,17 @@ class WatchlistCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    async def _resolve_watch_context(
+        self, ctx: commands.Context
+    ) -> commands.Context | Messageable:
+        target_channel = resolve_watchlist_channel(self.bot)
+        if target_channel and getattr(target_channel, "id", None) != getattr(
+            ctx.channel, "id", None
+        ):
+            await ctx.send("Check the watchlist channel for updates.")
+            return target_channel
+        return ctx
+
     @commands.command(
         name="watch",
         aliases=["wa"],
@@ -22,7 +35,8 @@ class WatchlistCog(commands.Cog):
         extras={"category": "Watchlist"},
     )
     async def watch(self, ctx: commands.Context, *, text: str) -> None:
-        await handle_watch_command(ctx, text=text)
+        target_ctx = await self._resolve_watch_context(ctx)
+        await handle_watch_command(target_ctx, text=text)
 
     @commands.command(
         name="addratio",
@@ -35,7 +49,8 @@ class WatchlistCog(commands.Cog):
         if not split_ratio:
             await ctx.send("Please include split ratio: * X-Y *")
             return
-        await watch_list_manager.watch_ratio(ctx, ticker, split_ratio)
+        target_ctx = await self._resolve_watch_context(ctx)
+        await watch_list_manager.watch_ratio(target_ctx, ticker, split_ratio)
 
     @commands.command(
         name="watchlist",
@@ -44,7 +59,8 @@ class WatchlistCog(commands.Cog):
         extras={"category": "Watchlist"},
     )
     async def all_watching(self, ctx: commands.Context) -> None:
-        await watch_list_manager.list_watched_tickers(ctx, include_prices=True)
+        target_ctx = await self._resolve_watch_context(ctx)
+        await watch_list_manager.list_watched_tickers(target_ctx, include_prices=True)
 
     @commands.command(
         name="watched",
@@ -54,7 +70,8 @@ class WatchlistCog(commands.Cog):
         extras={"category": "Watchlist"},
     )
     async def watched_ticker(self, ctx: commands.Context, ticker: str) -> None:
-        await watch_list_manager.stop_watching(ctx, ticker)
+        target_ctx = await self._resolve_watch_context(ctx)
+        await watch_list_manager.stop_watching(target_ctx, ticker)
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(WatchlistCog(bot))

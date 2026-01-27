@@ -109,7 +109,7 @@ async def track_ticker_summary(
     mapped_accounts = load_account_mappings()
 
     try:
-        # Read holdings log and keep only the latest row per account
+        # Read holdings log and keep only the latest row per account + ticker
         latest_rows = {}
         with open(holding_logs_file, mode="r") as file:
             csv_reader = csv.DictReader(file)
@@ -166,14 +166,16 @@ async def track_ticker_summary(
                 except Exception:
                     timestamp = datetime.min
 
-                key = (broker_name, account_key)
+                stock_raw = row.get("Stock", "")
+                stock = stock_raw.upper().strip() if isinstance(stock_raw, str) else ""
+                key = (broker_name, account_key, stock)
                 if key not in latest_rows or timestamp > latest_rows[key]["_ts"]:
                     row["_ts"] = timestamp
                     latest_rows[key] = row
 
         # Build holdings dict from latest rows
-        for (broker_name, account_key), row in latest_rows.items():
-            stock = row["Stock"].upper().strip()
+        for (broker_name, account_key, stock), row in latest_rows.items():
+            stock = stock or row["Stock"].upper().strip()
 
             try:
                 quantity = float(row["Quantity"])

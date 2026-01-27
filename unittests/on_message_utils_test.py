@@ -3,6 +3,7 @@
 from rsassistant.bot.handlers.on_message import (
     _format_account_label,
     _resolve_round_up_snippet,
+    _resolve_round_up_confirmation,
     format_mentions,
 )
 
@@ -54,3 +55,26 @@ def test_format_account_label_skips_duplicate_broker_prefix():
         == "Schwab 1 8745"
     )
     assert _format_account_label("Schwab", "1 8745") == "Schwab 1 8745"
+
+
+def test_resolve_round_up_confirmation_prefers_llm_policy():
+    """LLM fractional share policy should override programmatic flags."""
+
+    policy_info = {
+        "round_up_confirmed": True,
+        "llm_details": {"fractional_share_policy": "cash_in_lieu"},
+    }
+    assert _resolve_round_up_confirmation(policy_info) is False
+
+    policy_info = {
+        "round_up_confirmed": False,
+        "llm_details": {"fractional_share_policy": "rounded_up"},
+    }
+    assert _resolve_round_up_confirmation(policy_info) is True
+
+
+def test_resolve_round_up_confirmation_falls_back_to_programmatic():
+    """When no LLM policy exists, use programmatic round-up signals."""
+
+    policy_info = {"round_up_confirmed": True}
+    assert _resolve_round_up_confirmation(policy_info) is True

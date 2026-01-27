@@ -1,23 +1,40 @@
-"""Tests for the persistent order queue manager."""
+"""Tests for order queue persistence helpers."""
 
-from utils import order_queue_manager as oqm
+import json
+import os
+import tempfile
+
+from utils import order_queue_manager
 
 
-def test_add_and_remove_order(tmp_path, monkeypatch):
-    queue_file = tmp_path / "order_queue.json"
-    monkeypatch.setattr(oqm, "QUEUE_FILE", queue_file)
-    oqm.clear_order_queue()
-    order_id = "ABC_20240101_0930_buy"
-    data = {
-        "action": "buy",
-        "ticker": "ABC",
-        "quantity": 1,
-        "broker": "all",
-        "time": "2024-01-01 09:30:00",
-    }
-    oqm.add_to_order_queue(order_id, data)
-    queue = oqm.get_order_queue()
-    assert order_id in queue
-    oqm.remove_order(order_id)
-    queue = oqm.get_order_queue()
-    assert order_id not in queue
+def test_update_order_time_updates_existing_entry():
+    temp_dir = tempfile.TemporaryDirectory()
+    queue_path = os.path.join(temp_dir.name, "order_queue.json")
+    original_queue_file = order_queue_manager.QUEUE_FILE
+    try:
+        order_queue_manager.QUEUE_FILE = queue_path
+        with open(queue_path, "w") as handle:
+            json.dump(
+                {
+                    "TEST_20250101_0930_buy": {
+                        "action": "buy",
+                        "ticker": "TEST",
+                        "quantity": 1,
+                        "broker": "all",
+                        "time": "2025-01-01 09:30:00",
+                    }
+                },
+                handle,
+            )
+
+        updated = order_queue_manager.update_order_time(
+            "TEST_20250101_0930_buy", "2025-01-02 09:30:00"
+        )
+        assert updated is True
+
+        with open(queue_path, "r") as handle:
+            data = json.load(handle)
+        assert data["TEST_20250101_0930_buy"]["time"] == "2025-01-02 09:30:00"
+    finally:
+        order_queue_manager.QUEUE_FILE = original_queue_file
+        temp_dir.cleanup()

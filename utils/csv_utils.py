@@ -334,21 +334,22 @@ def save_holdings_to_csv(parsed_holdings):
                         )
                 existing_holdings = list(reader)
 
-        # Create a set of unique keys to track existing entries
-        existing_keys = set(
-            (
+        # Index existing holdings by their composite key for updates.
+        existing_by_key = {}
+        for holding in existing_holdings:
+            holding_key = (
                 holding.get("Key", ""),
                 holding.get("Broker Name", ""),
                 holding.get("Broker Number", ""),
                 holding.get("Account Number", ""),
                 holding.get("Stock", ""),
             )
-            for holding in existing_holdings
-        )
+            existing_by_key[holding_key] = holding
 
 
-        # Convert parsed_holdings into a list of dictionaries and filter out duplicates
+        # Convert parsed_holdings into dicts and update existing rows by key.
         new_holdings = []
+        updated_holdings = 0
         for holding in parsed_holdings:
             if isinstance(holding, dict):
                 # Map dictionary keys to standard CSV columns
@@ -407,45 +408,52 @@ def save_holdings_to_csv(parsed_holdings):
             holding_dict["Timestamp"] = timestamp
 
             # Check if this holding is a duplicate
-            if holding_key not in existing_keys:
+            if holding_key in existing_by_key:
+                existing_by_key[holding_key] = holding_dict
+                updated_holdings += 1
+            else:
                 new_holdings.append(holding_dict)
-                existing_keys.add(holding_key)
+                existing_by_key[holding_key] = holding_dict
 
-                quantity_value = holding_dict["Quantity"]
-                if quantity_value < 0:
-                    logger.info(
-                        "Skipping SQL logging for negative quantity holding: %s %s %s %s quantity=%s",
-                        holding_dict["Broker Name"],
-                        holding_dict["Broker Number"],
-                        holding_dict["Account Number"],
-                        holding_dict["Stock"],
-                        quantity_value,
+            quantity_value = holding_dict["Quantity"]
+            if quantity_value < 0:
+                logger.info(
+                    "Skipping SQL logging for negative quantity holding: %s %s %s %s quantity=%s",
+                    holding_dict["Broker Name"],
+                    holding_dict["Broker Number"],
+                    holding_dict["Account Number"],
+                    holding_dict["Stock"],
+                    quantity_value,
+                )
+            else:
+                try:
+                    update_holdings_live(
+                        broker=holding_dict["Broker Name"],
+                        broker_number=holding_dict["Broker Number"],
+                        account_number=holding_dict["Account Number"],
+                        ticker=holding_dict["Stock"],
+                        quantity=quantity_value,
+                        price=holding_dict["Price"],
                     )
-                else:
-                    try:
-                        update_holdings_live(
-                            broker=holding_dict["Broker Name"],
-                            broker_number=holding_dict["Broker Number"],
-                            account_number=holding_dict["Account Number"],
-                            ticker=holding_dict["Stock"],
-                            quantity=quantity_value,
-                            price=holding_dict["Price"],
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "SQL logging failed for holding %s: %s", holding_dict.get("Key", ""), exc
-                        )
+                except Exception as exc:
+                    logger.warning(
+                        "SQL logging failed for holding %s: %s",
+                        holding_dict.get("Key", ""),
+                        exc,
+                    )
 
         # Write the updated holdings to the CSV
-        if new_holdings:
+        if new_holdings or updated_holdings:
             with open(HOLDINGS_LOG_CSV, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
                 writer.writeheader()
-                writer.writerows(
-                    existing_holdings + new_holdings
-                )  # Append new entries to existing ones
+                writer.writerows(existing_by_key.values())
 
-            logger.info(f"Holdings saved, with {len(new_holdings)} new entries added.")
+            logger.info(
+                "Holdings saved, with %d new entries and %d updates.",
+                len(new_holdings),
+                updated_holdings,
+            )
         else:
             logger.info("No new holdings to add.")
 

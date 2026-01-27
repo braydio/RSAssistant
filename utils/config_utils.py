@@ -171,6 +171,13 @@ VERSION = "development 0.1"
 DISCORD_PRIMARY_CHANNEL = _get_env_int("DISCORD_PRIMARY_CHANNEL", 0)
 DISCORD_SECONDARY_CHANNEL = _get_env_int("DISCORD_SECONDARY_CHANNEL", 0)
 DISCORD_TERTIARY_CHANNEL = _get_env_int("DISCORD_TERTIARY_CHANNEL", 0)
+DISCORD_HOLDINGS_CHANNEL = _get_env_int("DISCORD_HOLDINGS_CHANNEL", 0)
+DISCORD_WATCHLIST_CHANNEL = _get_env_int("DISCORD_WATCHLIST_CHANNEL", 0)
+# Auto-RSA holdings import (file-based)
+AUTO_RSA_HOLDINGS_ENABLED = _get_env_bool("AUTO_RSA_HOLDINGS_ENABLED", True)
+AUTO_RSA_HOLDINGS_FILE = _resolve_path_env(
+    "AUTO_RSA_HOLDINGS_FILE", VOLUMES_DIR / "db" / "auto_rsa_holdings.json"
+)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
 # OpenAI parsing for reverse split notices

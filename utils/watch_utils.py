@@ -28,7 +28,7 @@ from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import send_large_message_chunks
 from utils.price_fetcher import get_last_prices
 from utils.sql_utils import update_historical_holdings
-from rsassistant.bot.channel_resolver import resolve_reply_channel
+from rsassistant.bot.channel_resolver import resolve_reply_channel, resolve_watchlist_channel
 from utils.market_calendar import MARKET_TZ, is_market_day
 
 account_mapping = load_account_mappings()
@@ -310,6 +310,16 @@ async def send_reminder_message_embed(ctx):
     # Create the embed message
     logging.info(f"Sending reminder message at {datetime.now()}")
     update_historical_holdings()
+    bot = getattr(ctx, "bot", None)
+    target_ctx = ctx
+    if bot is not None:
+        watch_channel = resolve_watchlist_channel(bot)
+        if watch_channel and getattr(watch_channel, "id", None) != getattr(
+            ctx.channel, "id", None
+        ):
+            await ctx.send("Check the watchlist channel for updates.")
+            target_ctx = watch_channel
+
     expired_entries = watch_list_manager.move_expired_to_sell()
     if expired_entries:
         lines = [
@@ -320,7 +330,7 @@ async def send_reminder_message_embed(ctx):
             "Removed expired reverse split tickers from watchlist:\n"
             + "\n".join(lines)
         )
-        await ctx.send(notice)
+        await target_ctx.send(notice)
     embed = discord.Embed(
         title="**Watchlist - Upcoming Split Dates: **",
         description=" ",
@@ -359,7 +369,7 @@ async def send_reminder_message_embed(ctx):
     embed.set_footer(text="Repeat this message with '..reminder'")
 
     # Send the embed message to the context
-    await ctx.send(embed=embed)
+    await target_ctx.send(embed=embed)
 
 
 def get_seconds_until_next_reminder(target_hour, target_minute):
@@ -434,7 +444,9 @@ async def send_reminder_message(bot):
     # Sort the list by days_left (first element of the tuple)
     sorted_tickers.sort(key=lambda x: x[0])
 
-    channel = resolve_reply_channel(bot, DISCORD_SECONDARY_CHANNEL)
+    channel = resolve_watchlist_channel(bot)
+    if not channel:
+        channel = resolve_reply_channel(bot, DISCORD_SECONDARY_CHANNEL)
     if not channel:
         channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
     if not channel:

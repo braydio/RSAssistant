@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from utils.csv_utils import sell_all_position
 from utils.order_exec import schedule_and_execute
+from rsassistant.bot.tasks import reschedule_past_due_orders
 from utils.order_queue_manager import list_order_queue_items, remove_order
 
 ORDER_COMMAND_USAGE = "..order <buy/sell> <ticker> [broker] [quantity] [time]"
@@ -238,6 +239,18 @@ class OrdersCog(commands.Cog):
             )
             return
         await ctx.send("That order could not be found. Please run `..queue` and retry.")
+
+    @commands.command(
+        name="queue_run",
+        aliases=["queue-run", "qr"],
+        help="Force reschedule and execution of any past-due queued orders.",
+        extras={"category": "Orders"},
+    )
+    async def run_past_due_queue(self, ctx: commands.Context) -> None:
+        await reschedule_past_due_orders(self.bot)
+        await ctx.send(
+            "Checked for past-due queued orders and rescheduled any that were found."
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

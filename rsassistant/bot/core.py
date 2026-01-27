@@ -27,6 +27,7 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     DISCORD_SECONDARY_CHANNEL,
     DISCORD_TERTIARY_CHANNEL,
+    DISCORD_HOLDINGS_CHANNEL,
     EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
@@ -170,16 +171,18 @@ class RSAssistantBot(commands.Bot):
                 DISCORD_PRIMARY_CHANNEL,
             )
         logger.info(
-            "%s has connected to Discord! PRIMARY | %s, SECONDARY | %s, | TERTIARY | %s",
+            "%s has connected to Discord! PRIMARY | %s, SECONDARY | %s, TERTIARY | %s, HOLDINGS | %s",
             self.user,
             DISCORD_PRIMARY_CHANNEL,
             DISCORD_SECONDARY_CHANNEL,
             DISCORD_TERTIARY_CHANNEL,
+            DISCORD_HOLDINGS_CHANNEL,
         )
         set_channels(
             DISCORD_PRIMARY_CHANNEL,
             DISCORD_SECONDARY_CHANNEL,
             DISCORD_TERTIARY_CHANNEL,
+            DISCORD_HOLDINGS_CHANNEL,
         )
 
     async def on_message(self, message: discord.Message) -> None:

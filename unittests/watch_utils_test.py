@@ -164,15 +164,18 @@ NCEW 1-8 (purchase by 11/13)
 
         with patch("utils.watch_utils.datetime", wraps=real_datetime) as datetime_mock:
             datetime_mock.now.return_value = real_datetime(2024, 10, 24)
-            self.manager.move_expired_to_sell()
+            expired = self.manager.move_expired_to_sell()
 
         self.assertIn("IPW", self.manager.watch_list)
         self.assertEqual(self.manager.sell_list, {})
+        self.assertEqual(expired, [])
 
         # Advance a single day past the split date; the ticker should move to the sell list.
         with patch("utils.watch_utils.datetime", wraps=real_datetime) as datetime_mock:
             datetime_mock.now.return_value = real_datetime(2024, 10, 25)
-            self.manager.move_expired_to_sell()
+            expired = self.manager.move_expired_to_sell()
 
         self.assertNotIn("IPW", self.manager.watch_list)
         self.assertIn("IPW", self.manager.sell_list)
+        self.assertEqual(len(expired), 1)
+        self.assertEqual(expired[0]["ticker"], "IPW")

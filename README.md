@@ -33,6 +33,26 @@ python RSAssistant.py
 
 That is enough to run the core workflow. See the sections below for optional OpenAI parsing, holdings alerts, and refresh automation.
 
+### Auto-RSA patch quickstart (holdings snapshot file)
+
+You do not need to clone auto-rsa inside this repo. The patch can be applied in any
+auto-rsa clone as long as both containers share a volume.
+
+```bash
+git clone git@github.com:NelsonDane/auto-rsa.git
+cd auto-rsa
+git apply /path/to/RSAssistant/patches/auto-rsa-holdings.patch
+```
+
+Or use the helper script from this repo:
+
+```bash
+./scripts/apply-auto-rsa-patch.sh /path/to/auto-rsa
+```
+
+Then set `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json` in the auto-rsa
+container and the same path in RSAssistant.
+
 ## Setup (local)
 
 ```bash
@@ -59,8 +79,12 @@ Docker uses `config/.env` via compose `env_file`. The application does not load 
 - `DISCORD_PRIMARY_CHANNEL`: Operational commands, holdings refresh output, order confirmations.
 - `DISCORD_SECONDARY_CHANNEL`: Where NASDAQ/SEC alert feeds are posted.
 - `DISCORD_TERTIARY_CHANNEL`: Reverse split summaries and policy snippets (optional).
+- `DISCORD_HOLDINGS_CHANNEL`: Channel where auto-RSA holdings embeds are posted (optional).
+- `DISCORD_WATCHLIST_CHANNEL`: Dedicated watchlist output channel (optional).
 
 If `DISCORD_TERTIARY_CHANNEL` is not set, summaries fall back to the primary channel.
+If `DISCORD_WATCHLIST_CHANNEL` is set, watchlist command responses and reminders
+will be sent there instead of the originating channel.
 
 ## Configuration notes
 
@@ -77,6 +101,11 @@ Set these in `config/.env` to enable LLM tie-breakers:
 - `OPENAI_POLICY_ENABLED=true`
 - `OPENAI_API_KEY=...`
 - `OPENAI_MODEL=gpt-4o-mini` (default)
+
+To disable the programmatic (keyword-based) policy parser and rely on the LLM
+for round-up determination, set:
+
+- `PROGRAMMATIC_POLICY_ENABLED=false`
 
 ### Holdings refresh and alerts
 
@@ -102,6 +131,47 @@ echo "AAPL" >> config/ignore_tickers.txt
 cp config/market_holidays.example.txt config/market_holidays.txt
 echo "2025-01-01  # New Year's Day" >> config/market_holidays.txt
 ```
+
+### Queued orders
+
+- Scheduled orders persist in `volumes/db/order_queue.json`.
+- Orders are rescheduled on startup and checked daily; past-due items are moved
+  to the next market open before execution.
+
+### Auto-RSA holdings file import (recommended)
+
+If auto-RSA can write a JSON snapshot to a shared Docker volume, RSAssistant can
+import it directly (bypassing Discord parsing):
+
+- `AUTO_RSA_HOLDINGS_ENABLED=true`
+- `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json`
+
+The importer polls for changes and updates `volumes/logs/holdings_log.csv`.
+
+Minimal JSON format (list of entries):
+
+```json
+[
+  {
+    "broker": "Public",
+    "group": "1",
+    "account": "2663",
+    "ticker": "AREB",
+    "quantity": 101.0,
+    "price": 0.30,
+    "value": 30.10,
+    "account_total": 228.76
+  }
+]
+```
+
+Auto-RSA setup (recommended):
+
+- Set `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json` in the auto-rsa
+  container, pointed at the same volume as RSAssistant.
+- RSAssistant will ingest it every 5 minutes (or on next change).
+- For full accuracy, have auto-rsa write a complete holdings snapshot
+  (all brokers) so stale rows are not retained.
 
 ## Feeds
 

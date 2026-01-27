@@ -56,7 +56,7 @@ This removes the current mismatch and makes plugin usage feel complete.
 Write a short "policy decision order" section in README (or a dedicated doc):
 - Local parser result
 - LLM tie-breaker when local parsing is uncertain and `OPENAI_POLICY_ENABLED`
-  is set
+  is set (and note `PROGRAMMATIC_POLICY_ENABLED=false` disables local parsing)
 - Action taken (watchlist + autobuy)
 
 ### 5) Make `externalization-staging/` explicit or remove it (medium impact)

@@ -4,6 +4,7 @@
 
 import json
 import os
+from datetime import datetime
 
 from utils.config_utils import VOLUMES_DIR
 
@@ -54,6 +55,16 @@ def remove_order(order_id):
     return False
 
 
+def update_order_time(order_id, new_time: str) -> bool:
+    """Update the scheduled time for an existing queued order."""
+    queue = _load_queue()
+    if order_id not in queue:
+        return False
+    queue[order_id]["time"] = new_time
+    _save_queue(queue)
+    return True
+
+
 def clear_order_queue():
     _save_queue({})
 
@@ -70,3 +81,17 @@ def list_order_queue_items():
     """Returns the queued orders as a list of (order_id, data) tuples."""
     queue = _load_queue()
     return list(queue.items())
+
+
+def get_past_due_orders(reference_time) -> list[tuple[str, dict]]:
+    """Return queued orders whose scheduled time is at or before reference_time."""
+    queue = _load_queue()
+    past_due = []
+    for order_id, data in queue.items():
+        try:
+            execution_time = datetime.strptime(data["time"], "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            continue
+        if execution_time <= reference_time:
+            past_due.append((order_id, data))
+    return past_due

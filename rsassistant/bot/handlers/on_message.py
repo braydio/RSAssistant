@@ -1,6 +1,5 @@
 """Discord message handlers used by RSAssistant."""
 
-import json
 import re
 import asyncio
 from datetime import datetime, timedelta, date
@@ -31,7 +30,6 @@ from utils.config_utils import (
     HOLDING_ALERT_MIN_PRICE,
     IGNORE_TICKERS as IGNORE_TICKERS_SET,
     IGNORE_BROKERS as IGNORE_BROKERS_SET,
-    DISCORD_PRIMARY_CHANNEL as PRIMARY_CHAN_ID,
     MENTION_USER_IDS,
     MENTION_ON_ALERTS,
     TAGGED_ALERT_REQUIREMENTS,
@@ -40,6 +38,7 @@ from utils import split_watch_utils
 from rsassistant.bot.channel_resolver import (
     resolve_message_destination,
     resolve_reply_channel,
+    resolve_watchlist_channel,
 )
 
 from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
@@ -47,6 +46,7 @@ from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
 DISCORD_TERTIARY_CHANNEL = None
+DISCORD_HOLDINGS_CHANNEL = None
 
 # Flag indicating the '..all' command is auditing watchlist holdings
 _audit_active = False
@@ -207,13 +207,24 @@ async def _process_round_up_flow(
         logger.error("Round-up flow aborted: empty ticker.")
         return
 
+    target_channel = channel
+    if bot is not None:
+        watchlist_channel = resolve_watchlist_channel(bot)
+        if watchlist_channel and getattr(watchlist_channel, "id", None) != getattr(
+            channel, "id", None
+        ):
+            await channel.send("Check the watchlist channel for updates.")
+            target_channel = watchlist_channel
+
     # Refresh cached watchlists to avoid stale ticker data.
     watch_list_manager.load_watch_list()
     split_watch_utils.load_data()
 
     watchlist_updated = False
     if not watch_list_manager.ticker_exists(ticker):
-        await watch_list_manager.watch_ticker(channel, ticker, watch_date, split_ratio)
+        await watch_list_manager.watch_ticker(
+            target_channel, ticker, watch_date, split_ratio
+        )
         watchlist_updated = True
     else:
         existing = watch_list_manager.get_watch_list().get(ticker, {})
@@ -221,7 +232,7 @@ async def _process_round_up_flow(
         if split_ratio and split_ratio != existing_ratio:
             watch_list_manager.add_ticker(ticker, watch_date, split_ratio)
             watchlist_updated = True
-            await channel.send(
+            await target_channel.send(
                 f"Updated watchlist entry for {ticker} to {watch_date} ({split_ratio})."
             )
 
@@ -240,7 +251,7 @@ async def _process_round_up_flow(
         f"Watchlist {'updated' if watchlist_updated else 'already tracked'}; "
         f"autobuy {'scheduled' if scheduled_autobuy else 'already tracked'}."
     )
-    await channel.send(summary)
+    await target_channel.send(summary)
 
 
 def _normalize_broker_name(broker: str) -> str:
@@ -532,13 +543,18 @@ async def _audit_holdings(bot, message, parsed_holdings):
         await response_channel.send(f"Missing in {account}: {', '.join(tickers)}")
 
 
-def set_channels(primary_id, secondary_id, tertiary_id):
-    global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_TERTIARY_CHANNEL
+def set_channels(primary_id, secondary_id, tertiary_id, holdings_id):
+    global DISCORD_PRIMARY_CHANNEL, DISCORD_SECONDARY_CHANNEL, DISCORD_TERTIARY_CHANNEL, DISCORD_HOLDINGS_CHANNEL
     DISCORD_PRIMARY_CHANNEL = primary_id
     DISCORD_SECONDARY_CHANNEL = secondary_id
     DISCORD_TERTIARY_CHANNEL = tertiary_id
+    DISCORD_HOLDINGS_CHANNEL = holdings_id
     logger.info(
-        f"rsassistant.bot.handlers.on_message loaded with primary={primary_id}, secondary={secondary_id}, tertiary={tertiary_id}"
+        "rsassistant.bot.handlers.on_message loaded with primary=%s, secondary=%s, tertiary=%s, holdings=%s",
+        primary_id,
+        secondary_id,
+        tertiary_id,
+        holdings_id,
     )
 
 
@@ -549,6 +565,7 @@ def on_message_ready(bot):
         DISCORD_PRIMARY_CHANNEL,
         DISCORD_SECONDARY_CHANNEL,
         DISCORD_TERTIARY_CHANNEL,
+        DISCORD_HOLDINGS_CHANNEL,
     )
     logger.debug("on_message_ready hook executed.")
 
@@ -563,10 +580,10 @@ def on_message_refresh_status():
     }
 
 
-def on_message_set_channels(primary_id, secondary_id, tertiary_id):
+def on_message_set_channels(primary_id, secondary_id, tertiary_id, holdings_id):
     """Alias to `set_channels` that matches the legacy export."""
 
-    set_channels(primary_id, secondary_id, tertiary_id)
+    set_channels(primary_id, secondary_id, tertiary_id, holdings_id)
 
 
 def get_account_nickname_or_default(broker_name, group_number, account_number):
@@ -594,7 +611,9 @@ async def handle_on_message(bot, message):
 
     Routes messages to the appropriate handler based on channel ID.
     """
-    if message.channel.id == DISCORD_PRIMARY_CHANNEL:
+    if message.channel.id == DISCORD_PRIMARY_CHANNEL or (
+        DISCORD_HOLDINGS_CHANNEL and message.channel.id == DISCORD_HOLDINGS_CHANNEL
+    ):
         await handle_primary_channel(bot, message)
     elif message.channel.id == DISCORD_SECONDARY_CHANNEL:
         await handle_secondary_channel(bot, message)
@@ -839,9 +858,6 @@ async def handle_secondary_channel(bot, message):
                 llm_ticker,
             )
 
-        summary = build_policy_summary(ticker, policy_info, url)
-        await post_policy_summary(bot, ticker, summary)
-
         body_text = policy_info.get("body_text")
         context = f"Round-up snippet from {url}: "
         max_length = max(0, 2000 - len(context))
@@ -881,6 +897,8 @@ async def handle_secondary_channel(bot, message):
             )
 
         if _resolve_round_up_confirmation(policy_info):
+            summary = build_policy_summary(ticker, policy_info, url)
+            await post_policy_summary(bot, ticker, summary)
             split_date = policy_info.get("effective_date") or date.today().isoformat()
             split_ratio = policy_info.get("split_ratio") or "N/A"
             watch_date = _format_watch_date(split_date)
@@ -944,30 +962,26 @@ def build_policy_summary(ticker, policy_info, fallback_url):
     if "sec_url" in policy_info:
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
-    effective_date = policy_info.get("effective_date")
+    llm_details = policy_info.get("llm_details") or {}
+    effective_date = llm_details.get("effective_date") or policy_info.get(
+        "effective_date"
+    )
     if effective_date:
         summary += f"**Effective Date:** {effective_date}\n"
 
-    split_ratio = policy_info.get("split_ratio")
+    split_ratio = llm_details.get("split_ratio") or policy_info.get("split_ratio")
     if split_ratio:
         summary += f"**Split Ratio:** {split_ratio}\n"
 
-    policy_text = policy_info.get("sec_policy") or policy_info.get("policy")
-    summary += f"**Fractional Share Policy:** {policy_text}"
-
-    fractional_policy = policy_info.get("fractional_share_policy")
-    if fractional_policy:
-        summary += f"\n**Fractional Share Policy (LLM):** {fractional_policy}"
+    llm_policy = llm_details.get("fractional_share_policy") or policy_info.get(
+        "fractional_share_policy"
+    )
+    if llm_policy:
+        summary += f"**Fractional Share Policy (LLM):** {llm_policy}"
 
     snippet = policy_info.get("snippet")
     if snippet:
         summary += f"\n> {snippet}"
-
-    llm_details = policy_info.get("llm_details")
-    if llm_details:
-        summary += "\n```json\n"
-        summary += json.dumps(llm_details, sort_keys=True)
-        summary += "\n```"
 
     return summary
 

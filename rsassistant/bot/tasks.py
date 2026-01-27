@@ -11,14 +11,17 @@ from typing import Optional
 import discord
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import BOT_PREFIX, DISCORD_PRIMARY_CHANNEL, ENABLE_MARKET_REFRESH
 from utils.order_exec import schedule_and_execute
-from utils.order_queue_manager import get_order_queue
+from utils.order_queue_manager import get_order_queue, update_order_time
 from utils.refresh_scheduler import MARKET_TZ, compute_next_refresh_datetime
+from utils.market_calendar import is_market_open_at, next_market_open
 from utils.watch_utils import send_reminder_message
+from utils.holdings_importer import import_holdings_if_updated
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,16 @@ async def reschedule_queued_orders(bot: commands.Bot) -> None:
     for order_id, data in queue.items():
         try:
             execution_time = datetime.strptime(data["time"], "%Y-%m-%d %H:%M:%S")
+            now = datetime.now(MARKET_TZ)
+            if execution_time.tzinfo is None:
+                execution_time = execution_time.replace(tzinfo=MARKET_TZ)
+            if execution_time <= now:
+                execution_time = (
+                    now if is_market_open_at(now) else next_market_open(now)
+                )
+                update_order_time(
+                    order_id, execution_time.strftime("%Y-%m-%d %H:%M:%S")
+                )
             bot.loop.create_task(
                 schedule_and_execute(
                     channel,
@@ -65,6 +78,46 @@ async def reschedule_queued_orders(bot: commands.Bot) -> None:
             logger.info("Rescheduled queued order %s", order_id)
         except Exception as exc:
             logger.error("Failed to reschedule order %s: %s", order_id, exc)
+
+
+async def reschedule_past_due_orders(bot: commands.Bot) -> None:
+    """Reschedule past-due queued orders to the next market open."""
+
+    queue = get_order_queue()
+    if not queue:
+        logger.info("No queued orders to check for past-due rescheduling.")
+        return
+
+    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
+    if not channel:
+        logger.error("Primary channel not found for past-due rescheduling.")
+        return
+
+    now = datetime.now(MARKET_TZ)
+    for order_id, data in queue.items():
+        try:
+            execution_time = datetime.strptime(data["time"], "%Y-%m-%d %H:%M:%S")
+            if execution_time.tzinfo is None:
+                execution_time = execution_time.replace(tzinfo=MARKET_TZ)
+            if execution_time > now:
+                continue
+            new_time = now if is_market_open_at(now) else next_market_open(now)
+            update_order_time(order_id, new_time.strftime("%Y-%m-%d %H:%M:%S"))
+            bot.loop.create_task(
+                schedule_and_execute(
+                    channel,
+                    action=data["action"],
+                    ticker=data["ticker"],
+                    quantity=data["quantity"],
+                    broker=data["broker"],
+                    execution_time=new_time,
+                    order_id=order_id,
+                    add_to_queue=False,
+                )
+            )
+            logger.info("Rescheduled past-due queued order %s", order_id)
+        except Exception as exc:
+            logger.error("Failed to reschedule past-due order %s: %s", order_id, exc)
 
 
 async def _invoke_total_refresh(bot: commands.Bot) -> None:
@@ -142,6 +195,14 @@ def _start_reminder_scheduler(bot: commands.Bot) -> BackgroundScheduler:
     scheduler.add_job(
         lambda: bot.loop.create_task(send_reminder_message(bot)),
         CronTrigger(hour=15, minute=30),
+    )
+    scheduler.add_job(
+        lambda: bot.loop.create_task(reschedule_past_due_orders(bot)),
+        CronTrigger(hour=7, minute=0),
+    )
+    scheduler.add_job(
+        import_holdings_if_updated,
+        IntervalTrigger(minutes=5),
     )
     scheduler.start()
     logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")

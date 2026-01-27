@@ -1,0 +1,58 @@
+diff --git a/src/helper_api.py b/src/helper_api.py
+index 3c86c6b..f1e0a3b 100644
+--- a/src/helper_api.py
++++ b/src/helper_api.py
+@@ -1,7 +1,8 @@
+ # Nelson Dane
+ # Helper functions and classes
+ # to share between scripts
+ 
+-import asyncio
++import asyncio
+ import datetime
++import json
+ import operator
+ import os
+@@ -716,6 +717,7 @@ def print_all_holdings(
+     print(
+         f"\n==============================\n{broker_obj.get_name()} Holdings\n==============================",
+     )
++    snapshot_entries: list[dict[str, Any]] = []
+     for key in broker_obj.get_account_numbers():
+         for account in broker_obj.get_account_numbers(key):
+             acc_name = f"{key} ({mask_string(account) if mask_account_number else account})"
+@@ -738,6 +740,24 @@ def print_all_holdings(
+                     quantity = holdings[stock]["quantity"]
+                     price = holdings[stock]["price"]
+                     total = holdings[stock]["total"]
+                     print_string += f"{stock}: {quantity} @ ${format(price, '0.2f')} = ${format(total, '0.2f')}\n"
++                    group = key
++                    broker_name = broker_obj.get_name()
++                    if isinstance(key, str) and key.startswith(f"{broker_name} "):
++                        group = key[len(f"{broker_name} ") :].strip() or key
++                    snapshot_entries.append(
++                        {
++                            "broker": broker_name,
++                            "group": group,
++                            "account": str(account),
++                            "ticker": stock,
++                            "quantity": quantity,
++                            "price": price,
++                            "value": total,
++                            "account_total": broker_obj.get_account_totals(key, account),
++                        }
++                    )
+             print_string += f"Total: ${format(broker_obj.get_account_totals(key, account), '0.2f')}\n"
+             print(print_string)
+@@ -757,6 +777,14 @@ def print_all_holdings(
+             )
+             embed["fields"].append(field)
++    snapshot_path = os.getenv("AUTO_RSA_HOLDINGS_FILE", "")
++    if snapshot_path:
++        try:
++            with open(snapshot_path, "w", encoding="utf-8") as handle:
++                json.dump(snapshot_entries, handle)
++        except Exception as exc:
++            print(f"Failed to write holdings snapshot to {snapshot_path}: {exc}")
+     print_and_discord(embed, loop, embed=True)
+     print("==============================")

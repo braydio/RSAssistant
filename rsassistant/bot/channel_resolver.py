@@ -78,6 +78,18 @@ def resolve_reply_channel(
     return None
 
 
+def resolve_watchlist_channel(
+    bot: commands.Bot, fallback: Optional[Messageable] = None
+) -> Optional[Messageable]:
+    """Return the configured watchlist channel when available."""
+
+    watchlist_id = config_utils.DISCORD_WATCHLIST_CHANNEL
+    channel = resolve_reply_channel(bot, preferred_id=watchlist_id)
+    if channel is not None:
+        return channel
+    return fallback
+
+
 def resolve_message_destination(
     bot: commands.Bot, message_channel: Optional[Messageable]
 ) -> Messageable:
