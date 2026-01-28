@@ -1,5 +1,6 @@
 # environment stuff
 RSDashboard/*
+auto-rsa/*
 volumes/logs*
 heartbeat.txt
 
