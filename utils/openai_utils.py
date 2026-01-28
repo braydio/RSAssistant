@@ -132,6 +132,7 @@ def extract_reverse_split_details(
 
     system_prompt = (
         "You extract reverse stock split details from financial notices. "
+        "The goal is to identify reverse stock splits where fractional shares will be converted to full shares."
         "Return ONLY valid JSON with keys: "
         "ticker, reverse_split_confirmed, split_ratio, effective_date, "
         "fractional_share_policy. "
@@ -140,12 +141,11 @@ def extract_reverse_split_details(
         "no_fractional_shares, unclear, not_mentioned. "
         "split_ratio should be normalized as 'X-Y' (e.g., 1-10 for 1-for-10). "
         "effective_date should be YYYY-MM-DD. Use null for unknown values."
+        "Be mindful of the wording to accurately determine whether a full share"
+        "will be returned when a trader has a fractional share"
+        "If the total share amount returned is greater than the initial share amount this is a definitive <rounded up> or <rounded to the nearest whole> case."
     )
-    user_prompt = (
-        f"{url_hint}\n{ticker_hint}\n\n"
-        "Notice text:\n"
-        f"{clipped}"
-    )
+    user_prompt = f"{url_hint}\n{ticker_hint}\n\n" "Notice text:\n" f"{clipped}"
 
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -184,11 +184,7 @@ def extract_reverse_split_details(
             elapsed,
             request_id,
         )
-        content = (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-        )
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
     except Exception as e:
         elapsed = time.monotonic() - start_time
         logger.error(f"OpenAI request failed: {e}")
