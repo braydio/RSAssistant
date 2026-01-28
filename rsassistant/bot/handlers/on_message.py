@@ -193,6 +193,15 @@ def _resolve_round_up_confirmation(policy_info: dict) -> bool:
     return bool(policy_info.get("round_up_confirmed"))
 
 
+def _resolve_fractional_handling_text(policy_info: dict) -> str:
+    """Return the resolved fractional share handling text."""
+    llm_details = policy_info.get("llm_details") or {}
+    llm_policy = llm_details.get("fractional_share_policy")
+    if llm_policy:
+        return llm_policy
+    return policy_info.get("sec_policy") or policy_info.get("policy") or "Policy not clearly stated."
+
+
 async def _process_round_up_flow(
     bot,
     channel,
@@ -902,11 +911,6 @@ async def handle_secondary_channel(bot, message):
             split_date = policy_info.get("effective_date") or date.today().isoformat()
             split_ratio = policy_info.get("split_ratio") or "N/A"
             watch_date = _format_watch_date(split_date)
-
-            watch_command = (
-                f"{BOT_PREFIX}watch {ticker.upper()} {watch_date} {split_ratio}"
-            )
-            logger.info("Auto watch command: %s", watch_command)
             await _process_round_up_flow(
                 bot,
                 response_channel,
@@ -915,6 +919,13 @@ async def handle_secondary_channel(bot, message):
                 split_ratio,
                 watch_date,
             )
+        else:
+            handling = _resolve_fractional_handling_text(policy_info)
+            alert = (
+                f"Alert Detected: {ticker}\n"
+                f"Fractional Share Handling: {handling}"
+            )
+            await post_alert_detection(bot, ticker, alert)
     except Exception:
         logger.exception("Error during policy analysis secondary channel")
 
@@ -998,12 +1009,32 @@ async def post_policy_summary(bot, ticker, summary):
         summary: Rendered summary text to post.
     """
 
+    channel = _resolve_alert_channel(bot, ticker)
+    if not channel:
+        return
+
+    await channel.send(summary)
+    logger.info(
+        "Posted policy summary for %s to channel %s", ticker, getattr(channel, "id", "unknown")
+    )
+
+
+async def post_alert_detection(bot, ticker, summary):
+    """Send a minimal alert detection message to the alerts channel."""
+    channel = _resolve_alert_channel(bot, ticker)
+    if not channel:
+        return
+
+    await channel.send(summary)
+
+
+def _resolve_alert_channel(bot, ticker):
     channel = None
     if DISCORD_TERTIARY_CHANNEL:
         channel = resolve_reply_channel(bot, DISCORD_TERTIARY_CHANNEL)
         if not channel:
             logger.error(
-                "Tertiary channel %s not found; reverse split summary will fallback.",
+                "Tertiary channel %s not found; alert will fallback.",
                 DISCORD_TERTIARY_CHANNEL,
             )
 
@@ -1011,22 +1042,16 @@ async def post_policy_summary(bot, ticker, summary):
         channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
         if channel:
             logger.warning(
-                "Posting %s reverse split summary to primary channel fallback.", ticker
+                "Posting %s alert to primary channel fallback.", ticker
             )
 
     if not channel:
         channel = resolve_reply_channel(bot)
 
     if not channel:
-        logger.error(
-            "Unable to resolve a channel for %s reverse split summary.", ticker
-        )
-        return
-
-    await channel.send(summary)
-    logger.info(
-        "Posted policy summary for %s to channel %s", ticker, getattr(channel, "id", "unknown")
-    )
+        logger.error("Unable to resolve a channel for %s alerts.", ticker)
+        return None
+    return channel
 
 
 

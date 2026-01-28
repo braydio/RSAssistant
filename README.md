@@ -53,6 +53,16 @@ Or use the helper script from this repo:
 Then set `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json` in the auto-rsa
 container and the same path in RSAssistant.
 
+### Env GUI (optional)
+
+Run a local config editor for `config/.env`:
+
+```bash
+python scripts/env_gui.py
+```
+
+Then open `http://127.0.0.1:8765` in your browser.
+
 ## Setup (local)
 
 ```bash
@@ -137,6 +147,7 @@ echo "2025-01-01  # New Year's Day" >> config/market_holidays.txt
 - Scheduled orders persist in `volumes/db/order_queue.json`.
 - Orders are rescheduled on startup and checked daily; past-due items are moved
   to the next market open before execution.
+- Use `..queue_run` to force a manual reschedule of past-due items.
 
 ### Auto-RSA holdings file import (recommended)
 
