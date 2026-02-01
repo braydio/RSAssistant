@@ -21,8 +21,6 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     load_account_mappings,
 )
-from utils.csv_utils import save_order_to_csv
-from utils.excel_utils import update_excel_log, record_error_message
 from utils.sql_utils import insert_order_history
 from utils.utility_utils import debug_order_data
 from utils.price_fetcher import get_last_stock_price
@@ -62,6 +60,17 @@ _REMOTE_TICKER_PATTERNS = [
 ]
 
 
+def _log_order_failure(reason: str, details: str) -> None:
+    """Log a structured warning for order parsing failures.
+
+    Args:
+        reason: A short description of the failure reason.
+        details: Additional context (broker/account/action/ticker).
+    """
+
+    logger.warning("Order processing failed: %s | details=%s", reason, details)
+
+
 def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
     """Return a ticker symbol by inspecting a linked article when needed.
 
@@ -80,9 +89,7 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
         response = requests.get(url, headers=_REMOTE_FETCH_HEADERS, timeout=10)
         response.raise_for_status()
     except RequestException as exc:
-        logger.warning(
-            "Unable to fetch %s for remote ticker detection: %s", url, exc
-        )
+        logger.warning("Unable to fetch %s for remote ticker detection: %s", url, exc)
         return None
 
     html = response.text or ""
@@ -98,6 +105,7 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
 
     logger.warning("Ticker not found within remote source %s", url)
     return None
+
 
 # RIP
 # "Tradier": r"(Tradier)\s(\d+):\s(buying|selling)\s(\d+\.?\d*)\sof\s([A-Z]+)",
@@ -255,9 +263,9 @@ def parse_broker_data(
 def handle_complete_order(match, broker_name, broker_number):
     """Process a complete order and persist it.
 
-    Fetches the latest price for the order stock and writes the order to the CSV
-    and database. If the price lookup fails, an error entry is recorded and the
-    order is skipped.
+    Fetches the latest price for the order stock and writes the order to the SQL
+    order history. If the price lookup fails, the issue is logged and the order
+    is skipped.
     """
     try:
         # Parse broker-specific data
@@ -284,7 +292,7 @@ def handle_complete_order(match, broker_name, broker_number):
 
         price = get_last_stock_price(stock)
         if price is None:
-            record_error_message(
+            _log_order_failure(
                 "Price fetch failed",
                 f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
             )
@@ -303,13 +311,8 @@ def handle_complete_order(match, broker_name, broker_number):
             "Date": date,
         }
         logger.info(
-            f"Processing complete order for {broker_name} {broker_number} to CSV"
+            f"Processing complete order for {broker_name} {broker_number} to SQL history"
         )
-
-        logger.info(
-            f"Processing complete order for {broker_name} {broker_number} to CSV and database"
-        )
-        # Save the order data to CSV
         handoff_order_data(order_data, broker_name, broker_number, account_number)
 
         logger.info(
@@ -543,7 +546,7 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
     """Finalize a verified order and persist it.
 
     After normalization, the latest stock price is retrieved. If the price cannot
-    be fetched, the order details are logged as an error and no persistence is
+    be fetched, the order details are logged as a warning and no persistence is
     attempted.
     """
     logger.info(
@@ -566,7 +569,7 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
     # Get price and current date
     price = get_last_stock_price(stock)
     if price is None:
-        record_error_message(
+        _log_order_failure(
             "Price fetch failed",
             f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
         )
@@ -587,9 +590,8 @@ def process_verified_orders(broker_name, broker_number, account_number, order):
     }
 
     logger.info(
-        f"Processing complete order for {broker_name} {broker_number} to CSV and database."
+        f"Processing complete order for {broker_name} {broker_number} to SQL history."
     )
-    # Save the order data to CSV
     handoff_order_data(order_data, broker_name, broker_number, account_number)
 
 
@@ -612,9 +614,18 @@ def handle_failed_order(match, broker_name, broker_number):
 
 
 def handoff_order_data(order_data, broker_name, broker_number, account_number):
+    """Persist normalized order data via SQL logging.
+
+    Args:
+        order_data: Normalized order dictionary in the expected format.
+        broker_name: Broker name for logging context.
+        broker_number: Broker identifier for logging context.
+        account_number: Account identifier for logging context.
+    """
+
     logger.info(
         f"Processing order for {broker_name} {broker_number} {account_number}. "
-        "Passing to CSV, DB, and Excel log..."
+        "Passing to SQL order history..."
     )
 
     order_debug = debug_order_data(order_data)
@@ -636,19 +647,11 @@ def handoff_order_data(order_data, broker_name, broker_number, account_number):
     if order_debug:
         logger.info(f"I think passed the order debug.")
 
-    # Each key is a descriptive label; each value is the call that returns True/False.
-    steps = {
-        "CSV": save_order_to_csv(order_data),
-        "SQL DB": insert_order_history(order_data),
-        "Excel log": update_excel_log(order_data),
-    }
-
-    # Log successes/warnings in a loop
-    for step_label, result in steps.items():
-        if result:
-            logger.info(f"{step_label} updated with order data.")
-        else:
-            logger.warning(f"Order data not saved to {step_label}.")
+    try:
+        insert_order_history(order_data)
+        logger.info("Order data saved to SQL order history.")
+    except Exception as exc:
+        logger.warning("Order data not saved to SQL order history: %s", exc)
 
     logger.info("Handoff of order data complete.")
 
@@ -1070,9 +1073,7 @@ def alert_channel_message(content):
 
     # Case-insensitive check for "reverse split" phrases in the alert message
     reverse_split_confirm = (
-        re.search(
-            r"reverse\s+(?:stock\s+)?split", normalized_content, re.IGNORECASE
-        )
+        re.search(r"reverse\s+(?:stock\s+)?split", normalized_content, re.IGNORECASE)
         is not None
     )
     logger.info(

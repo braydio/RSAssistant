@@ -28,7 +28,6 @@ from utils.config_utils import (
     DISCORD_SECONDARY_CHANNEL,
     DISCORD_TERTIARY_CHANNEL,
     DISCORD_HOLDINGS_CHANNEL,
-    EXCEL_FILE_MAIN,
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
     OPENAI_API_KEY,
@@ -101,9 +100,7 @@ def _build_command_usage(prefix: str | None, command: commands.Command | None) -
 
     qualified_name = getattr(command, "qualified_name", "").strip()
     usage_hint = (
-        getattr(command, "usage", None)
-        or getattr(command, "signature", "")
-        or ""
+        getattr(command, "usage", None) or getattr(command, "signature", "") or ""
     ).strip()
 
     if qualified_name and usage_hint:
@@ -128,7 +125,9 @@ class RSAssistantBot(commands.Bot):
             intents=intents,
             reconnect=True,
         )
-        self.enabled_plugins = list(enabled_plugins or _parse_enabled_plugins(os.getenv("ENABLED_PLUGINS")))
+        self.enabled_plugins = list(
+            enabled_plugins or _parse_enabled_plugins(os.getenv("ENABLED_PLUGINS"))
+        )
         self.background_tasks = None
         self.help_command = commands.MinimalHelpCommand()
 
@@ -147,9 +146,8 @@ class RSAssistantBot(commands.Bot):
         channel = resolve_reply_channel(self, DISCORD_PRIMARY_CHANNEL)
         account_setup_message = (
             "**(╯°□°）╯**\n\n"
-            "Account mappings not found. Please fill in Reverse Split Log > Account Details sheet at\n"
-            f"`{EXCEL_FILE_MAIN}`\n\n"
-            "Then run: `..loadmap` and `..loadlog`."
+            "Account mappings not found. Please update `config/account_mapping.json`\n"
+            "or use `..addmap` to define mappings, then run `..loadmap` to sync SQL."
         )
         try:
             ready_message = (
@@ -237,6 +235,7 @@ class RSAssistantBot(commands.Bot):
             getattr(command, "qualified_name", "<unknown>"),
             exc_info=error,
         )
+
     async def close(self) -> None:
         if self.background_tasks:
             await task_runner.stop_background_tasks(self.background_tasks)

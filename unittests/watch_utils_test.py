@@ -16,7 +16,9 @@ class DummyContext:
     def __init__(self):
         self.sent_messages = []
 
-    async def send(self, content=None, embed=None):  # pragma: no cover - exercised indirectly
+    async def send(
+        self, content=None, embed=None
+    ):  # pragma: no cover - exercised indirectly
         self.sent_messages.append({"content": content, "embed": embed})
 
 
@@ -71,9 +73,9 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         }
 
         chunk_mock = AsyncMock()
-        with patch(
-            "utils.watch_utils.send_large_message_chunks", chunk_mock
-        ), patch("utils.watch_utils.get_last_prices", return_value={"TEST": 8.9}):
+        with patch("utils.watch_utils.send_large_message_chunks", chunk_mock), patch(
+            "utils.watch_utils.get_last_prices", return_value={"TEST": 8.9}
+        ):
             await self.manager.send_watchlist_prices(self.ctx)
 
         chunk_mock.assert_awaited_once_with(self.ctx, "TEST: $8.90")
@@ -113,9 +115,7 @@ NCEW 1-8 (purchase by 11/13)
 """
 
         # Patch the global watch list manager used by the command helper
-        with patch.object(watch_utils, "watch_list_manager", self.manager), patch(
-            "utils.watch_utils.add_stock_to_excel_log", new_callable=AsyncMock
-        ):
+        with patch.object(watch_utils, "watch_list_manager", self.manager):
             await watch_utils.watch(self.ctx, text=content)
 
         self.assertEqual(
@@ -136,9 +136,7 @@ NCEW 1-8 (purchase by 11/13)
     async def test_watch_command_validates_single_entry_inputs(self):
         """Single-line watch usage should enforce date and ratio validation."""
 
-        with patch.object(watch_utils, "watch_list_manager", self.manager), patch(
-            "utils.watch_utils.add_stock_to_excel_log", new_callable=AsyncMock
-        ):
+        with patch.object(watch_utils, "watch_list_manager", self.manager):
             await watch_utils.watch(self.ctx, text="TEST 11/11 1-5")
 
         self.assertIn("TEST", self.manager.watch_list)
@@ -154,6 +152,15 @@ NCEW 1-8 (purchase by 11/13)
             self.ctx.sent_messages[-1]["content"],
             "Invalid date format. Please use mm/dd, mm/dd/yy, or mm/dd/yyyy.",
         )
+
+    async def test_watch_ticker_logs_excel_deprecation_warning(self):
+        """Watch additions should log a warning about Excel deprecation."""
+
+        with patch("utils.watch_utils.logging.warning") as warning_mock:
+            await self.manager.watch_ticker(self.ctx, "TEST", "11/11", "1-5")
+
+        warning_mock.assert_called_once()
+        self.assertIn("TEST", self.manager.watch_list)
 
     def test_move_expired_to_sell_uses_exact_day_for_month_day_dates(self):
         """Tickers using month/day dates should move immediately after the day passes."""

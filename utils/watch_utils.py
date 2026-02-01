@@ -24,11 +24,13 @@ from utils.config_utils import (
     load_account_mappings,
     AUTO_REFRESH_ON_REMINDER,
 )
-from utils.excel_utils import add_stock_to_excel_log
 from utils.utility_utils import send_large_message_chunks
 from utils.price_fetcher import get_last_prices
 from utils.sql_utils import update_historical_holdings
-from rsassistant.bot.channel_resolver import resolve_reply_channel, resolve_watchlist_channel
+from rsassistant.bot.channel_resolver import (
+    resolve_reply_channel,
+    resolve_watchlist_channel,
+)
 from utils.market_calendar import MARKET_TZ, is_market_day
 
 account_mapping = load_account_mappings()
@@ -184,23 +186,24 @@ class WatchListManager:
         return self.watch_list
 
     async def watch_ticker(self, ctx, ticker, split_date, split_ratio=None):
-        """Add a stock ticker with a split date and optional split ratio to the watch list."""
+        """Add a stock ticker with split details to the watch list.
+
+        Watchlist entries are persisted to JSON storage. Excel updates are
+        deprecated and no longer emitted from this flow.
+        """
         ticker = ticker.upper()
 
         if not self.ticker_exists(ticker):
             self.add_ticker(ticker, split_date, split_ratio or "N/A")
-            try:
-                # Update Excel log for the new ticker
-                await add_stock_to_excel_log(
-                    ctx, ticker, split_date, split_ratio or "N/A"
-                )
-                logging.info(
-                    f"{ticker} with Split Ratio {split_ratio or 'N/A'} on {split_date} saved to watchlist & Excel log."
-                )
-            except Exception as e:
-                await ctx.send(f"Error adding {ticker} to the Excel log: {str(e)}")
-                logging.error(f"Error adding stock {ticker} to Excel: {str(e)}")
-                return
+            logging.warning(
+                "Excel logging is deprecated; watchlist updates are stored in JSON only."
+            )
+            logging.info(
+                "%s with Split Ratio %s on %s saved to watchlist.",
+                ticker,
+                split_ratio or "N/A",
+                split_date,
+            )
 
         # Confirmation message
         confirmation_message = (
@@ -229,9 +232,7 @@ class WatchListManager:
         await ctx.send(f"Updated the split ratio for {ticker} to {split_ratio}.")
         logging.info(f"Updated split ratio for {ticker} in watchlist to {split_ratio}.")
 
-    async def list_watched_tickers(
-        self, ctx, include_prices: bool = False
-    ) -> None:
+    async def list_watched_tickers(self, ctx, include_prices: bool = False) -> None:
         """List all watched tickers with split details.
 
         Args:
@@ -326,9 +327,8 @@ async def send_reminder_message_embed(ctx):
             f"- {entry['ticker']} (Split Date: {entry['split_date']}, Ratio: {entry['split_ratio']})"
             for entry in expired_entries
         ]
-        notice = (
-            "Removed expired reverse split tickers from watchlist:\n"
-            + "\n".join(lines)
+        notice = "Removed expired reverse split tickers from watchlist:\n" + "\n".join(
+            lines
         )
         await target_ctx.send(notice)
     embed = discord.Embed(
@@ -496,7 +496,9 @@ async def send_reminder_message(bot):
                 primary = resolve_reply_channel(bot)
             if primary:
                 await primary.send("!rsa holdings all")
-                logging.info("Triggered holdings refresh due to reminder (AUTO_REFRESH_ON_REMINDER=true)")
+                logging.info(
+                    "Triggered holdings refresh due to reminder (AUTO_REFRESH_ON_REMINDER=true)"
+                )
             else:
                 logging.error(
                     "No configured channel found for auto holdings refresh command."
