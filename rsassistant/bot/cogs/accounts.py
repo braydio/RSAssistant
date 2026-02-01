@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from discord.ext import commands
 
-from utils.excel_utils import (
-    add_account_mappings,
-    clear_account_mappings,
-    index_account_details,
-    map_accounts_in_excel_log,
+from utils.config_utils import load_account_mappings, save_account_mappings
+from utils.sql_utils import (
+    clear_account_nicknames,
+    sync_account_mappings,
+    upsert_account_mapping,
 )
 from utils.utility_utils import all_account_nicknames, all_brokers
 
@@ -26,7 +26,9 @@ class AccountsCog(commands.Cog):
         usage="[broker]",
         extras={"category": "Accounts"},
     )
-    async def brokerlist(self, ctx: commands.Context, broker: str | None = None) -> None:
+    async def brokerlist(
+        self, ctx: commands.Context, broker: str | None = None
+    ) -> None:
         if broker is None:
             await all_brokers(ctx)
         else:
@@ -40,38 +42,64 @@ class AccountsCog(commands.Cog):
         extras={"category": "Accounts"},
     )
     async def add_account_mappings_command(
-        self, ctx: commands.Context, brokerage: str, broker_no: str, account: str, nickname: str
+        self,
+        ctx: commands.Context,
+        brokerage: str,
+        broker_no: str,
+        account: str,
+        nickname: str,
     ) -> None:
+        """Add or update an account mapping in JSON and SQL storage."""
         if not (brokerage and broker_no and account and nickname):
             await ctx.send(
                 "All arguments are required: `<brokerage> <broker_no> <account> <nickname>`."
             )
             return
-        await add_account_mappings(ctx, brokerage, broker_no, account, nickname)
+        mappings = load_account_mappings()
+        mappings.setdefault(brokerage, {}).setdefault(broker_no, {})[account] = nickname
+        save_account_mappings(mappings)
+        upsert_account_mapping(brokerage, broker_no, account, nickname)
+        await ctx.send(
+            f"Added mapping: {brokerage} - Broker No: {broker_no}, Account: {account}, Nickname: {nickname}"
+        )
 
     @commands.command(
         name="loadmap",
         aliases=["lm"],
-        help="Map account details from Excel to JSON.",
+        help="Sync account mappings from JSON into SQL storage.",
         extras={"category": "Accounts"},
     )
     async def load_account_mappings_command(self, ctx: commands.Context) -> None:
-        await ctx.send("Mapping account details...")
-        await index_account_details(ctx)
+        """Sync account mappings from JSON into SQL storage."""
+        await ctx.send("Syncing account mappings to SQL...")
+        mappings = load_account_mappings()
+        if not mappings:
+            await ctx.send("No account mappings found to sync.")
+            return
+        results = sync_account_mappings(mappings)
         await ctx.send(
-            "Mapping complete.\n Run `..loadlog` to save mapped accounts to the excel logger."
+            "Account mapping sync complete."
+            f" Added: {results['added']}, Updated: {results['updated']}."
         )
 
     @commands.command(
         name="loadlog",
         aliases=["ll"],
-        help="Update Excel log with mapped accounts.",
+        help="Refresh SQL account mapping storage from JSON.",
         extras={"category": "Accounts"},
     )
     async def update_log_with_mappings(self, ctx: commands.Context) -> None:
-        await ctx.send("Updating log with mapped accounts...")
-        await map_accounts_in_excel_log(ctx)
-        await ctx.send("Complete.")
+        """Refresh SQL account mappings from JSON storage."""
+        await ctx.send("Refreshing SQL account mappings from JSON...")
+        mappings = load_account_mappings()
+        if not mappings:
+            await ctx.send("No account mappings found to sync.")
+            return
+        results = sync_account_mappings(mappings)
+        await ctx.send(
+            "Account mapping refresh complete."
+            f" Added: {results['added']}, Updated: {results['updated']}."
+        )
 
     @commands.command(
         name="clearmap",
@@ -80,9 +108,11 @@ class AccountsCog(commands.Cog):
         extras={"category": "Accounts"},
     )
     async def clear_mapping_command(self, ctx: commands.Context) -> None:
+        """Clear account mapping data from JSON and SQL storage."""
         await ctx.send("Clearing account mappings...")
-        await clear_account_mappings(ctx)
-        await ctx.send("Account mappings have been cleared.")
+        save_account_mappings({})
+        cleared = clear_account_nicknames()
+        await ctx.send(f"Account mappings have been cleared. ({cleared} SQL rows)")
 
 
 async def setup(bot: commands.Bot) -> None:

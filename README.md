@@ -8,7 +8,7 @@ RSAssistant is a Discord bot that monitors reverse split announcements and autom
 - Extracts dates, ratios, and fractional share policies from filings.
 - Maintains watch and sell lists, reminders, and scheduled orders.
 - Refreshes holdings via `..all`, audits them against the watchlist, and posts consolidated summaries.
-- Persists logs, Excel output, and a SQLite database under `volumes/` (override with `VOLUMES_DIR`).
+- Persists logs, watchlist JSON, and a SQLite database under `volumes/` (override with `VOLUMES_DIR`).
 
 ## Minimal configuration quickstart
 
@@ -198,7 +198,7 @@ Post these into the channel mapped to `DISCORD_SECONDARY_CHANNEL`.
 - `RSAssistant.py` launches the modular runtime in `rsassistant/bot`.
 - `rsassistant/` contains Discord cogs, handlers, and background tasks.
 - `utils/` contains configuration, parsing, scheduling, and persistence helpers.
-- Runtime state lives under `volumes/` (logs, DB, Excel, split watchlist).
+- Runtime state lives under `volumes/` (logs, DB, split watchlist).
 
 Directory snapshot:
 
@@ -208,7 +208,7 @@ Directory snapshot:
 ├── rsassistant/            # Bot runtime and cogs
 ├── utils/                  # Shared helpers
 ├── config/                 # .env and config files
-├── volumes/                # Logs, database, Excel output
+├── volumes/                # Logs, database, watchlist output
 ├── unittests/              # Unit tests
 ├── requirements.txt
 ├── docker-compose.yml

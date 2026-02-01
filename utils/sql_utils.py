@@ -95,6 +95,152 @@ def get_or_create_account_id(
             raise
 
 
+def upsert_account_mapping(
+    broker: str, broker_number: str, account_number: str, account_nickname: str
+) -> bool:
+    """Insert or update account nickname mappings in SQL storage.
+
+    Args:
+        broker: Broker name for the account.
+        broker_number: Broker group identifier.
+        account_number: Account identifier.
+        account_nickname: Friendly nickname to store.
+
+    Returns:
+        ``True`` when SQL storage was updated, ``False`` when SQL logging is
+        disabled.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; account mapping not stored.")
+        return False
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT account_id
+            FROM Accounts
+            WHERE broker = ? AND broker_number = ? AND account_number = ?
+            """,
+            (broker, broker_number, account_number),
+        )
+        result = cursor.fetchone()
+
+        if result:
+            cursor.execute(
+                """
+                UPDATE Accounts
+                SET account_nickname = ?
+                WHERE account_id = ?
+                """,
+                (account_nickname, result[0]),
+            )
+            conn.commit()
+            logger.info(
+                "Updated SQL account nickname for %s/%s/%s.",
+                broker,
+                broker_number,
+                account_number,
+            )
+            return True
+
+        cursor.execute(
+            """
+            INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
+            VALUES (?, ?, ?, ?)
+            """,
+            (broker, account_number, broker_number, account_nickname),
+        )
+        conn.commit()
+        logger.info(
+            "Inserted SQL account nickname for %s/%s/%s.",
+            broker,
+            broker_number,
+            account_number,
+        )
+        return True
+
+
+def sync_account_mappings(mappings: dict) -> dict[str, int]:
+    """Synchronize a JSON mapping dictionary into SQL storage.
+
+    Args:
+        mappings: Nested broker/group/account mapping structure.
+
+    Returns:
+        Dictionary with ``added`` and ``updated`` counts.
+    """
+
+    results = {"added": 0, "updated": 0}
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; account mapping sync skipped.")
+        return results
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        for broker, broker_groups in mappings.items():
+            for broker_number, accounts in broker_groups.items():
+                for account_number, nickname in accounts.items():
+                    cursor.execute(
+                        """
+                        SELECT account_id, account_nickname
+                        FROM Accounts
+                        WHERE broker = ? AND broker_number = ? AND account_number = ?
+                        """,
+                        (broker, broker_number, account_number),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        if row[1] != nickname:
+                            cursor.execute(
+                                """
+                                UPDATE Accounts
+                                SET account_nickname = ?
+                                WHERE account_id = ?
+                                """,
+                                (nickname, row[0]),
+                            )
+                            results["updated"] += 1
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (broker, account_number, broker_number, nickname),
+                        )
+                        results["added"] += 1
+
+        conn.commit()
+
+    logger.info(
+        "Synced account mappings to SQL. Added=%s Updated=%s",
+        results["added"],
+        results["updated"],
+    )
+    return results
+
+
+def clear_account_nicknames() -> int:
+    """Clear stored account nicknames from SQL storage.
+
+    Returns:
+        Number of rows updated.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; account nickname clear skipped.")
+        return 0
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Accounts SET account_nickname = NULL")
+        conn.commit()
+        logger.info("Cleared account nicknames in SQL storage.")
+        return cursor.rowcount
+
+
 def init_db():
     """Initialize database tables if SQL logging is enabled."""
 

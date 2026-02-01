@@ -7,6 +7,8 @@
 - Optional plugin loading exists via `ENABLED_PLUGINS` and `plugins/`.
 - Configuration is centralized in `config/.env` (with `config/.env.example` as
   template) plus a legacy `config/settings.yml`.
+- Excel logging is deprecated; SQL and JSON persistence are the current sources
+  of truth for order history and watchlists.
 
 ## Newcomer Experience: What Is Confusing
 1. Two parallel homes for logic (`rsassistant/` vs `utils/`) without a clear

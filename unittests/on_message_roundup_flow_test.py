@@ -40,18 +40,16 @@ class RoundUpFlowTest(IsolatedAsyncioTestCase):
             }
 
         try:
-            with patch.object(
-                on_message, "watch_list_manager", manager
-            ), patch.object(
+            with patch.object(on_message, "watch_list_manager", manager), patch.object(
                 on_message, "attempt_autobuy", new=AsyncMock()
             ) as autobuy_mock, patch.object(
                 on_message.split_watch_utils, "load_data", return_value=None
             ), patch.object(
                 on_message.split_watch_utils, "get_status", side_effect=_get_status
             ), patch.object(
-                on_message.split_watch_utils, "add_split_watch", side_effect=_add_split_watch
-            ), patch(
-                "utils.watch_utils.add_stock_to_excel_log", new_callable=AsyncMock
+                on_message.split_watch_utils,
+                "add_split_watch",
+                side_effect=_add_split_watch,
             ):
                 await on_message._process_round_up_flow(
                     bot=None,

@@ -21,6 +21,8 @@ from utils.config_utils import (
     EXCEL_LOGGING_ENABLED,
 )
 
+EXCEL_DEPRECATED = True
+
 EXCEL_FILE_DIRECTORY = EXCEL_FILE_MAIN.parent
 EXCEL_FILE_NAME = EXCEL_FILE_MAIN.stem
 BASE_EXCEL_FILE = EXCEL_FILE_MAIN.name
@@ -53,6 +55,10 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
 
     base_dir = Path(directory)
     base_excel_file_path = base_dir / BASE_EXCEL_FILE
+
+    if EXCEL_DEPRECATED:
+        logger.warning("Excel logging is deprecated; skipping Excel setup.")
+        return os.fspath(base_excel_file_path)
 
     if not EXCEL_LOGGING_ENABLED:
         return os.fspath(base_excel_file_path)
@@ -104,6 +110,10 @@ def copy_cell_format(source_cell, target_cell):
 def create_excel_backups(excel_backup):
     """Create a dated backup of the Excel log when enabled."""
 
+    if EXCEL_DEPRECATED:
+        logger.warning("Excel logging is deprecated; skipping backup creation.")
+        return
+
     if not EXCEL_LOGGING_ENABLED:
         logger.info("Excel logging disabled; skipping backup creation.")
         return
@@ -119,6 +129,9 @@ def create_excel_backups(excel_backup):
 
 def excel_backups_checks():
     """Ensure today's and tomorrow's backups exist when enabled."""
+
+    if EXCEL_DEPRECATED:
+        return
 
     if not EXCEL_LOGGING_ENABLED:
         return
@@ -142,6 +155,10 @@ def load_excel_workbook(file_path):
     Backup checks are skipped when Excel logging is disabled.
     """
 
+    if EXCEL_DEPRECATED:
+        logger.warning("Excel logging is deprecated; skipping workbook load.")
+        return None
+
     if not os.path.exists(file_path):
         logger.error(f"Workbook not found: {file_path}")
         return None
@@ -161,7 +178,16 @@ def load_excel_workbook(file_path):
 async def index_account_details(
     ctx, excel_main_path=EXCEL_FILE_PATH, mapping_file=ACCOUNT_MAPPING
 ):
-    """Index account details from an Excel file, update account mappings in JSON, and notify about changes."""
+    """Index account details from Excel into JSON storage.
+
+    Excel-backed mapping is deprecated and will log a warning without making
+    changes when Excel is disabled.
+    """
+
+    if EXCEL_DEPRECATED:
+        await ctx.send("Excel mapping is deprecated; no changes were applied.")
+        logger.warning("Excel mapping requested while deprecated; skipping.")
+        return
 
     # Load the Excel workbook and select the 'Account Details' sheet
     try:
@@ -272,7 +298,15 @@ async def index_account_details(
 async def map_accounts_in_excel_log(
     ctx, filename=EXCEL_FILE_PATH, mapped_accounts_json=ACCOUNT_MAPPING
 ):
-    """Update the Reverse Split Log sheet by inserting new rows, copying data and formatting, and deleting original rows."""
+    """Update the Reverse Split Log sheet with mapped accounts.
+
+    Excel updates are deprecated and will no-op when Excel logging is disabled.
+    """
+
+    if EXCEL_DEPRECATED:
+        await ctx.send("Excel logging is deprecated; no updates were applied.")
+        logger.warning("Excel log update requested while deprecated; skipping.")
+        return
 
     # Load the Excel workbook and the Reverse Split Log sheet
     wb = load_excel_workbook(filename)
@@ -524,7 +558,15 @@ def generate_account_nickname(
 
 
 async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
-    """Add the given stock ticker to the next available spot in the Excel log and copy formatting from the previous columns."""
+    """Add a stock ticker to the Excel log.
+
+    Excel logging is deprecated, so this function logs a warning and exits.
+    """
+    if EXCEL_DEPRECATED:
+        await ctx.send("Excel logging is deprecated; no Excel updates were made.")
+        logger.warning("Excel log update requested for %s; skipping.", ticker)
+        return
+
     wb = None
     try:
         # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
@@ -616,7 +658,14 @@ def find_last_filled_column(ws, row):
 
 
 def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
-    """Update the Excel log with buy or sell orders, handling single or multiple orders."""
+    """Update the Excel log with buy or sell orders.
+
+    Excel logging is deprecated, so this function logs a warning and exits.
+    """
+    if EXCEL_DEPRECATED:
+        logger.warning("Excel logging is deprecated; skipping order log update.")
+        return
+
     logger.info("Updating excel log.")
     if isinstance(order_data, dict):
         order_data = [order_data]
@@ -656,9 +705,7 @@ def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
             quantity = order["Quantity"]
             price = float(order["Price"])
             date = order["Date"]
-            order_identifier = (
-                f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
-            )
+            order_identifier = f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
 
             # Log the extracted details
             logger.debug(f"Processing order: {order}")
@@ -766,6 +813,11 @@ def delete_stale_backups(
     days_to_keep=2,
 ):
     """Delete backup files older than the specified number of days."""
+
+    if EXCEL_DEPRECATED:
+        logger.warning("Excel logging is deprecated; skipping backup cleanup.")
+        return
+
     now = datetime.now()
     cutoff = now - timedelta(days=days_to_keep)
 
@@ -860,6 +912,10 @@ def update_cell_value(ws, row, col, value):
 
 def save_workbook(wb, filename):
     """Persist the workbook if Excel logging is enabled."""
+
+    if EXCEL_DEPRECATED:
+        logger.warning("Excel logging is deprecated; skipping workbook save.")
+        return
 
     if not EXCEL_LOGGING_ENABLED:
         logger.info("Excel logging disabled; skipping workbook save.")
