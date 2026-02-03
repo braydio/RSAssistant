@@ -1,8 +1,8 @@
 # RSAssistant
 
-RSAssistant is a Discord bot that monitors reverse split announcements and automates trading workflows around them. It parses NASDAQ/SEC alerts, maintains watchlists, and sends `!rsa` commands to autoRSA for execution.
+RSAssistant is a Discord bot that monitors reverse split announcements and automates trading workflows around them. It parses NASDAQ/SEC alerts, maintains watchlists, and sends `!rsa` commands to auto-rsa for execution.
 
-## What it does
+## Key features
 
 - Monitors secondary-channel alert feeds for reverse split announcements.
 - Extracts dates, ratios, and fractional share policies from filings.
@@ -10,30 +10,78 @@ RSAssistant is a Discord bot that monitors reverse split announcements and autom
 - Refreshes holdings via `..all`, audits them against the watchlist, and posts consolidated summaries.
 - Persists logs, watchlist JSON, and a SQLite database under `volumes/` (override with `VOLUMES_DIR`).
 
-## Minimal configuration quickstart
-
-1. Copy the example env file:
+## Quickstart (local)
 
 ```bash
 cp config/.env.example config/.env
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python RSAssistant.py
 ```
 
-2. Open `config/.env` and set at least:
+## Quickstart (Docker)
+
+```bash
+cp config/.env.example config/.env
+docker compose up --build
+```
+
+Docker uses the environment provided by Compose (`env_file` / `environment`). The
+application does not load a `.env` file inside the container.
+
+## Configuration basics
+
+Required settings in `config/.env`:
 
 - `BOT_TOKEN`
 - `DISCORD_PRIMARY_CHANNEL`
 - `DISCORD_SECONDARY_CHANNEL`
-- `DISCORD_TERTIARY_CHANNEL` (optional, falls back to primary)
 
-3. Start the bot:
+Optional channels:
+
+- `DISCORD_TERTIARY_CHANNEL` (summaries; falls back to primary)
+- `DISCORD_HOLDINGS_CHANNEL` (auto-rsa holdings embeds)
+- `DISCORD_WATCHLIST_CHANNEL` (watchlist-only output)
+
+Env file loading order:
+
+1. `ENV_FILE=/absolute/or/relative/path.env` (only this file is loaded)
+2. Docker: process environment only
+3. Local default: `config/.env`
+
+## Optional env GUI
 
 ```bash
-python RSAssistant.py
+python scripts/env_gui.py
 ```
 
-That is enough to run the core workflow. See the sections below for optional OpenAI parsing, holdings alerts, and refresh automation.
+Then open `http://127.0.0.1:8765` in your browser.
 
-### Auto-RSA patch quickstart (holdings snapshot file)
+## Policy parsing flow
+
+1. Programmatic parsing (NASDAQ/SEC/press release) runs when `PROGRAMMATIC_POLICY_ENABLED=true`.
+2. LLM parsing runs when `OPENAI_POLICY_ENABLED=true` and can fill in missing ratio/date/policy details.
+3. The resolved policy and effective date drive watchlist scheduling and reminders.
+
+## Data & persistence
+
+Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
+
+- `volumes/db/` (SQLite DB, split watchlist, order queue, auto-rsa holdings snapshot)
+- `volumes/logs/` (app logs, holdings logs)
+- `volumes/excel/` (ReverseSplitLog.xlsx)
+
+## Auto-rsa holdings import (recommended)
+
+If auto-rsa writes a JSON snapshot to a shared volume, RSAssistant can ingest it directly:
+
+- `AUTO_RSA_HOLDINGS_ENABLED=true`
+- `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json`
+
+RSAssistant polls for changes and updates `volumes/logs/holdings_log.csv`.
+
+### Auto-rsa patch quickstart (holdings snapshot file)
 
 You do not need to clone auto-rsa inside this repo. The patch can be applied in any
 auto-rsa clone as long as both containers share a volume.
@@ -50,139 +98,41 @@ Or use the helper script from this repo:
 ./scripts/apply-auto-rsa-patch.sh /path/to/auto-rsa
 ```
 
-Then set `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json` in the auto-rsa
-container and the same path in RSAssistant.
+The patcher reads `AUTO_RSA_HOLDINGS_FILE` from your environment (or
+`config/.env`) and writes it into the auto-rsa `.env` (override with
+`AUTO_RSA_ENV_FILE=/path/to/auto-rsa.env`). Then set the same
+`AUTO_RSA_HOLDINGS_FILE` value in RSAssistant so both containers share the
+snapshot path.
 
-### Env GUI (optional)
-
-Run a local config editor for `config/.env`:
-
-```bash
-python scripts/env_gui.py
-```
-
-Then open `http://127.0.0.1:8765` in your browser.
-
-## Setup (local)
+You can also run the patcher from Discord (admin-only):
 
 ```bash
-git clone https://github.com/braydio/RSAssistant.git
-cd RSAssistant
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp config/.env.example config/.env
-python RSAssistant.py
+..patchautorsa /path/to/auto-rsa
 ```
 
-## Setup (Docker)
+## Holdings snapshots
+
+Use `..snapshot` to post a holdings snapshot to the holdings channel. Provide a
+broker name to focus on one brokerage or a number to change the top-positions
+count:
 
 ```bash
-cp config/.env.example config/.env
-docker compose up --build
+..snapshot
+..snapshot webull
+..snapshot webull 5
+..snapshot 8
 ```
 
-Docker uses `config/.env` via compose `env_file`. The application does not load a `.env` file inside the container.
+## Plugins
 
-## Discord channel layout
-
-- `DISCORD_PRIMARY_CHANNEL`: Operational commands, holdings refresh output, order confirmations.
-- `DISCORD_SECONDARY_CHANNEL`: Where NASDAQ/SEC alert feeds are posted.
-- `DISCORD_TERTIARY_CHANNEL`: Reverse split summaries and policy snippets (optional).
-- `DISCORD_HOLDINGS_CHANNEL`: Channel where auto-RSA holdings embeds are posted (optional).
-- `DISCORD_WATCHLIST_CHANNEL`: Dedicated watchlist output channel (optional).
-
-If `DISCORD_TERTIARY_CHANNEL` is not set, summaries fall back to the primary channel.
-If `DISCORD_WATCHLIST_CHANNEL` is set, watchlist command responses and reminders
-will be sent there instead of the originating channel.
-
-## Configuration notes
-
-### Env file loading
-
-- Default: `config/.env` when running locally.
-- Override: set `ENV_FILE=/path/to/your.env`.
-- Docker: process environment only (compose `env_file`).
-
-### OpenAI policy parsing (optional)
-
-Set these in `config/.env` to enable LLM tie-breakers:
-
-- `OPENAI_POLICY_ENABLED=true`
-- `OPENAI_API_KEY=...`
-- `OPENAI_MODEL=gpt-4o-mini` (default)
-
-To disable the programmatic (keyword-based) policy parser and rely on the LLM
-for round-up determination, set:
-
-- `PROGRAMMATIC_POLICY_ENABLED=false`
-
-### Holdings refresh and alerts
-
-- `AUTO_REFRESH_ON_REMINDER` (bool): Send `!rsa holdings all` after reminders.
-- `ENABLE_MARKET_REFRESH` (bool): Run `..all` every 15 minutes during market hours.
-- `HOLDING_ALERT_MIN_PRICE` (float): Minimum last price to trigger alerts (default `1`).
-- `AUTO_SELL_LIVE` (bool): Also post `!rsa sell {quantity} {ticker} {broker} false`.
-- `IGNORE_TICKERS` / `IGNORE_TICKERS_FILE`: Skip alert/auto-sell for tickers.
-- `IGNORE_BROKERS` / `IGNORE_BROKERS_FILE`: Skip alert/auto-sell for brokers.
-- `MENTION_USER_ID` / `MENTION_USER_IDS`: Discord user IDs to mention.
-- `MENTION_ON_ALERTS` (bool): Enable/disable mentions.
-
-Example ignore list:
+Plugins are opt-in via `ENABLED_PLUGINS` (comma-separated). The ULT-MA plugin ships
+with the repo and can be enabled with:
 
 ```bash
-cp config/ignore_tickers.example.txt config/ignore_tickers.txt
-echo "AAPL" >> config/ignore_tickers.txt
+ENABLED_PLUGINS=ultma
 ```
 
-### Market holidays
-
-```bash
-cp config/market_holidays.example.txt config/market_holidays.txt
-echo "2025-01-01  # New Year's Day" >> config/market_holidays.txt
-```
-
-### Queued orders
-
-- Scheduled orders persist in `volumes/db/order_queue.json`.
-- Orders are rescheduled on startup and checked daily; past-due items are moved
-  to the next market open before execution.
-- Use `..queue_run` to force a manual reschedule of past-due items.
-
-### Auto-RSA holdings file import (recommended)
-
-If auto-RSA can write a JSON snapshot to a shared Docker volume, RSAssistant can
-import it directly (bypassing Discord parsing):
-
-- `AUTO_RSA_HOLDINGS_ENABLED=true`
-- `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json`
-
-The importer polls for changes and updates `volumes/logs/holdings_log.csv`.
-
-Minimal JSON format (list of entries):
-
-```json
-[
-  {
-    "broker": "Public",
-    "group": "1",
-    "account": "2663",
-    "ticker": "AREB",
-    "quantity": 101.0,
-    "price": 0.30,
-    "value": 30.10,
-    "account_total": 228.76
-  }
-]
-```
-
-Auto-RSA setup (recommended):
-
-- Set `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json` in the auto-rsa
-  container, pointed at the same volume as RSAssistant.
-- RSAssistant will ingest it every 5 minutes (or on next change).
-- For full accuracy, have auto-rsa write a complete holdings snapshot
-  (all brokers) so stale rows are not retained.
+See `plugins/ultma/README.md` for configuration and commands.
 
 ## Feeds
 
@@ -227,4 +177,5 @@ python -m unittest discover -s unittests -p '*_test.py'
 
 ## Contributing
 
-Follow the repository guidelines in `AGENTS.md`, especially around config, logging, and where to place new code.
+Follow the repository guidelines in `AGENTS.md`, especially around config, logging,
+and where to place new code.

@@ -2,7 +2,7 @@ diff --git a/src/helper_api.py b/src/helper_api.py
 index 3c86c6b..f1e0a3b 100644
 --- a/src/helper_api.py
 +++ b/src/helper_api.py
-@@ -1,7 +1,8 @@
+@@ -1,8 +1,9 @@
  # Nelson Dane
  # Helper functions and classes
  # to share between scripts
@@ -21,7 +21,7 @@ index 3c86c6b..f1e0a3b 100644
      for key in broker_obj.get_account_numbers():
          for account in broker_obj.get_account_numbers(key):
              acc_name = f"{key} ({mask_string(account) if mask_account_number else account})"
-@@ -738,6 +740,24 @@ def print_all_holdings(
+@@ -738,6 +740,22 @@ def print_all_holdings(
                      quantity = holdings[stock]["quantity"]
                      price = holdings[stock]["price"]
                      total = holdings[stock]["total"]
@@ -44,7 +44,7 @@ index 3c86c6b..f1e0a3b 100644
 +                    )
              print_string += f"Total: ${format(broker_obj.get_account_totals(key, account), '0.2f')}\n"
              print(print_string)
-@@ -757,6 +777,14 @@ def print_all_holdings(
+@@ -757,4 +777,11 @@ def print_all_holdings(
              )
              embed["fields"].append(field)
 +    snapshot_path = os.getenv("AUTO_RSA_HOLDINGS_FILE", "")

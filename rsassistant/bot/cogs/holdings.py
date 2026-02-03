@@ -9,8 +9,9 @@ from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from rsassistant.bot.history_query import show_sql_holdings_history
-from utils.config_utils import DISCORD_PRIMARY_CHANNEL, HOLDINGS_LOG_CSV
+from utils.config_utils import DISCORD_HOLDINGS_CHANNEL, DISCORD_PRIMARY_CHANNEL, HOLDINGS_LOG_CSV
 from utils.csv_utils import clear_holdings_log
+from utils.holdings_snapshot import build_holdings_snapshot_embeds
 from utils.utility_utils import track_ticker_summary
 from rsassistant.bot.handlers.on_message import (
     REFRESH_WINDOW_DURATION,
@@ -105,6 +106,41 @@ class HoldingsCog(commands.Cog):
                 reset_holdings_completion_tracking()
         else:
             await ctx.send("Primary channel not found; unable to run holdings refresh.")
+
+    @commands.command(
+        name="snapshot",
+        aliases=["hs", "holdings"],
+        help="Post a holdings snapshot to the holdings channel.",
+        usage="[broker] [top_n]",
+        extras={"category": "Reporting"},
+    )
+    async def holdings_snapshot(self, ctx: commands.Context, *args: str) -> None:
+        broker = None
+        top_n = 5
+        if args:
+            if len(args) == 1:
+                if args[0].isdigit():
+                    top_n = int(args[0])
+                else:
+                    broker = args[0]
+            else:
+                broker = args[0]
+                if args[1].isdigit():
+                    top_n = int(args[1])
+
+        top_n = max(1, min(top_n, 10))
+        channel = resolve_reply_channel(self.bot, DISCORD_HOLDINGS_CHANNEL) or ctx.channel
+
+        embeds, error = build_holdings_snapshot_embeds(broker_filter=broker, top_n=top_n)
+        if error:
+            await ctx.send(error)
+            return
+
+        for embed in embeds:
+            await channel.send(embed=embed)
+
+        if channel.id != ctx.channel.id:
+            await ctx.send(f"Holdings snapshot posted to {channel.mention}.")
 
     @commands.command(
         name="history",
