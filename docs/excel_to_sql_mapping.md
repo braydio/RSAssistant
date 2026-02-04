@@ -7,8 +7,15 @@ artifact only.
 
 ## Excel Sheet Layouts (Deprecated)
 
+The workbook currently uses two sheets for Excel-backed data (as referenced in
+`utils/excel_utils.py`):
+
+- `Account Details`
+- `Reverse Split Log`
+
 ### Account Details
-Column headers and meaning:
+Column headers and meaning (as read from columns A-D in
+`utils/excel_utils.index_account_details`):
 
 | Column | Header (inferred) | Meaning | SQL Mapping |
 | --- | --- | --- | --- |
@@ -30,8 +37,12 @@ Row indices (from `utils/excel_utils.py`):
 Column layout for per-account values:
 
 - Columns are grouped in repeating blocks of three:
-  - **Cost column**: ticker symbol appears on `stock_row`; account prices for buy/cost entries.
-  - **Proceeds column**: split date appears on `date_row`; split ratio appears on `ratio_row`; order header uses "Proceeds" on `order_row`; account prices for sell/proceeds entries.
+  - **Cost column**: ticker symbol appears on `stock_row` (row 1); account
+    prices for buy/cost entries appear in the account rows.
+  - **Proceeds column**: split date appears on `date_row` (row 1); split ratio
+    appears on `ratio_row` (row 2); order header uses "Proceeds" on
+    `order_row` (row 3); account prices for sell/proceeds entries appear in the
+    account rows.
   - **Spacer column**: formatting-only spacer copied from the prior block.
 - The first two columns are treated as headers/labels in helpers (tickers start at
   column 3 when adding new tickers).
@@ -92,3 +103,5 @@ Tracks per-account cost/proceeds entries that were stored in the Excel grid.
 - After migration, Excel should not be updated by the system. Any new entries
   should be written to the SQL tables above, and Excel should be considered
   read-only for audit or historical reference.
+- Excel is non-authoritative after migration; the SQL database and JSON logs
+  are the sources of truth.
