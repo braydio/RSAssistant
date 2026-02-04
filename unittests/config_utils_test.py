@@ -1,20 +1,18 @@
-import json
-from pathlib import Path
-
 from utils import config_utils
+from utils import sql_utils
 
 
 def test_get_account_nickname_creates_mapping(tmp_path, monkeypatch):
-    tmp_mapping = tmp_path / "account_mapping.json"
-    monkeypatch.setattr(config_utils, "ACCOUNT_MAPPING", tmp_mapping)
+    db_path = tmp_path / "test.db"
+    monkeypatch.setattr(sql_utils, "SQL_DATABASE", db_path)
+    monkeypatch.setattr(sql_utils, "SQL_LOGGING_ENABLED", True)
+    sql_utils.init_db()
 
     nickname = config_utils.get_account_nickname("TestBroker", "1", "1234")
     assert nickname == "TestBroker 1 1234"
 
-    with open(tmp_mapping, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    assert data == {"TestBroker": {"1": {"1234": "TestBroker 1 1234"}}}
+    mappings = sql_utils.fetch_account_mappings()
+    assert mappings == {"TestBroker": {"1": {"1234": "TestBroker 1 1234"}}}
 
 
 def test_ignore_tickers_file_and_env_merge(tmp_path, monkeypatch):

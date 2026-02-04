@@ -1,10 +1,10 @@
 """Tests for the round-up processing flow in on_message."""
 
-import os
 import tempfile
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
+from utils import sql_utils
 from utils.watch_utils import WatchListManager
 from rsassistant.bot.handlers import on_message
 
@@ -21,9 +21,12 @@ class RoundUpFlowTest(IsolatedAsyncioTestCase):
 
     async def test_process_round_up_flow_tracks_and_schedules(self):
         temp_dir = tempfile.TemporaryDirectory()
-        watch_path = os.path.join(temp_dir.name, "watch.json")
-        sell_path = os.path.join(temp_dir.name, "sell.json")
-        manager = WatchListManager(watch_path, sell_path)
+        original_db = sql_utils.SQL_DATABASE
+        original_enabled = sql_utils.SQL_LOGGING_ENABLED
+        sql_utils.SQL_DATABASE = f"{temp_dir.name}/test.db"
+        sql_utils.SQL_LOGGING_ENABLED = True
+        sql_utils.init_db()
+        manager = WatchListManager()
         channel = DummyChannel()
 
         split_watch_cache = {"watchlist": {}}
@@ -65,4 +68,6 @@ class RoundUpFlowTest(IsolatedAsyncioTestCase):
             autobuy_mock.assert_awaited_once()
             self.assertGreaterEqual(channel.send.call_count, 1)
         finally:
+            sql_utils.SQL_DATABASE = original_db
+            sql_utils.SQL_LOGGING_ENABLED = original_enabled
             temp_dir.cleanup()

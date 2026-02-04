@@ -1,12 +1,12 @@
 """Unit tests for watch list presentation helpers."""
 
-import os
 import tempfile
 from datetime import datetime as real_datetime
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
 import utils.watch_utils as watch_utils
+from utils import sql_utils
 from utils.watch_utils import WatchListManager, parse_bulk_watchlist_message
 
 
@@ -27,12 +27,17 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        watch_path = os.path.join(self.temp_dir.name, "watch.json")
-        sell_path = os.path.join(self.temp_dir.name, "sell.json")
-        self.manager = WatchListManager(watch_path, sell_path)
+        self.original_db = sql_utils.SQL_DATABASE
+        self.original_enabled = sql_utils.SQL_LOGGING_ENABLED
+        sql_utils.SQL_DATABASE = f"{self.temp_dir.name}/test.db"
+        sql_utils.SQL_LOGGING_ENABLED = True
+        sql_utils.init_db()
+        self.manager = WatchListManager()
         self.ctx = DummyContext()
 
     def tearDown(self):  # pragma: no cover - cleanup
+        sql_utils.SQL_DATABASE = self.original_db
+        sql_utils.SQL_LOGGING_ENABLED = self.original_enabled
         self.temp_dir.cleanup()
 
     async def test_list_watched_tickers_without_prices(self):

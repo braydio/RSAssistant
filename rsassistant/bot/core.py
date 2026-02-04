@@ -8,7 +8,6 @@ values are provided as a comma-separated list (e.g., ``ENABLED_PLUGINS=ultma``).
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import datetime
@@ -21,7 +20,6 @@ from discord.ext import commands
 from . import tasks as task_runner
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import (
-    ACCOUNT_MAPPING,
     BOT_PREFIX,
     BOT_TOKEN,
     DISCORD_PRIMARY_CHANNEL,
@@ -39,7 +37,7 @@ from utils.config_utils import (
 from utils.logging_setup import setup_logging
 from rsassistant.bot.handlers.on_message import handle_on_message, set_channels
 from utils.order_queue_manager import get_order_queue
-from utils.sql_utils import init_db
+from utils.sql_utils import has_account_mappings, init_db
 from utils.market_calendar import MARKET_TZ, is_market_day
 from utils.price_fetcher import CACHE_FILE as PRICE_CACHE_FILE
 from utils.price_fetcher import TTL_SECONDS as PRICE_CACHE_TTL_SECONDS
@@ -146,17 +144,14 @@ class RSAssistantBot(commands.Bot):
         channel = resolve_reply_channel(self, DISCORD_PRIMARY_CHANNEL)
         account_setup_message = (
             "**(╯°□°）╯**\n\n"
-            "Account mappings not found. Please update `config/account_mapping.json`\n"
-            "or use `..addmap` to define mappings, then run `..loadmap` to sync SQL."
+            "Account mappings not found. Use `..addmap` to define mappings or\n"
+            "run `..loadmap` to migrate legacy JSON into SQL."
         )
-        try:
-            ready_message = (
-                account_setup_message
-                if not ACCOUNT_MAPPING
-                else f"\nWatching for order activity...   q(o.O)P"
-            )
-        except (FileNotFoundError, json.JSONDecodeError):
-            ready_message = account_setup_message
+        ready_message = (
+            account_setup_message
+            if not has_account_mappings()
+            else "\nWatching for order activity...   q(o.O)P"
+        )
 
         if channel:
             queued = len(get_order_queue())

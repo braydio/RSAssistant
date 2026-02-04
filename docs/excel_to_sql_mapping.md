@@ -71,6 +71,8 @@ Existing SQL tables for related data:
 - `Accounts`: canonical account registry.
 - `OrderHistory`: structured order events (action, quantity, price, timestamp).
 - `HoldingsLive` / `HistoricalHoldings`: holdings snapshots.
+- `account_mappings`: broker/account nickname mappings (replaces legacy JSON).
+- `watchlist` / `sell_list`: reverse split watch and sell queues (replaces legacy JSON).
 
 ## Proposed SQL Tables for Excel-Only Concepts
 

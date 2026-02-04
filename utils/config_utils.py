@@ -2,10 +2,10 @@
 
 This module loads environment variables, resolves file paths and provides
 helper functions for broker account lookups. When an account nickname is not
-found in the mapping JSON, :data:`DEFAULT_ACCOUNT_NICKNAME` is used to
-construct a fallback based on broker, group and account numbers. Missing
-accounts are automatically persisted with this default mapping to keep
-brokerage tracking functional without manual setup.
+found in SQL storage, :data:`DEFAULT_ACCOUNT_NICKNAME` is used to construct a
+fallback based on broker, group and account numbers. Missing accounts are
+automatically persisted to SQL to keep brokerage tracking functional without
+manual setup.
 
 Set the ``VOLUMES_DIR`` environment variable to override the default
 ``volumes/`` directory path for logs/DB/Excel. Configuration now lives
@@ -529,34 +529,37 @@ logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 # === Account Mapping Functions ===
 
 
-def load_account_mappings():
-    logger.debug(f"Loading account mappings from file path: {ACCOUNT_MAPPING}")
-    if not ACCOUNT_MAPPING.exists():
-        logger.error(f"Account mapping file {ACCOUNT_MAPPING} not found.")
-        return {}
+def load_account_mappings() -> dict:
+    """Return account mappings stored in SQL.
 
-    try:
-        with open(ACCOUNT_MAPPING, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if not isinstance(data, dict):
-                logger.error(
-                    f"Invalid account mapping structure in {ACCOUNT_MAPPING}. Expected a dictionary."
-                )
-                return {}
-            return data
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON from {ACCOUNT_MAPPING}: {e}")
-        return {}
+    Falls back to legacy JSON mappings when SQL logging is disabled.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning(
+            "SQL logging disabled; loading legacy account mappings from %s.",
+            ACCOUNT_MAPPING,
+        )
+        return _load_legacy_account_mappings()
+
+    from utils import sql_utils
+
+    mappings = sql_utils.fetch_account_mappings()
+    if mappings:
+        return mappings
+    return _load_legacy_account_mappings()
 
 
 def save_account_mappings(mappings: dict) -> None:
-    """Persist account nickname mappings to disk."""
+    """Persist account nickname mappings to SQL storage."""
 
-    logger.debug(f"Saving account mappings to {ACCOUNT_MAPPING}")
-    ACCOUNT_MAPPING.parent.mkdir(parents=True, exist_ok=True)
-    with open(ACCOUNT_MAPPING, "w", encoding="utf-8") as f:
-        json.dump(mappings, f, indent=4)
-    logger.info(f"Account mappings saved to {ACCOUNT_MAPPING}")
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; account mapping save skipped.")
+        return
+
+    from utils import sql_utils
+
+    sql_utils.sync_account_mappings(mappings)
 
 
 def get_broker_name(broker_number: int | str) -> Optional[str]:
@@ -584,12 +587,12 @@ def get_account_number(broker_name: str, broker_number: int | str) -> list:
 
 
 def get_account_nickname(broker_name, broker_number, account_number):
-    """Return the nickname for an account, creating a default mapping if missing.
+    """Return the nickname for an account, creating a default if missing.
 
     When an account is encountered without a user-defined nickname, a default
-    nickname is generated using :data:`DEFAULT_ACCOUNT_NICKNAME` and persisted to
-    :data:`ACCOUNT_MAPPING`. This ensures broker tracking commands function even
-    before explicit account setup.
+    nickname is generated using :data:`DEFAULT_ACCOUNT_NICKNAME` and persisted
+    to SQL storage. This ensures broker tracking commands function even before
+    explicit account setup.
     """
 
     mappings = load_account_mappings()
@@ -606,8 +609,19 @@ def get_account_nickname(broker_name, broker_number, account_number):
     nickname = DEFAULT_ACCOUNT_NICKNAME.format(
         broker=broker_name, group=broker_number, account=account_number
     )
-    group_dict[account_str] = nickname
-    save_account_mappings(mappings)
+    if SQL_LOGGING_ENABLED:
+        from utils import sql_utils
+
+        sql_utils.upsert_account_mapping(
+            broker_name, broker_str, account_str, nickname
+        )
+    else:
+        logger.warning(
+            "SQL logging disabled; default nickname not persisted for %s/%s/%s.",
+            broker_name,
+            broker_number,
+            account_number,
+        )
     return nickname
 
 
@@ -615,6 +629,28 @@ def get_account_nickname_or_default(broker_name, broker_number, account_number):
     """Return nickname from mappings or the formatted default."""
 
     return get_account_nickname(broker_name, broker_number, account_number)
+
+
+def _load_legacy_account_mappings() -> dict:
+    """Return account mappings from the legacy JSON file, if present."""
+
+    if not ACCOUNT_MAPPING.exists():
+        logger.warning("Legacy account mapping file %s not found.", ACCOUNT_MAPPING)
+        return {}
+
+    try:
+        with open(ACCOUNT_MAPPING, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            logger.error(
+                "Invalid account mapping structure in %s. Expected a dictionary.",
+                ACCOUNT_MAPPING,
+            )
+            return {}
+        return data
+    except json.JSONDecodeError as e:
+        logger.error("Error decoding JSON from %s: %s", ACCOUNT_MAPPING, e)
+        return {}
 
 
 _config_cache = None

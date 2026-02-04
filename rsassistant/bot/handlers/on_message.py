@@ -18,7 +18,6 @@ from utils.csv_utils import save_holdings_to_csv
 from utils.watch_utils import (
     parse_bulk_watchlist_message,
     add_entries_from_message,
-    account_mapping,
     watch_list_manager,
 )
 from utils.update_utils import update_and_restart, revert_and_restart
@@ -597,7 +596,7 @@ def on_message_set_channels(primary_id, secondary_id, tertiary_id, holdings_id):
 
 def get_account_nickname_or_default(broker_name, group_number, account_number):
     try:
-        broker_accounts = account_mapping.get(broker_name, {})
+        broker_accounts = load_account_mappings().get(broker_name, {})
         group_accounts = broker_accounts.get(str(group_number), {})
         if not isinstance(group_accounts, dict):
             logger.error(
