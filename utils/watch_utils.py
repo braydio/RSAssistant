@@ -1,112 +1,110 @@
-"""Utility helpers for managing watch and sell lists.
-
-This module relies on :func:`utils.config_utils.load_account_mappings` to load
-broker account information used across various watch list operations.
-"""
+"""Utility helpers for managing watch and sell lists."""
 
 import asyncio
-import csv
-import json
 import logging
-import os
 import re
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 import discord
-import pandas as pd
 
 from utils.config_utils import (
     DISCORD_SECONDARY_CHANNEL,
     DISCORD_PRIMARY_CHANNEL,
-    SELL_FILE,
-    WATCH_FILE,
-    load_account_mappings,
     AUTO_REFRESH_ON_REMINDER,
 )
 from utils.utility_utils import send_large_message_chunks
 from utils.price_fetcher import get_last_prices
-from utils.sql_utils import update_historical_holdings
+from utils.sql_utils import (
+    delete_sell_list_entry,
+    delete_watchlist_entry,
+    fetch_sell_list_entries,
+    fetch_watchlist_entries,
+    init_db,
+    upsert_sell_list_entry,
+    upsert_watchlist_entry,
+    update_historical_holdings,
+)
 from rsassistant.bot.channel_resolver import (
     resolve_reply_channel,
     resolve_watchlist_channel,
 )
 from utils.market_calendar import MARKET_TZ, is_market_day
 
-account_mapping = load_account_mappings()
-
-
 # WatchList Manager
 class WatchListManager:
     """Manages the watch list and sell list for stock tickers."""
 
-    def __init__(self, watch_file, sell_file):
-        self.watch_file = watch_file
-        self.sell_file = sell_file
+    def __init__(self):
+        init_db()
         self.watch_list = {}
         self.sell_list = {}
         self.load_watch_list()
         self.load_sell_list()
 
     def save_watch_list(self):
-        """Save the current watch list to a JSON file."""
-        try:
-            with open(self.watch_file, "w") as file:
-                json.dump(self.watch_list, file, default=str)
-            logging.info("Watch list saved.")
-        except Exception as e:
-            logging.error(f"Failed to save watch list: {e}")
+        """Persist the current watch list to SQL."""
+        existing = set(fetch_watchlist_entries().keys())
+        desired = {ticker.upper() for ticker in self.watch_list.keys()}
+        for ticker in existing - desired:
+            delete_watchlist_entry(ticker)
+        for ticker, data in self.watch_list.items():
+            upsert_watchlist_entry(
+                ticker=ticker,
+                split_date=data.get("split_date"),
+                split_ratio=data.get("split_ratio", "N/A"),
+                metadata=None,
+            )
+        logging.info("Watch list saved to SQL.")
 
     def load_watch_list(self):
-        """Load the watch list from a JSON file."""
-        if os.path.exists(self.watch_file):
-            try:
-                with open(self.watch_file, "r") as file:
-                    self.watch_list = json.load(file)
-                logging.info("Watch list loaded.")
-            except (IOError, json.JSONDecodeError) as e:
-                logging.error(f"Failed to load watch list: {e}")
+        """Load the watch list from SQL storage."""
+        self.watch_list = fetch_watchlist_entries()
+        if self.watch_list:
+            logging.info("Watch list loaded from SQL.")
         else:
-            logging.info("No watch list file found, starting fresh.")
+            logging.info("No watch list entries found, starting fresh.")
 
     def save_sell_list(self):
-        """Save the sell list to a JSON file."""
-        try:
-            with open(self.sell_file, "w") as file:
-                json.dump(self.sell_list, file, default=str)
-            logging.info("Sell list saved.")
-        except Exception as e:
-            logging.error(f"Failed to save sell list: {e}")
+        """Persist the current sell list to SQL."""
+        existing = set(fetch_sell_list_entries().keys())
+        desired = {ticker.upper() for ticker in self.sell_list.keys()}
+        for ticker in existing - desired:
+            delete_sell_list_entry(ticker)
+        for ticker, data in self.sell_list.items():
+            upsert_sell_list_entry(
+                ticker=ticker,
+                split_date=data.get("split_date"),
+                split_ratio=data.get("split_ratio"),
+                metadata=data,
+            )
+        logging.info("Sell list saved to SQL.")
 
     def load_sell_list(self):
-        """Load the sell list from a JSON file."""
-        if os.path.exists(self.sell_file):
-            try:
-                with open(self.sell_file, "r") as file:
-                    self.sell_list = json.load(file)
-                logging.info("Sell list loaded.")
-            except (IOError, json.JSONDecodeError) as e:
-                logging.error(f"Failed to load sell list: {e}")
+        """Load the sell list from SQL storage."""
+        self.sell_list = fetch_sell_list_entries()
+        if self.sell_list:
+            logging.info("Sell list loaded from SQL.")
         else:
-            logging.info("No sell list file found, starting fresh.")
+            logging.info("No sell list entries found, starting fresh.")
 
     def add_to_sell_list(self, ticker, broker, quantity, scheduled_time):
         """
         Add a ticker with details to the sell list.
         """
-        self.sell_list[ticker.upper()] = {
+        payload = {
             "broker": broker,
             "quantity": quantity,
             "scheduled_time": scheduled_time,
             "added_on": datetime.now().strftime("%Y-%m-%d"),
         }
-        self.save_sell_list()
+        self.sell_list[ticker.upper()] = payload
+        upsert_sell_list_entry(ticker=ticker, metadata=payload)
 
     def remove_from_sell_list(self, ticker):
         """Remove a ticker from the sell list."""
         if ticker.upper() in self.sell_list:
             del self.sell_list[ticker.upper()]
-            self.save_sell_list()
+            delete_sell_list_entry(ticker)
             return True
         return False
 
@@ -158,7 +156,8 @@ class WatchListManager:
             if ticker in self.watch_list:
                 del self.watch_list[ticker]
         if to_remove:
-            self.save_watch_list()
+            for ticker in to_remove:
+                delete_watchlist_entry(ticker)
         return expired_entries
 
     def add_ticker(self, ticker, split_date, split_ratio="N/A"):
@@ -167,13 +166,13 @@ class WatchListManager:
             "split_date": split_date,
             "split_ratio": split_ratio,
         }
-        self.save_watch_list()
+        upsert_watchlist_entry(ticker, split_date, split_ratio)
 
     def remove_ticker(self, ticker):
         """Remove a ticker from the watch list."""
         if ticker.upper() in self.watch_list:
             del self.watch_list[ticker.upper()]
-            self.save_watch_list()
+            delete_watchlist_entry(ticker)
             return True
         return False
 
@@ -188,7 +187,7 @@ class WatchListManager:
     async def watch_ticker(self, ctx, ticker, split_date, split_ratio=None):
         """Add a stock ticker with split details to the watch list.
 
-        Watchlist entries are persisted to JSON storage. Excel updates are
+        Watchlist entries are persisted to SQL storage. Excel updates are
         deprecated and no longer emitted from this flow.
         """
         ticker = ticker.upper()
@@ -196,7 +195,7 @@ class WatchListManager:
         if not self.ticker_exists(ticker):
             self.add_ticker(ticker, split_date, split_ratio or "N/A")
             logging.warning(
-                "Excel logging is deprecated; watchlist updates are stored in JSON only."
+                "Excel logging is deprecated; watchlist updates are stored in SQL."
             )
             logging.info(
                 "%s with Split Ratio %s on %s saved to watchlist.",
@@ -302,7 +301,7 @@ class WatchListManager:
 
 
 # Initialize WatchList Manager
-watch_list_manager = WatchListManager(WATCH_FILE, SELL_FILE)
+watch_list_manager = WatchListManager()
 
 
 # Main functions

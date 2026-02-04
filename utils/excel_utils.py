@@ -1,6 +1,5 @@
 """Excel workbook helpers for account and order management."""
 
-import json
 import logging
 import os
 import shutil
@@ -20,6 +19,7 @@ from utils.config_utils import (
     load_account_mappings,
     EXCEL_LOGGING_ENABLED,
 )
+from utils.sql_utils import clear_account_nicknames, sync_account_mappings, upsert_account_mapping
 
 EXCEL_DEPRECATED = True
 
@@ -285,14 +285,11 @@ async def index_account_details(
     else:
         await ctx.send("No changes detected in account mappings.")
 
-    # Save the updated mappings back to the JSON file
     try:
-        with open(mapping_file, "w", encoding="utf-8") as f:
-            json.dump(account_mappings, f, indent=4)
-        await ctx.send(f"Updated mappings saved to `{mapping_file}`.")
-
+        sync_account_mappings(account_mappings)
+        await ctx.send("Updated account mappings saved to SQL.")
     except Exception as e:
-        await ctx.send(f"Error saving JSON file: {e}")
+        await ctx.send(f"Error saving account mappings to SQL: {e}")
 
 
 async def map_accounts_in_excel_log(
@@ -434,40 +431,19 @@ async def map_accounts_in_excel_log(
 
 
 async def clear_account_mappings(ctx, mapping_file=ACCOUNT_MAPPING):
-    """Clear the account mappings JSON file and notify the user."""
+    """Clear the account mappings from SQL storage and notify the user."""
 
     try:
-        # Clear the account mappings by writing an empty dictionary to the file
-        with open(mapping_file, "w", encoding="utf-8") as f:
-            json.dump({}, f, indent=4)
-
-        # Notify the user that the file has been cleared
-        await ctx.send(f"Account mappings in `{mapping_file}` have been cleared.")
+        cleared = clear_account_nicknames()
+        await ctx.send(f"Account mappings have been cleared. ({cleared} SQL rows)")
 
     except Exception as e:
-        await ctx.send(f"Error clearing the JSON file: {e}")
+        await ctx.send(f"Error clearing account mappings: {e}")
 
 
 async def add_account_mappings(ctx, brokerage, broker_no, account, nickname):
     try:
-        # Load the account mappings
-        account_mappings_file = ACCOUNT_MAPPING  # Path to account mappings file
-        account_mappings = load_account_mappings()
-
-        # Ensure the structure exists for the brokerage and broker_no
-        if brokerage not in account_mappings:
-            account_mappings[brokerage] = {}
-        if broker_no not in account_mappings[brokerage]:
-            account_mappings[brokerage][broker_no] = {}
-
-        # Add or update the account mapping
-        account_mappings[brokerage][broker_no][account] = nickname
-
-        # Save the updated mappings
-        with open(account_mappings_file, "w", encoding="utf-8") as f:
-            json.dump(account_mappings, f, indent=4)
-
-        # Confirmation message
+        upsert_account_mapping(brokerage, broker_no, account, nickname)
         await ctx.send(
             f"Added mapping: {brokerage} - Broker No: {broker_no}, Account: {account}, Nickname: {nickname}"
         )
@@ -505,20 +481,13 @@ def generate_account_nickname(
         broker_name (str): The name of the broker.
         group_number (str): The group number of the account.
         account_number (str): The account number (should be a string padded to 4 digits).
-        mapping_file (str): Path to the JSON mapping file.
+        mapping_file (str): Legacy parameter retained for compatibility; SQL is authoritative.
 
     Returns:
         str: The generated nickname.
     """
 
-    # Load current account mappings from JSON file
-    mapping_path = Path(mapping_file)
-    try:
-        with open(mapping_path, "r", encoding="utf-8") as f:
-            account_mappings = json.load(f)
-    except FileNotFoundError:
-        logger.info(f"Account mapping file not found at {mapping_path}; creating new.")
-        account_mappings = {}  # Initialize empty if file doesn't exist
+    account_mappings = load_account_mappings()
 
     # Ensure structure for broker and group exists
     if broker_name not in account_mappings:
@@ -547,9 +516,7 @@ def generate_account_nickname(
     # Save the new account to the structure
     account_mappings[broker_name][group_number][account_number] = new_nickname
 
-    # Write updated mappings back to JSON
-    with open(mapping_path, "w", encoding="utf-8") as f:
-        json.dump(account_mappings, f, indent=4)
+    upsert_account_mapping(broker_name, group_number, account_number, new_nickname)
 
     return new_nickname
 

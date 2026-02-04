@@ -6,26 +6,21 @@ back to Discord.
 """
 
 import io
-import json
 
 import discord
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from utils.config_utils import ACCOUNT_MAPPING_FILE
-from utils.sql_utils import get_db_connection
-
-# Load account mappings for translating account IDs to nicknames
-with open(ACCOUNT_MAPPING_FILE, "r") as f:
-    account_mappings = json.load(f)
+from utils.sql_utils import fetch_account_labels, get_db_connection
 
 
 def get_account_id_or_name(account_input):
     """Return account_id if given nickname, or nickname if given account_id."""
+    account_mappings = fetch_account_labels()
     for entry in account_mappings:
         if account_input.isdigit() and str(entry["account_id"]) == account_input:
             return entry["account_nickname"]
-        elif entry["account_nickname"].lower() == account_input.lower():
+        if entry["account_nickname"].lower() == account_input.lower():
             return entry["account_id"]
     return None
 

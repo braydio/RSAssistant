@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import sqlite3
@@ -6,9 +7,12 @@ import uuid
 from datetime import datetime, timedelta
 
 from utils.config_utils import (
+    ACCOUNT_MAPPING,
+    SELL_FILE,
     SQL_DATABASE,
     get_account_nickname_or_default,
     SQL_LOGGING_ENABLED,
+    WATCH_FILE,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +123,25 @@ def upsert_account_mapping(
         cursor = conn.cursor()
         cursor.execute(
             """
+            INSERT INTO account_mappings (
+                broker,
+                broker_number,
+                account_number,
+                account_nickname,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+            ON CONFLICT(broker, broker_number, account_number)
+            DO UPDATE SET
+                account_nickname = excluded.account_nickname,
+                updated_at = DATETIME('now')
+            """,
+            (broker, broker_number, account_number, account_nickname),
+        )
+
+        cursor.execute(
+            """
             SELECT account_id
             FROM Accounts
             WHERE broker = ? AND broker_number = ? AND account_number = ?
@@ -126,7 +149,6 @@ def upsert_account_mapping(
             (broker, broker_number, account_number),
         )
         result = cursor.fetchone()
-
         if result:
             cursor.execute(
                 """
@@ -136,25 +158,17 @@ def upsert_account_mapping(
                 """,
                 (account_nickname, result[0]),
             )
-            conn.commit()
-            logger.info(
-                "Updated SQL account nickname for %s/%s/%s.",
-                broker,
-                broker_number,
-                account_number,
+        else:
+            cursor.execute(
+                """
+                INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
+                VALUES (?, ?, ?, ?)
+                """,
+                (broker, account_number, broker_number, account_nickname),
             )
-            return True
-
-        cursor.execute(
-            """
-            INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
-            VALUES (?, ?, ?, ?)
-            """,
-            (broker, account_number, broker_number, account_nickname),
-        )
         conn.commit()
         logger.info(
-            "Inserted SQL account nickname for %s/%s/%s.",
+            "Upserted SQL account nickname for %s/%s/%s.",
             broker,
             broker_number,
             account_number,
@@ -184,24 +198,60 @@ def sync_account_mappings(mappings: dict) -> dict[str, int]:
                 for account_number, nickname in accounts.items():
                     cursor.execute(
                         """
-                        SELECT account_id, account_nickname
-                        FROM Accounts
+                        SELECT account_nickname
+                        FROM account_mappings
                         WHERE broker = ? AND broker_number = ? AND account_number = ?
                         """,
                         (broker, broker_number, account_number),
                     )
                     row = cursor.fetchone()
                     if row:
-                        if row[1] != nickname:
+                        if row[0] != nickname:
+                            cursor.execute(
+                                """
+                                UPDATE account_mappings
+                                SET account_nickname = ?, updated_at = DATETIME('now')
+                                WHERE broker = ? AND broker_number = ? AND account_number = ?
+                                """,
+                                (nickname, broker, broker_number, account_number),
+                            )
+                            results["updated"] += 1
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO account_mappings (
+                                broker,
+                                broker_number,
+                                account_number,
+                                account_nickname,
+                                created_at,
+                                updated_at
+                            )
+                            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+                            """,
+                            (broker, broker_number, account_number, nickname),
+                        )
+                        results["added"] += 1
+
+                    cursor.execute(
+                        """
+                        SELECT account_id, account_nickname
+                        FROM Accounts
+                        WHERE broker = ? AND broker_number = ? AND account_number = ?
+                        """,
+                        (broker, broker_number, account_number),
+                    )
+                    account_row = cursor.fetchone()
+                    if account_row:
+                        if account_row[1] != nickname:
                             cursor.execute(
                                 """
                                 UPDATE Accounts
                                 SET account_nickname = ?
                                 WHERE account_id = ?
                                 """,
-                                (nickname, row[0]),
+                                (nickname, account_row[0]),
                             )
-                            results["updated"] += 1
                     else:
                         cursor.execute(
                             """
@@ -210,7 +260,6 @@ def sync_account_mappings(mappings: dict) -> dict[str, int]:
                             """,
                             (broker, account_number, broker_number, nickname),
                         )
-                        results["added"] += 1
 
         conn.commit()
 
@@ -235,10 +284,394 @@ def clear_account_nicknames() -> int:
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        cursor.execute("UPDATE account_mappings SET account_nickname = NULL")
+        cleared = cursor.rowcount
         cursor.execute("UPDATE Accounts SET account_nickname = NULL")
         conn.commit()
         logger.info("Cleared account nicknames in SQL storage.")
-        return cursor.rowcount
+        return cleared
+
+
+def fetch_account_mappings() -> dict[str, dict[str, dict[str, str]]]:
+    """Return account mappings stored in SQL.
+
+    Returns:
+        Nested mapping ``{broker: {broker_number: {account_number: nickname}}}``.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; returning empty account mappings.")
+        return {}
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT broker, broker_number, account_number, account_nickname
+                FROM account_mappings
+                ORDER BY broker, broker_number, account_number
+                """
+            )
+            rows = cursor.fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Failed reading account mappings: %s", exc)
+            return {}
+
+    mappings: dict[str, dict[str, dict[str, str]]] = {}
+    for broker, broker_number, account_number, nickname in rows:
+        if nickname is None:
+            continue
+        mappings.setdefault(broker, {}).setdefault(str(broker_number), {})[
+            str(account_number)
+        ] = nickname
+
+    return mappings
+
+
+def fetch_account_nickname(
+    broker: str, broker_number: str, account_number: str
+) -> str | None:
+    """Return the nickname for an account from SQL."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; account nickname lookup skipped.")
+        return None
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT account_nickname
+                FROM account_mappings
+                WHERE broker = ? AND broker_number = ? AND account_number = ?
+                """,
+                (broker, broker_number, account_number),
+            )
+            row = cursor.fetchone()
+        except sqlite3.Error as exc:
+            logger.error("Failed reading account nickname: %s", exc)
+            return None
+    return row[0] if row else None
+
+
+def fetch_account_labels() -> list[dict[str, str]]:
+    """Return account IDs and nicknames from the Accounts table."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; account label lookup skipped.")
+        return []
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT account_id, account_nickname
+                FROM Accounts
+                WHERE account_nickname IS NOT NULL
+                """
+            )
+            rows = cursor.fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Failed reading account labels: %s", exc)
+            return []
+
+    return [
+        {"account_id": row[0], "account_nickname": row[1]}
+        for row in rows
+        if row[1]
+    ]
+
+
+def has_account_mappings() -> bool:
+    """Return ``True`` when SQL has at least one account mapping row."""
+
+    if not SQL_LOGGING_ENABLED:
+        return False
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT COUNT(1) FROM account_mappings")
+            count = cursor.fetchone()[0]
+        except sqlite3.Error as exc:
+            logger.error("Failed checking account mappings: %s", exc)
+            return False
+    return count > 0
+
+
+def _parse_metadata(metadata: str | None) -> dict:
+    if not metadata:
+        return {}
+    try:
+        return json.loads(metadata)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse metadata JSON; returning empty dict.")
+        return {}
+
+
+def _serialize_metadata(metadata: dict | None) -> str:
+    return json.dumps(metadata or {}, ensure_ascii=False)
+
+
+def fetch_watchlist_entries() -> dict[str, dict[str, str]]:
+    """Return watchlist entries keyed by ticker."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; watchlist lookup skipped.")
+        return {}
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT ticker, split_date, split_ratio, metadata
+                FROM watchlist
+                ORDER BY ticker
+                """
+            )
+            rows = cursor.fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Failed reading watchlist: %s", exc)
+            return {}
+
+    watchlist: dict[str, dict[str, str]] = {}
+    for ticker, split_date, split_ratio, metadata in rows:
+        entry = {
+            "split_date": split_date,
+            "split_ratio": split_ratio or "N/A",
+        }
+        entry.update(_parse_metadata(metadata))
+        watchlist[ticker.upper()] = entry
+
+    return watchlist
+
+
+def upsert_watchlist_entry(
+    ticker: str,
+    split_date: str,
+    split_ratio: str,
+    metadata: dict | None = None,
+) -> bool:
+    """Insert or update a watchlist entry."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; watchlist upsert skipped.")
+        return False
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO watchlist (
+                ticker,
+                split_date,
+                split_ratio,
+                metadata,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+            ON CONFLICT(ticker)
+            DO UPDATE SET
+                split_date = excluded.split_date,
+                split_ratio = excluded.split_ratio,
+                metadata = excluded.metadata,
+                updated_at = DATETIME('now')
+            """,
+            (ticker.upper(), split_date, split_ratio, _serialize_metadata(metadata)),
+        )
+        conn.commit()
+    return True
+
+
+def delete_watchlist_entry(ticker: str) -> bool:
+    """Remove a watchlist entry by ticker."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; watchlist delete skipped.")
+        return False
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker.upper(),))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def fetch_sell_list_entries() -> dict[str, dict[str, str]]:
+    """Return sell list entries keyed by ticker."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; sell list lookup skipped.")
+        return {}
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT ticker, split_date, split_ratio, metadata
+                FROM sell_list
+                ORDER BY ticker
+                """
+            )
+            rows = cursor.fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Failed reading sell list: %s", exc)
+            return {}
+
+    sell_list: dict[str, dict[str, str]] = {}
+    for ticker, split_date, split_ratio, metadata in rows:
+        entry = _parse_metadata(metadata)
+        if split_date:
+            entry.setdefault("split_date", split_date)
+        if split_ratio:
+            entry.setdefault("split_ratio", split_ratio)
+        sell_list[ticker.upper()] = entry
+
+    return sell_list
+
+
+def upsert_sell_list_entry(
+    ticker: str,
+    split_date: str | None = None,
+    split_ratio: str | None = None,
+    metadata: dict | None = None,
+) -> bool:
+    """Insert or update a sell list entry."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; sell list upsert skipped.")
+        return False
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO sell_list (
+                ticker,
+                split_date,
+                split_ratio,
+                metadata,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+            ON CONFLICT(ticker)
+            DO UPDATE SET
+                split_date = excluded.split_date,
+                split_ratio = excluded.split_ratio,
+                metadata = excluded.metadata,
+                updated_at = DATETIME('now')
+            """,
+            (ticker.upper(), split_date, split_ratio, _serialize_metadata(metadata)),
+        )
+        conn.commit()
+    return True
+
+
+def delete_sell_list_entry(ticker: str) -> bool:
+    """Remove a sell list entry by ticker."""
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; sell list delete skipped.")
+        return False
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sell_list WHERE ticker = ?", (ticker.upper(),))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def _load_legacy_json(path: os.PathLike) -> dict:
+    try:
+        if not os.path.exists(path):
+            return {}
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            logger.warning("Legacy JSON %s is not a dict; skipping.", path)
+            return {}
+        return data
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed reading legacy JSON %s: %s", path, exc)
+        return {}
+
+
+def migrate_legacy_json_data() -> dict[str, int]:
+    """Migrate legacy JSON mappings/watchlists into SQL tables.
+
+    Returns:
+        Mapping of migrated row counts for each dataset.
+    """
+
+    results = {"account_mappings": 0, "watchlist": 0, "sell_list": 0}
+    if not SQL_LOGGING_ENABLED:
+        logger.info("SQL logging disabled; skipping legacy JSON migration.")
+        return results
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT COUNT(1) FROM account_mappings")
+            has_account_rows = cursor.fetchone()[0] > 0
+            cursor.execute("SELECT COUNT(1) FROM watchlist")
+            has_watch_rows = cursor.fetchone()[0] > 0
+            cursor.execute("SELECT COUNT(1) FROM sell_list")
+            has_sell_rows = cursor.fetchone()[0] > 0
+        except sqlite3.Error as exc:
+            logger.error("Failed checking legacy migration state: %s", exc)
+            return results
+
+    if not has_account_rows:
+        legacy_mappings = _load_legacy_json(ACCOUNT_MAPPING)
+        if legacy_mappings:
+            sync_results = sync_account_mappings(legacy_mappings)
+            results["account_mappings"] = sync_results["added"] + sync_results["updated"]
+
+    if not has_watch_rows:
+        legacy_watch = _load_legacy_json(WATCH_FILE)
+        for ticker, data in legacy_watch.items():
+            if isinstance(data, dict):
+                split_date = data.get("split_date")
+                split_ratio = data.get("split_ratio", "N/A")
+            else:
+                split_date = None
+                split_ratio = "N/A"
+            if split_date:
+                upsert_watchlist_entry(
+                    ticker=ticker,
+                    split_date=split_date,
+                    split_ratio=split_ratio,
+                    metadata=None,
+                )
+                results["watchlist"] += 1
+
+    if not has_sell_rows:
+        legacy_sell = _load_legacy_json(SELL_FILE)
+        for ticker, data in legacy_sell.items():
+            metadata = data if isinstance(data, dict) else {}
+            upsert_sell_list_entry(
+                ticker=ticker,
+                split_date=metadata.get("split_date"),
+                split_ratio=metadata.get("split_ratio"),
+                metadata=metadata,
+            )
+            results["sell_list"] += 1
+
+    if any(results.values()):
+        logger.info(
+            "Legacy JSON migration complete. account_mappings=%s watchlist=%s sell_list=%s",
+            results["account_mappings"],
+            results["watchlist"],
+            results["sell_list"],
+        )
+    return results
 
 
 def init_db():
@@ -298,10 +731,39 @@ def init_db():
                     timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
                     FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS account_mappings (
+                    broker TEXT NOT NULL,
+                    broker_number TEXT NOT NULL,
+                    account_number TEXT NOT NULL,
+                    account_nickname TEXT,
+                    created_at TEXT NOT NULL DEFAULT (DATETIME('now')),
+                    updated_at TEXT NOT NULL DEFAULT (DATETIME('now')),
+                    PRIMARY KEY (broker, broker_number, account_number)
+                );
+
+                CREATE TABLE IF NOT EXISTS watchlist (
+                    ticker TEXT PRIMARY KEY,
+                    split_date TEXT,
+                    split_ratio TEXT,
+                    metadata TEXT,
+                    created_at TEXT NOT NULL DEFAULT (DATETIME('now')),
+                    updated_at TEXT NOT NULL DEFAULT (DATETIME('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS sell_list (
+                    ticker TEXT PRIMARY KEY,
+                    split_date TEXT,
+                    split_ratio TEXT,
+                    metadata TEXT,
+                    created_at TEXT NOT NULL DEFAULT (DATETIME('now')),
+                    updated_at TEXT NOT NULL DEFAULT (DATETIME('now'))
+                );
                 """
             )
             conn.commit()
             logger.info("Database tables initialized successfully.")
+            migrate_legacy_json_data()
         except sqlite3.Error as e:
             logger.error(f"Error initializing database tables: {e}")
             raise

@@ -8,7 +8,7 @@ RSAssistant is a Discord bot that monitors reverse split announcements and autom
 - Extracts dates, ratios, and fractional share policies from filings.
 - Maintains watch and sell lists, reminders, and scheduled orders.
 - Refreshes holdings via `..all`, audits them against the watchlist, and posts consolidated summaries.
-- Persists logs, watchlist JSON, and a SQLite database under `volumes/` (override with `VOLUMES_DIR`).
+- Persists logs, watchlists, and account mappings in SQLite under `volumes/` (override with `VOLUMES_DIR`).
 
 ## Quickstart (local)
 
@@ -68,9 +68,14 @@ Then open `http://127.0.0.1:8765` in your browser.
 
 Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
-- `volumes/db/` (SQLite DB, split watchlist, order queue, auto-rsa holdings snapshot)
+- `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot)
 - `volumes/logs/` (app logs, holdings logs)
 - `volumes/excel/` (ReverseSplitLog.xlsx)
+
+Watchlist, sell list, and account mappings now live in the SQLite database
+(`watchlist`, `sell_list`, and `account_mappings` tables). Legacy JSON files can
+be migrated once via `..loadmap` (for account mappings) or automatically on
+startup when SQL logging is enabled.
 
 ## Auto-rsa holdings import (recommended)
 
@@ -148,7 +153,7 @@ Post these into the channel mapped to `DISCORD_SECONDARY_CHANNEL`.
 - `RSAssistant.py` launches the modular runtime in `rsassistant/bot`.
 - `rsassistant/` contains Discord cogs, handlers, and background tasks.
 - `utils/` contains configuration, parsing, scheduling, and persistence helpers.
-- Runtime state lives under `volumes/` (logs, DB, split watchlist).
+- Runtime state lives under `volumes/` (logs and the SQLite DB).
 
 Directory snapshot:
 
@@ -167,7 +172,7 @@ Directory snapshot:
 
 ## Default account nicknames
 
-If a broker/account is missing from `config/account_mapping.json`, RSAssistant falls back to the pattern `"{broker} {group} {account}"` and writes it to the mapping file so tracking still works.
+If a broker/account is missing from SQL account mappings, RSAssistant falls back to the pattern `"{broker} {group} {account}"` and stores it in the `account_mappings` table so tracking still works. Legacy JSON mappings can be migrated with `..loadmap`.
 
 ## Testing
 

@@ -544,7 +544,7 @@ def calculate_broker_totals(account_mapping):
     Calculate total number of accounts and total holdings for each broker and group.
 
     Parameters:
-        account_mapping (dict): The account mappings loaded from account_mapping.json.
+        account_mapping (dict): The account mappings loaded from SQL storage.
 
     Returns:
         dict: Broker and group totals.
@@ -658,10 +658,11 @@ def all_brokers_summary_by_owner(specific_broker=None):
     """
     group_titles = _load_account_owners()
     brokers_summary = {}
+    account_mapping = load_account_mappings()
 
     # Debug: log the structure of account_mapping
     logger.debug("\nAccount Mapping Structure:")
-    for broker, broker_data in ACCOUNT_MAPPING.items():
+    for broker, broker_data in account_mapping.items():
         logger.debug(f"{broker}: {broker_data}")
 
     processed_accounts = set()  # Track processed accounts to avoid duplicates
@@ -699,8 +700,8 @@ def all_brokers_summary_by_owner(specific_broker=None):
             # )
 
             nickname = ""
-            if broker_name in ACCOUNT_MAPPING:
-                for broker_number, accounts in ACCOUNT_MAPPING[broker_name].items():
+            if broker_name in account_mapping:
+                for broker_number, accounts in account_mapping[broker_name].items():
                     if account_number in accounts:
                         nickname = accounts[account_number]
                         break
@@ -746,6 +747,7 @@ def generate_broker_summary_embed(specific_broker=None):
     """Return a Discord embed summarizing holdings by owner for each broker."""
 
     brokers_summary = all_brokers_summary_by_owner(specific_broker)
+    account_mapping = load_account_mappings()
     broker_label = (
         specific_broker.upper()
         if specific_broker and specific_broker.lower() in ["bbae", "dspac"]
@@ -759,7 +761,7 @@ def generate_broker_summary_embed(specific_broker=None):
     for broker_name, owner_totals in brokers_summary.items():
         account_owner_count = sum(
             len(accounts)
-            for _group, accounts in ACCOUNT_MAPPING.get(broker_name, {}).items()
+            for _group, accounts in account_mapping.get(broker_name, {}).items()
         )
         broker_total = sum(owner_totals.values())
 
