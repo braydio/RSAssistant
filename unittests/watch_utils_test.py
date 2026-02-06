@@ -1,6 +1,7 @@
 """Unit tests for watch list presentation helpers."""
 
 import tempfile
+from pathlib import Path
 from datetime import datetime as real_datetime
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
@@ -29,15 +30,26 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db = sql_utils.SQL_DATABASE
         self.original_enabled = sql_utils.SQL_LOGGING_ENABLED
+        self.original_watch_file = sql_utils.WATCH_FILE
+        self.original_sell_file = sql_utils.SELL_FILE
+        self.original_account_mapping = sql_utils.ACCOUNT_MAPPING
         sql_utils.SQL_DATABASE = f"{self.temp_dir.name}/test.db"
         sql_utils.SQL_LOGGING_ENABLED = True
+        sql_utils.WATCH_FILE = Path(self.temp_dir.name) / "watch_list.json"
+        sql_utils.SELL_FILE = Path(self.temp_dir.name) / "sell_list.json"
+        sql_utils.ACCOUNT_MAPPING = Path(self.temp_dir.name) / "account_mapping.json"
         sql_utils.init_db()
+        sql_utils.replace_watchlist_entries({})
+        sql_utils.replace_sell_list_entries({})
         self.manager = WatchListManager()
         self.ctx = DummyContext()
 
     def tearDown(self):  # pragma: no cover - cleanup
         sql_utils.SQL_DATABASE = self.original_db
         sql_utils.SQL_LOGGING_ENABLED = self.original_enabled
+        sql_utils.WATCH_FILE = self.original_watch_file
+        sql_utils.SELL_FILE = self.original_sell_file
+        sql_utils.ACCOUNT_MAPPING = self.original_account_mapping
         self.temp_dir.cleanup()
 
     async def test_list_watched_tickers_without_prices(self):

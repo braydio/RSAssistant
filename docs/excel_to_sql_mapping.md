@@ -1,8 +1,7 @@
 # Excel to SQL Mapping Reference
 
 ## Status Note
-Excel is deprecated and non-authoritative after migration. The SQL database and
-JSON logs are the sources of truth, and Excel should be treated as a historical
+Excel is deprecated and non-authoritative after migration. The SQL database is the source of truth, and Excel should be treated as a historical
 artifact only.
 
 ## Excel Sheet Layouts (Deprecated)
@@ -105,5 +104,4 @@ Tracks per-account cost/proceeds entries that were stored in the Excel grid.
 - After migration, Excel should not be updated by the system. Any new entries
   should be written to the SQL tables above, and Excel should be considered
   read-only for audit or historical reference.
-- Excel is non-authoritative after migration; the SQL database and JSON logs
-  are the sources of truth.
+- Excel is non-authoritative after migration; SQL tables are the source of truth.

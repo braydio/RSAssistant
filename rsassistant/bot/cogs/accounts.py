@@ -62,31 +62,33 @@ class AccountsCog(commands.Cog):
     @commands.command(
         name="loadmap",
         aliases=["lm"],
-        help="Migrate legacy JSON account mappings into SQL storage.",
+        help="Migrate legacy JSON data into SQL storage.",
         extras={"category": "Accounts"},
     )
     async def load_account_mappings_command(self, ctx: commands.Context) -> None:
         """Migrate legacy JSON account mappings into SQL storage."""
-        await ctx.send("Migrating legacy account mappings to SQL...")
+        await ctx.send(
+            "Migrating legacy JSON data (mappings/watchlist/sell list) to SQL..."
+        )
         results = migrate_legacy_json_data()
         await ctx.send(
-            "Account mapping sync complete."
-            f" Migrated: {results['account_mappings']}."
+            "Migration complete."
+            f" account_mappings={results['account_mappings']} watchlist={results['watchlist']} sell_list={results['sell_list']}."
         )
 
     @commands.command(
         name="loadlog",
         aliases=["ll"],
-        help="Re-run the legacy JSON migration for account mappings.",
+        help="Re-run legacy JSON migration into SQL storage.",
         extras={"category": "Accounts"},
     )
     async def update_log_with_mappings(self, ctx: commands.Context) -> None:
         """Re-run the legacy JSON migration for account mappings."""
-        await ctx.send("Re-running legacy account mapping migration...")
+        await ctx.send("Re-running legacy JSON migration...")
         results = migrate_legacy_json_data()
         await ctx.send(
-            "Account mapping refresh complete."
-            f" Migrated: {results['account_mappings']}."
+            "Migration refresh complete."
+            f" account_mappings={results['account_mappings']} watchlist={results['watchlist']} sell_list={results['sell_list']}."
         )
 
     @commands.command(

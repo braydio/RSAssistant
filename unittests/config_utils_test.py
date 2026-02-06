@@ -18,13 +18,16 @@ def test_get_account_nickname_creates_mapping(tmp_path, monkeypatch):
 def test_ignore_tickers_file_and_env_merge(tmp_path, monkeypatch):
     # Prepare temp ignore file
     ignore_file = tmp_path / "ignore_tickers.txt"
-    ignore_file.write_text("""
+    ignore_file.write_text(
+        """
     # comment line
     aapl
     msft  # Long-term position
 
     
-    """.strip(), encoding="utf-8")
+    """.strip(),
+        encoding="utf-8",
+    )
 
     # Point module to temp file and set env variable
     monkeypatch.setattr(config_utils, "IGNORE_TICKERS_FILE", ignore_file)
@@ -37,12 +40,15 @@ def test_ignore_tickers_file_and_env_merge(tmp_path, monkeypatch):
 
 def test_ignore_brokers_file_and_env_merge(tmp_path, monkeypatch):
     ignore_file = tmp_path / "ignore_brokers.txt"
-    ignore_file.write_text("""
+    ignore_file.write_text(
+        """
     Fidelity
     Schwab  # Workplace plan
 
 
-    """.strip(), encoding="utf-8")
+    """.strip(),
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(config_utils, "IGNORE_BROKERS_FILE", ignore_file)
     monkeypatch.setenv("IGNORE_BROKERS", "tasty, , robinhood ")
@@ -73,3 +79,18 @@ def test_persistence_env_override(monkeypatch):
         "excel": False,
         "sql": False,
     }
+
+
+def test_load_account_mappings_uses_sql_only_when_enabled(monkeypatch):
+    monkeypatch.setattr(config_utils, "SQL_LOGGING_ENABLED", True)
+    monkeypatch.setattr(sql_utils, "SQL_LOGGING_ENABLED", True)
+    monkeypatch.setattr(sql_utils, "fetch_account_mappings", lambda: {})
+    monkeypatch.setattr(
+        config_utils,
+        "_load_legacy_account_mappings",
+        lambda: {"Legacy": {"1": {"0001": "Old"}}},
+    )
+
+    mappings = config_utils.load_account_mappings()
+
+    assert mappings == {}
