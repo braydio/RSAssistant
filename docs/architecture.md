@@ -25,6 +25,12 @@ All runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 - `logs/` (application + holdings logs)
 - `excel/` (ReverseSplitLog.xlsx)
 
+## Auto-rsa integration
+
+RSAssistant does not import auto-rsa code. It communicates via Discord commands
+and can optionally ingest a holdings snapshot JSON file if auto-rsa writes it to
+a shared path (`AUTO_RSA_HOLDINGS_FILE`).
+
 ## Policy parsing
 
 1. Programmatic parsing runs when `PROGRAMMATIC_POLICY_ENABLED=true`.

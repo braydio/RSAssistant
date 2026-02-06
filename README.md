@@ -96,7 +96,9 @@ RSAssistant polls for changes and updates `volumes/logs/holdings_log.csv`.
 ### Auto-rsa patch quickstart (holdings snapshot file)
 
 You do not need to clone auto-rsa inside this repo. The patch can be applied in any
-auto-rsa clone as long as both containers share a volume.
+auto-rsa clone as long as both containers share a volume. RSAssistant does not import
+auto-rsa code directly; it only sends Discord commands and optionally reads the shared
+holdings snapshot file.
 
 ```bash
 git clone git@github.com:NelsonDane/auto-rsa.git
@@ -121,6 +123,33 @@ You can also run the patcher from Discord (admin-only):
 ```bash
 ..patchautorsa /path/to/auto-rsa
 ```
+
+### Local layout (optional)
+
+If you prefer keeping the repos near each other locally, use sibling folders and a
+shared `volumes/` directory (or Docker volume). Example:
+
+```
+/home/braydenchaffee/Trading/
+  RSAssistant/
+  auto-rsa/
+  AutoRSA-GUI/
+  shared/
+    volumes/
+      db/auto_rsa_holdings.json
+      logs/
+      excel/
+```
+
+Point both apps at the same `AUTO_RSA_HOLDINGS_FILE` path. `AutoRSA-GUI` is optional
+and is not referenced by RSAssistant.
+
+### Version control options for local clones
+
+- Recommended: keep `auto-rsa/` and `AutoRSA-GUI/` as separate repos (outside this repo).
+- If you keep them inside this repo for convenience, either:
+  - Add them as git submodules, or
+  - Add them to `.gitignore` so credentials and binaries are not tracked.
 
 ## Holdings snapshots
 
