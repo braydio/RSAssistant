@@ -73,9 +73,15 @@ Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 - `volumes/excel/` (ReverseSplitLog.xlsx)
 
 Watchlist, sell list, and account mappings now live in the SQLite database
-(`watchlist`, `sell_list`, and `account_mappings` tables). Legacy JSON files can
-be migrated once via `..loadmap` (for account mappings) or automatically on
-startup when SQL logging is enabled.
+(`watchlist`, `sell_list`, and `account_mappings` tables). Legacy JSON files are
+migrated automatically on startup when SQL logging is enabled (only when the
+matching SQL tables are empty), and can also be migrated manually with:
+
+```bash
+python scripts/migrate_json_to_sql.py
+# optional: archive imported JSON files to *.migrated
+python scripts/migrate_json_to_sql.py --archive
+```
 
 ## Auto-rsa holdings import (recommended)
 

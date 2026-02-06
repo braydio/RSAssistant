@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -379,9 +378,7 @@ def fetch_account_labels() -> list[dict[str, str]]:
             return []
 
     return [
-        {"account_id": row[0], "account_nickname": row[1]}
-        for row in rows
-        if row[1]
+        {"account_id": row[0], "account_nickname": row[1]} for row in rows if row[1]
     ]
 
 
@@ -588,6 +585,114 @@ def delete_sell_list_entry(ticker: str) -> bool:
         return cursor.rowcount > 0
 
 
+def fetch_watchlist_entry(ticker: str) -> dict[str, str] | None:
+    """Return a single watchlist entry by ticker.
+
+    Args:
+        ticker: Symbol to fetch.
+
+    Returns:
+        Watchlist payload when present, otherwise ``None``.
+    """
+
+    return fetch_watchlist_entries().get(ticker.upper())
+
+
+def replace_watchlist_entries(entries: dict[str, dict[str, str]]) -> int:
+    """Replace the entire watchlist table with ``entries``.
+
+    Args:
+        entries: Mapping keyed by ticker containing ``split_date`` and optional
+            ``split_ratio`` plus metadata fields.
+
+    Returns:
+        Number of rows written.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; watchlist replace skipped.")
+        return 0
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM watchlist")
+        for ticker, data in entries.items():
+            payload = data if isinstance(data, dict) else {}
+            metadata = {
+                key: value
+                for key, value in payload.items()
+                if key not in {"split_date", "split_ratio"}
+            }
+            cursor.execute(
+                """
+                INSERT INTO watchlist (
+                    ticker,
+                    split_date,
+                    split_ratio,
+                    metadata,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+                """,
+                (
+                    ticker.upper(),
+                    payload.get("split_date"),
+                    payload.get("split_ratio", "N/A"),
+                    _serialize_metadata(metadata or None),
+                ),
+            )
+        conn.commit()
+        return len(entries)
+
+
+def fetch_sell_list_entry(ticker: str) -> dict[str, str] | None:
+    """Return a single sell list entry by ticker."""
+
+    return fetch_sell_list_entries().get(ticker.upper())
+
+
+def replace_sell_list_entries(entries: dict[str, dict[str, str]]) -> int:
+    """Replace the entire sell list table with ``entries``.
+
+    Args:
+        entries: Mapping keyed by ticker that may include split metadata and
+            scheduling fields.
+
+    Returns:
+        Number of rows written.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.warning("SQL logging disabled; sell list replace skipped.")
+        return 0
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sell_list")
+        for ticker, data in entries.items():
+            payload = data if isinstance(data, dict) else {}
+            cursor.execute(
+                """
+                INSERT INTO sell_list (
+                    ticker,
+                    split_date,
+                    split_ratio,
+                    metadata,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+                """,
+                (
+                    ticker.upper(),
+                    payload.get("split_date"),
+                    payload.get("split_ratio"),
+                    _serialize_metadata(payload),
+                ),
+            )
+        conn.commit()
+        return len(entries)
+
+
 def _load_legacy_json(path: os.PathLike) -> dict:
     try:
         if not os.path.exists(path):
@@ -603,8 +708,15 @@ def _load_legacy_json(path: os.PathLike) -> dict:
         return {}
 
 
-def migrate_legacy_json_data() -> dict[str, int]:
+def migrate_legacy_json_data(remove_legacy_files: bool = False) -> dict[str, int]:
     """Migrate legacy JSON mappings/watchlists into SQL tables.
+
+    The migration is idempotent for populated SQL tables and only imports a
+    legacy dataset when the corresponding table is empty.
+
+    Args:
+        remove_legacy_files: When ``True``, rename successfully imported legacy
+            JSON files to ``*.migrated`` so they are no longer consumed.
 
     Returns:
         Mapping of migrated row counts for each dataset.
@@ -632,7 +744,9 @@ def migrate_legacy_json_data() -> dict[str, int]:
         legacy_mappings = _load_legacy_json(ACCOUNT_MAPPING)
         if legacy_mappings:
             sync_results = sync_account_mappings(legacy_mappings)
-            results["account_mappings"] = sync_results["added"] + sync_results["updated"]
+            results["account_mappings"] = (
+                sync_results["added"] + sync_results["updated"]
+            )
 
     if not has_watch_rows:
         legacy_watch = _load_legacy_json(WATCH_FILE)
@@ -671,6 +785,16 @@ def migrate_legacy_json_data() -> dict[str, int]:
             results["watchlist"],
             results["sell_list"],
         )
+        if remove_legacy_files:
+            for path in (ACCOUNT_MAPPING, WATCH_FILE, SELL_FILE):
+                try:
+                    if os.path.exists(path):
+                        os.replace(path, f"{path}.migrated")
+                        logger.info("Archived legacy JSON file %s.migrated", path)
+                except OSError as exc:
+                    logger.warning(
+                        "Failed to archive legacy JSON file %s: %s", path, exc
+                    )
     return results
 
 

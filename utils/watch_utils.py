@@ -20,6 +20,8 @@ from utils.sql_utils import (
     fetch_sell_list_entries,
     fetch_watchlist_entries,
     init_db,
+    replace_sell_list_entries,
+    replace_watchlist_entries,
     upsert_sell_list_entry,
     upsert_watchlist_entry,
     update_historical_holdings,
@@ -29,6 +31,7 @@ from rsassistant.bot.channel_resolver import (
     resolve_watchlist_channel,
 )
 from utils.market_calendar import MARKET_TZ, is_market_day
+
 
 # WatchList Manager
 class WatchListManager:
@@ -43,17 +46,7 @@ class WatchListManager:
 
     def save_watch_list(self):
         """Persist the current watch list to SQL."""
-        existing = set(fetch_watchlist_entries().keys())
-        desired = {ticker.upper() for ticker in self.watch_list.keys()}
-        for ticker in existing - desired:
-            delete_watchlist_entry(ticker)
-        for ticker, data in self.watch_list.items():
-            upsert_watchlist_entry(
-                ticker=ticker,
-                split_date=data.get("split_date"),
-                split_ratio=data.get("split_ratio", "N/A"),
-                metadata=None,
-            )
+        replace_watchlist_entries(self.watch_list)
         logging.info("Watch list saved to SQL.")
 
     def load_watch_list(self):
@@ -66,17 +59,7 @@ class WatchListManager:
 
     def save_sell_list(self):
         """Persist the current sell list to SQL."""
-        existing = set(fetch_sell_list_entries().keys())
-        desired = {ticker.upper() for ticker in self.sell_list.keys()}
-        for ticker in existing - desired:
-            delete_sell_list_entry(ticker)
-        for ticker, data in self.sell_list.items():
-            upsert_sell_list_entry(
-                ticker=ticker,
-                split_date=data.get("split_date"),
-                split_ratio=data.get("split_ratio"),
-                metadata=data,
-            )
+        replace_sell_list_entries(self.sell_list)
         logging.info("Sell list saved to SQL.")
 
     def load_sell_list(self):

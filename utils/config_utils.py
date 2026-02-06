@@ -24,6 +24,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 def _get_env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -93,6 +94,7 @@ def _resolve_dir_env(name: str, default: Path) -> Path:
         )
         return default.resolve()
     return candidate
+
 
 # --- Early path definitions for .env loading ---
 UTILS_DIR = Path(__file__).resolve().parent
@@ -188,9 +190,7 @@ OPENAI_POLICY_ENABLED = _get_env_bool("OPENAI_POLICY_ENABLED", False)
 # Toggle programmatic policy parsing (keyword-based NASDAQ/SEC analysis).
 PROGRAMMATIC_POLICY_ENABLED = _get_env_bool("PROGRAMMATIC_POLICY_ENABLED", True)
 # Minimum interval between outbound !rsa commands (rate-limit protection)
-RSA_COMMAND_MIN_INTERVAL_SECONDS = _get_env_float(
-    "RSA_COMMAND_MIN_INTERVAL_SECONDS", 2
-)
+RSA_COMMAND_MIN_INTERVAL_SECONDS = _get_env_float("RSA_COMMAND_MIN_INTERVAL_SECONDS", 2)
 # Enable scheduled ``..all`` refreshes every 15 minutes during market hours
 ENABLE_MARKET_REFRESH = _get_env_bool("ENABLE_MARKET_REFRESH", False)
 
@@ -520,8 +520,8 @@ logger.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
 logger.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
 logger.info(f"Resolved DATABASE_FILE: {SQL_DATABASE}")
 logger.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
-logger.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
-logger.info(f"Resolved SELLING_FILE: {SELL_FILE}")
+logger.info(f"Resolved LEGACY_WATCH_FILE: {WATCH_FILE}")
+logger.info(f"Resolved LEGACY_SELL_FILE: {SELL_FILE}")
 
 ENABLE_TICKER_CLI = _get_env_bool("ENABLE_TICKER", False)
 logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
@@ -532,7 +532,9 @@ logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 def load_account_mappings() -> dict:
     """Return account mappings stored in SQL.
 
-    Falls back to legacy JSON mappings when SQL logging is disabled.
+    Falls back to legacy JSON mappings only when SQL logging is disabled.
+    Legacy JSON migration into SQL is handled by ``utils.sql_utils`` during
+    database initialization and by the one-time migration script.
     """
 
     if not SQL_LOGGING_ENABLED:
@@ -544,10 +546,7 @@ def load_account_mappings() -> dict:
 
     from utils import sql_utils
 
-    mappings = sql_utils.fetch_account_mappings()
-    if mappings:
-        return mappings
-    return _load_legacy_account_mappings()
+    return sql_utils.fetch_account_mappings()
 
 
 def save_account_mappings(mappings: dict) -> None:
@@ -612,9 +611,7 @@ def get_account_nickname(broker_name, broker_number, account_number):
     if SQL_LOGGING_ENABLED:
         from utils import sql_utils
 
-        sql_utils.upsert_account_mapping(
-            broker_name, broker_str, account_str, nickname
-        )
+        sql_utils.upsert_account_mapping(broker_name, broker_str, account_str, nickname)
     else:
         logger.warning(
             "SQL logging disabled; default nickname not persisted for %s/%s/%s.",
@@ -676,9 +673,7 @@ def load_config():
         "logging": {
             "level": os.getenv("LOG_LEVEL", "INFO"),
             "file": os.fspath(
-                _resolve_path_env(
-                    "LOG_FILE", VOLUMES_DIR / "logs" / "rsassistant.log"
-                )
+                _resolve_path_env("LOG_FILE", VOLUMES_DIR / "logs" / "rsassistant.log")
             ),
             "backup_count": _get_env_int("LOG_BACKUP_COUNT", 2),
         },
