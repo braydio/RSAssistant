@@ -2,30 +2,41 @@
 
 ## Status Note
 Excel is deprecated and non-authoritative after migration. The SQL database and
-JSON logs are the sources of truth, and Excel should be treated as a historical
-artifact only.
+JSON/structured logs are the sources of truth, and Excel should be treated as a
+historical artifact only.
+
+## Excel Sheet Enumeration from `utils/excel_utils.py`
+
+`utils/excel_utils.py` references the following worksheet names:
+
+1. `Account Details`
+2. `Reverse Split Log`
+
+No other sheet name is explicitly used for business logic in this module.
 
 ## Excel Sheet Layouts (Deprecated)
 
-The workbook currently uses two sheets for Excel-backed data (as referenced in
-`utils/excel_utils.py`):
+### `Account Details`
 
-- `Account Details`
-- `Reverse Split Log`
+The `index_account_details` workflow reads rows starting at row `2` and consumes
+columns `A:D`.
 
-### Account Details
-Column headers and meaning (as read from columns A-D in
-`utils/excel_utils.index_account_details`):
-
-| Column | Header (inferred) | Meaning | SQL Mapping |
+| Column | Header (inferred) | Meaning in Excel | SQL Mapping |
 | --- | --- | --- | --- |
-| A | Broker Name | Broker name string used in account mapping. | `Accounts.broker` |
-| B | Group Number | Broker group number used in account mapping. | `Accounts.broker_number` |
-| C | Account Number | Account number (zero-padded to 4 digits in code). | `Accounts.account_number` |
-| D | Account Nickname | Human-readable nickname for the account. | `Accounts.account_nickname` |
+| A | Broker Name | Broker identifier namespace for an account. | `Accounts.broker`, `account_mappings.broker` |
+| B | Group Number | Broker grouping / broker number partition. | `Accounts.broker_number`, `account_mappings.group_number` |
+| C | Account Number | Raw account number, normalized to 4-char zero-padded text before write. | `Accounts.account_number`, `account_mappings.account_number` |
+| D | Account Nickname | Human-readable account label; generated when missing. | `Accounts.account_nickname`, `account_mappings.account_nickname` |
 
-### Reverse Split Log
-Row indices (from `utils/excel_utils.py`):
+Stored vs. derived notes:
+
+- `account_number` is **stored** in SQL as text after normalization.
+- default nickname generation (`"Account N"`) is **derived** at ingest time,
+  then the resulting value is **stored**.
+
+### `Reverse Split Log`
+
+Row indices/constants defined in `utils/excel_utils.py`:
 
 - `stock_row = 1`
 - `date_row = 1`
@@ -34,76 +45,81 @@ Row indices (from `utils/excel_utils.py`):
 - `account_start_row = 4`
 - `account_start_column = 1`
 
-Column layout for per-account values:
+Column layout used for per-account values:
 
-- Columns are grouped in repeating blocks of three:
-  - **Cost column**: ticker symbol appears on `stock_row` (row 1); account
-    prices for buy/cost entries appear in the account rows.
-  - **Proceeds column**: split date appears on `date_row` (row 1); split ratio
-    appears on `ratio_row` (row 2); order header uses "Proceeds" on
-    `order_row` (row 3); account prices for sell/proceeds entries appear in the
-    account rows.
-  - **Spacer column**: formatting-only spacer copied from the prior block.
-- The first two columns are treated as headers/labels in helpers (tickers start at
-  column 3 when adding new tickers).
-- Account rows begin at `account_start_row`, with column A containing the
-  account label (broker + nickname).
+- Repeating 3-column block per ticker event:
+  1. **Cost column** (`N`):
+     - `row 1` (`stock_row`) stores ticker symbol.
+     - `row 2` (`ratio_row`) stores label text `"Split Ratio:"`.
+     - `row 3` (`order_row`) stores `"Cost"`.
+     - `rows >= 4` store account-level price values for cost-side entries.
+  2. **Proceeds column** (`N+1`):
+     - `row 1` (`date_row`) stores split date.
+     - `row 2` (`ratio_row`) stores split ratio value.
+     - `row 3` (`order_row`) stores `"Proceeds"`.
+     - `rows >= 4` store account-level price values for proceeds-side entries.
+  3. **Spacer column** (`N+2`): formatting spacer, no business value.
+- Account labels are in column `A`, starting at `account_start_row`.
+- Lookup helpers scan ticker columns in steps of 2 (`cost`, then `proceeds`),
+  effectively treating spacer columns as non-data.
 
-## Excel Concepts → SQL Mapping
+## Excel Concept → SQL Table/Column Mapping
 
-| Excel Concept | SQL Table / Column | Stored or Derived | Notes |
-| --- | --- | --- | --- |
-| Account Details (Broker Name) | `Accounts.broker` | Stored | Canonical broker name. |
-| Account Details (Group Number) | `Accounts.broker_number` | Stored | Group number in Excel corresponds to broker number. |
-| Account Details (Account Number) | `Accounts.account_number` | Stored | Stored as text to preserve zero padding. |
-| Account Details (Account Nickname) | `Accounts.account_nickname` | Stored | Defaulted in code when missing. |
-| Account identifier | `Accounts.account_id` | Derived | Auto-increment primary key. |
-| Reverse split ticker | `reverse_split_log.ticker` (proposed) | Stored | From `stock_row` cost column. |
-| Reverse split date | `reverse_split_log.split_date` (proposed) | Stored | From `date_row` in proceeds column. |
-| Reverse split ratio | `reverse_split_log.split_ratio` (proposed) | Stored | From `ratio_row` in proceeds column. |
-| Order cost/proceeds price | `reverse_split_account_entries.price` (proposed) | Stored | Value for the account row in cost/proceeds column. |
-| Order type (cost/proceeds) | `reverse_split_account_entries.order_type` (proposed) | Derived | Derived from which column (cost vs. proceeds) contains the value. |
-| Account label | `reverse_split_account_entries.account_id` (proposed) | Derived | Resolve from `Accounts` via broker + account number or nickname. |
-| Order timestamp | `reverse_split_account_entries.timestamp` (proposed) | Stored | When the entry was captured/imported. |
-
-Existing SQL tables for related data:
-
-- `Accounts`: canonical account registry.
-- `OrderHistory`: structured order events (action, quantity, price, timestamp).
-- `HoldingsLive` / `HistoricalHoldings`: holdings snapshots.
-- `account_mappings`: broker/account nickname mappings (replaces legacy JSON).
-- `watchlist` / `sell_list`: reverse split watch and sell queues (replaces legacy JSON).
+| Excel Concept | SQL Table.Column | Existing or New | Stored or Derived | Notes |
+| --- | --- | --- | --- | --- |
+| Broker Name (`Account Details!A`) | `Accounts.broker` | Existing | Stored | Canonical broker string. |
+| Broker Name (`Account Details!A`) | `account_mappings.broker` | Existing | Stored | Compatibility mapping table. |
+| Group Number (`Account Details!B`) | `Accounts.broker_number` | Existing | Stored | Numeric/text broker grouping. |
+| Group Number (`Account Details!B`) | `account_mappings.group_number` | Existing | Stored | String representation in mapping rows. |
+| Account Number (`Account Details!C`) | `Accounts.account_number` | Existing | Stored | Persisted as zero-padded text. |
+| Account Number (`Account Details!C`) | `account_mappings.account_number` | Existing | Stored | Same normalized value. |
+| Account Nickname (`Account Details!D`) | `Accounts.account_nickname` | Existing | Stored | Final resolved nickname. |
+| Account Nickname (`Account Details!D`) | `account_mappings.account_nickname` | Existing | Stored | Mirrors mapping lookup surface. |
+| Default nickname generation | n/a (logic in `generate_account_nickname`) | Existing logic | Derived then Stored | `"Account N"` calculated from existing nicknames. |
+| Account row label (`Reverse Split Log!A{row}`) | `Accounts.account_id` | Existing | Derived | Resolve account via broker + nickname/number. |
+| Ticker (`stock_row` in cost col) | `reverse_split_log.ticker` | New (proposed) | Stored | One ticker per reverse split log record. |
+| Split date (`date_row` in proceeds col) | `reverse_split_log.split_date` | New (proposed) | Stored | Source date string/date from Excel. |
+| Split ratio (`ratio_row` in proceeds col) | `reverse_split_log.split_ratio` | New (proposed) | Stored | Keep source representation (e.g., `1-20`). |
+| Cost/Proceeds header (`order_row`) | `reverse_split_account_entries.order_type` | New (proposed) | Derived | Derived from whether value came from cost or proceeds column. |
+| Account price cell (`rows >= 4`) | `reverse_split_account_entries.price` | New (proposed) | Stored | Numeric price payload. |
+| Cell capture moment | `reverse_split_account_entries.timestamp` | New (proposed) | Stored | Capture/ingestion timestamp. |
+| Import metadata | `reverse_split_log.ingestion_timestamp`, `reverse_split_log.source`, `reverse_split_account_entries.source` | New (proposed) | Stored | Audit lineage for migration and post-migration writes. |
 
 ## Proposed SQL Tables for Excel-Only Concepts
 
-### reverse_split_log
-Tracks per-ticker reverse split metadata that used to live in the Excel sheet.
+### `reverse_split_log`
+
+Tracks per-ticker reverse split metadata that previously lived in header rows of
+`Reverse Split Log`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | reverse_split_id | INTEGER PRIMARY KEY | Surrogate key. |
 | ticker | TEXT NOT NULL | Stock symbol. |
-| split_ratio | TEXT NOT NULL | Original split ratio string (e.g., "1-20"). |
-| split_date | TEXT NOT NULL | Split effective date. |
-| ingestion_timestamp | TEXT NOT NULL | When the entry was captured/imported. |
-| source | TEXT NOT NULL | "excel_migration", "manual", etc. |
+| split_ratio | TEXT NOT NULL | Original split ratio string (e.g., `1-20`). |
+| split_date | TEXT NOT NULL | Split effective date from source. |
+| ingestion_timestamp | TEXT NOT NULL | When ingested/migrated. |
+| source | TEXT NOT NULL | e.g., `excel_migration`, `manual`, `feed_parser`. |
 
-### reverse_split_account_entries
-Tracks per-account cost/proceeds entries that were stored in the Excel grid.
+### `reverse_split_account_entries`
+
+Tracks per-account cost/proceeds values from `Reverse Split Log` account rows.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | entry_id | INTEGER PRIMARY KEY | Surrogate key. |
+| reverse_split_id | INTEGER NOT NULL | FK to `reverse_split_log.reverse_split_id`. |
 | account_id | INTEGER NOT NULL | FK to `Accounts.account_id`. |
-| ticker | TEXT NOT NULL | Stock symbol. |
-| order_type | TEXT NOT NULL | "cost" or "proceeds" derived from column position. |
-| price | REAL NOT NULL | Value logged in the sheet cell. |
-| timestamp | TEXT NOT NULL | When the entry was captured/imported. |
-| source | TEXT NOT NULL | "excel_migration", "manual", etc. |
+| ticker | TEXT NOT NULL | Redundant convenience column for read performance (optional if joining via `reverse_split_id`). |
+| order_type | TEXT NOT NULL CHECK(order_type IN ('cost','proceeds')) | Derived from column family. |
+| price | REAL NOT NULL | Account-specific cost/proceeds value. |
+| timestamp | TEXT NOT NULL | Capture/ingestion time. |
+| source | TEXT NOT NULL | e.g., `excel_migration`, `manual`. |
 
 ## Migration Guidance
-- After migration, Excel should not be updated by the system. Any new entries
-  should be written to the SQL tables above, and Excel should be considered
-  read-only for audit or historical reference.
-- Excel is non-authoritative after migration; the SQL database and JSON logs
-  are the sources of truth.
+
+- After migration, Excel should not be updated by the system.
+- New reverse split metadata and account entries should be written to SQL,
+  optionally mirrored to JSON/CSV logs for reporting compatibility.
+- Excel is explicitly non-authoritative after migration; it is retained only for
+  historical audit and reconciliation.
