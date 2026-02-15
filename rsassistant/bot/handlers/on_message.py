@@ -22,9 +22,11 @@ from utils.watch_utils import (
 )
 from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute, send_sell_command
+from utils.order_queue_manager import get_order_queue
 from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
 from utils.monitor_utils import has_acted_today, record_action_today
 from utils.config_utils import (
+    AUTO_BUY_WATCHLIST,
     AUTO_SELL_LIVE,
     HOLDING_ALERT_MIN_PRICE,
     IGNORE_TICKERS as IGNORE_TICKERS_SET,
@@ -198,7 +200,11 @@ def _resolve_fractional_handling_text(policy_info: dict) -> str:
     llm_policy = llm_details.get("fractional_share_policy")
     if llm_policy:
         return llm_policy
-    return policy_info.get("sec_policy") or policy_info.get("policy") or "Policy not clearly stated."
+    return (
+        policy_info.get("sec_policy")
+        or policy_info.get("policy")
+        or "Policy not clearly stated."
+    )
 
 
 async def _process_round_up_flow(
@@ -278,7 +284,10 @@ def _ensure_configured_brokers_loaded() -> None:
 
     mapped_brokers = _load_configured_brokers_from_mappings()
     if mapped_brokers:
-        if _configured_brokers != mapped_brokers or _configured_brokers_source != "account_mapping":
+        if (
+            _configured_brokers != mapped_brokers
+            or _configured_brokers_source != "account_mapping"
+        ):
             _configured_brokers = mapped_brokers
             _configured_brokers_source = "account_mapping"
             logger.info(
@@ -358,7 +367,9 @@ def _reset_discovery_timer(bot) -> None:
     if _refresh_discovery_task and not _refresh_discovery_task.done():
         _refresh_discovery_task.cancel()
     loop = getattr(bot, "loop", None) or asyncio.get_event_loop()
-    _refresh_discovery_task = loop.create_task(_finalize_discovered_brokers_after_idle())
+    _refresh_discovery_task = loop.create_task(
+        _finalize_discovered_brokers_after_idle()
+    )
 
 
 def start_holdings_completion_tracking(bot, force: bool = True) -> None:
@@ -367,7 +378,11 @@ def start_holdings_completion_tracking(bot, force: bool = True) -> None:
     global _refresh_completion_event, _refresh_seen_brokers, _refresh_discovered_brokers
     global _refresh_discovery_task
 
-    if not force and _refresh_completion_event and not _refresh_completion_event.is_set():
+    if (
+        not force
+        and _refresh_completion_event
+        and not _refresh_completion_event.is_set()
+    ):
         return
 
     _ensure_configured_brokers_loaded()
@@ -403,7 +418,11 @@ async def wait_for_holdings_completion(timeout: float) -> bool:
 def record_holdings_brokers(bot, brokers: set[str]) -> None:
     """Track seen brokers during a holdings refresh."""
 
-    if not brokers or not _refresh_completion_event or _refresh_completion_event.is_set():
+    if (
+        not brokers
+        or not _refresh_completion_event
+        or _refresh_completion_event.is_set()
+    ):
         return
 
     normalized = {_normalize_broker_name(broker) for broker in brokers if broker}
@@ -450,9 +469,7 @@ async def _emit_refresh_summary(bot) -> None:
         tickers = ", ".join(sorted(_pending_alerts_by_broker[broker].keys()))
         lines.append(f"- {broker}: {tickers}")
 
-    header = (
-        f"{mention}Holdings >= ${threshold:.2f} detected across {len(_pending_alerts_by_broker)} broker(s) during refresh:\n"
-    )
+    header = f"{mention}Holdings >= ${threshold:.2f} detected across {len(_pending_alerts_by_broker)} broker(s) during refresh:\n"
     max_len = 2000
     body = "\n".join(lines)
     first_msg = (header + body)[:max_len]
@@ -543,12 +560,92 @@ def compute_account_missing_tickers(parsed_holdings):
     return results
 
 
+def _extract_order_queue_pairs() -> set[tuple[str, str]]:
+    """Return queued ``(ticker, broker)`` pairs to avoid duplicate watchlist autobuys.
+
+    Returns:
+        set[tuple[str, str]]: Normalized ``(ticker, broker)`` pairs for queued buy
+        and sell commands in the persistent order queue.
+    """
+
+    pairs: set[tuple[str, str]] = set()
+    for order in get_order_queue().values():
+        ticker = str(order.get("ticker", "")).strip().upper()
+        broker = _normalize_broker_name(order.get("broker", ""))
+        if ticker and broker:
+            pairs.add((ticker, broker))
+    return pairs
+
+
+async def queue_missing_watchlist_autobuys(
+    bot, channel, missing_by_account: dict[str, list[str]]
+) -> int:
+    """Queue watchlist autobuys for broker/ticker gaps discovered during ``..all``.
+
+    A ``!rsa buy 1 <ticker> <broker> false`` command is queued only when there is
+    no currently queued order for the same broker/ticker pair.
+
+    Args:
+        bot: Discord bot used to resolve the outbound command channel.
+        channel: Current response channel used when channel resolution fails.
+        missing_by_account (dict[str, list[str]]): Missing watchlist tickers keyed by
+            account label in the form ``"<broker> ..."``.
+
+    Returns:
+        int: Number of missing watchlist autobuy commands queued/sent.
+    """
+
+    if not AUTO_BUY_WATCHLIST:
+        return 0
+
+    target_channel = resolve_reply_channel(
+        bot, DISCORD_PRIMARY_CHANNEL
+    ) or resolve_message_destination(bot, channel)
+    queued_pairs = _extract_order_queue_pairs()
+    queued_count = 0
+
+    for account_label, tickers in missing_by_account.items():
+        broker = _normalize_broker_name(account_label.split(" ", 1)[0])
+        if not broker or is_broker_ignored(broker):
+            continue
+
+        for ticker in sorted({str(t).strip().upper() for t in tickers if t}):
+            pair = (ticker, broker)
+            if pair in queued_pairs:
+                logger.info(
+                    "Skipping watchlist autobuy for %s/%s; order already queued.",
+                    ticker,
+                    broker,
+                )
+                continue
+
+            command = f"!rsa buy 1 {ticker} {broker} false"
+            await send_sell_command(target_channel, command, bot=bot)
+            queued_pairs.add(pair)
+            queued_count += 1
+            logger.info(
+                "Queued watchlist autobuy command for missing position %s/%s.",
+                ticker,
+                broker,
+            )
+
+    return queued_count
+
+
 async def _audit_holdings(bot, message, parsed_holdings):
+    """Record and announce missing watchlist positions during a holdings audit."""
+
     missing = compute_account_missing_tickers(parsed_holdings)
     response_channel = resolve_message_destination(bot, message.channel)
     for account, tickers in missing.items():
         _missing_summary[account].update(tickers)
         await response_channel.send(f"Missing in {account}: {', '.join(tickers)}")
+
+    queued_count = await queue_missing_watchlist_autobuys(bot, message.channel, missing)
+    if queued_count:
+        await response_channel.send(
+            f"Queued {queued_count} watchlist autobuy command(s) for missing broker positions."
+        )
 
 
 def set_channels(primary_id, secondary_id, tertiary_id, holdings_id):
@@ -736,13 +833,13 @@ async def handle_primary_channel(bot, message):
                     # Record that we've acted to avoid duplicates the same day
                     record_action_today(broker, account_name, ticker)
                 except Exception as exc:
-                    logger.error(f"Monitor/auto-sell step failed for holding {h}: {exc}")
+                    logger.error(
+                        f"Monitor/auto-sell step failed for holding {h}: {exc}"
+                    )
 
             if areb_alerts:
                 mention = _mention_prefix(force=True)
-                header = (
-                    f"{mention}AREB position(s) above {AREB_QUANTITY_THRESHOLD} shares detected:\n"
-                )
+                header = f"{mention}AREB position(s) above {AREB_QUANTITY_THRESHOLD} shares detected:\n"
                 lines = []
                 for alert in areb_alerts:
                     qty = alert["quantity"]
@@ -751,9 +848,7 @@ async def handle_primary_channel(bot, message):
                     price = alert["price"]
                     price_fragment = f" @ ${price:.2f}" if price else ""
                     account_label = _format_account_label(broker, account_name)
-                    lines.append(
-                        f"- {account_label}: {qty:.2f} shares{price_fragment}"
-                    )
+                    lines.append(f"- {account_label}: {qty:.2f} shares{price_fragment}")
                 body = "\n".join(lines)
                 await response_channel.send(header + body)
 
@@ -779,14 +874,15 @@ async def handle_primary_channel(bot, message):
                 for (broker, account_name), items in grouped.items():
                     account_label = _format_account_label(broker, account_name)
                     details = ", ".join(
-                        f"{it['ticker']} @ ${it['price']:.2f} (qty {it['quantity']})" for it in items
+                        f"{it['ticker']} @ ${it['price']:.2f} (qty {it['quantity']})"
+                        for it in items
                     )
                     lines.append(f"- {account_label}: {details}")
 
-                mention = _mention_prefix(tag_enabled=_should_tag_entries(alert_entries))
-                header = (
-                    f"{mention}Detected holdings >= ${threshold:.2f} across {len(grouped)} account(s):\n"
+                mention = _mention_prefix(
+                    tag_enabled=_should_tag_entries(alert_entries)
                 )
+                header = f"{mention}Detected holdings >= ${threshold:.2f} across {len(grouped)} account(s):\n"
 
                 # Discord 2000 char limit; send in chunks if needed. Mention only once.
                 max_len = 2000
@@ -921,8 +1017,7 @@ async def handle_secondary_channel(bot, message):
         else:
             handling = _resolve_fractional_handling_text(policy_info)
             alert = (
-                f"Alert Detected: {ticker}\n"
-                f"Fractional Share Handling: {handling}"
+                f"Alert Detected: {ticker}\n" f"Fractional Share Handling: {handling}"
             )
             await post_alert_detection(bot, ticker, alert)
     except Exception:
@@ -1014,7 +1109,9 @@ async def post_policy_summary(bot, ticker, summary):
 
     await channel.send(summary)
     logger.info(
-        "Posted policy summary for %s to channel %s", ticker, getattr(channel, "id", "unknown")
+        "Posted policy summary for %s to channel %s",
+        ticker,
+        getattr(channel, "id", "unknown"),
     )
 
 
@@ -1040,9 +1137,7 @@ def _resolve_alert_channel(bot, ticker):
     if not channel and DISCORD_PRIMARY_CHANNEL:
         channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
         if channel:
-            logger.warning(
-                "Posting %s alert to primary channel fallback.", ticker
-            )
+            logger.warning("Posting %s alert to primary channel fallback.", ticker)
 
     if not channel:
         channel = resolve_reply_channel(bot)
@@ -1051,9 +1146,6 @@ def _resolve_alert_channel(bot, ticker):
         logger.error("Unable to resolve a channel for %s alerts.", ticker)
         return None
     return channel
-
-
-
 
 
 class OnMessagePolicyResolver:
