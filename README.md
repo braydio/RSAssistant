@@ -7,7 +7,7 @@ RSAssistant is a Discord bot that monitors reverse split announcements and autom
 - Monitors secondary-channel alert feeds for reverse split announcements.
 - Extracts dates, ratios, and fractional share policies from filings.
 - Maintains watch and sell lists, reminders, and scheduled orders.
-- Refreshes holdings via `..all`, audits them against the watchlist, and posts consolidated summaries.
+- Refreshes holdings via `..all`, audits them against the watchlist, posts consolidated summaries, and can queue watchlist autobuys for missing broker positions.
 - Persists logs, watchlists, and account mappings in SQLite under `volumes/` (override with `VOLUMES_DIR`).
 
 ## Quickstart (local)
@@ -43,6 +43,7 @@ Optional channels:
 - `DISCORD_TERTIARY_CHANNEL` (summaries; falls back to primary)
 - `DISCORD_HOLDINGS_CHANNEL` (auto-rsa holdings embeds)
 - `DISCORD_WATCHLIST_CHANNEL` (watchlist-only output)
+- `AUTO_BUY_WATCHLIST` (when `true`, `..all` queues `!rsa buy 1 <ticker> <broker> false` if a watched ticker is missing and no queued order exists)
 
 Env file loading order:
 

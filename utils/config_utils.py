@@ -201,6 +201,8 @@ AUTO_REFRESH_ON_REMINDER = _get_env_bool("AUTO_REFRESH_ON_REMINDER", False)
 HOLDING_ALERT_MIN_PRICE = _get_env_float("HOLDING_ALERT_MIN_PRICE", 1)
 # If enabled, automatically place sell orders to close detected holdings
 AUTO_SELL_LIVE = _get_env_bool("AUTO_SELL_LIVE", False)
+# If enabled, ``..all`` audits can auto-buy missing watchlist positions per broker.
+AUTO_BUY_WATCHLIST = _get_env_bool("AUTO_BUY_WATCHLIST", False)
 # Comma-separated list of tickers to ignore for alerts/auto-sell
 # Also supports a file of tickers (one per line) at CONFIG_DIR/ignore_tickers.txt
 # or a custom path via IGNORE_TICKERS_FILE.
