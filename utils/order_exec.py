@@ -12,6 +12,7 @@ from utils.config_utils import (
     RSA_COMMAND_MIN_INTERVAL_SECONDS,
 )
 from utils.order_queue_manager import add_to_order_queue, remove_order
+from utils.order_send_log_manager import record_sent_rsa_order
 from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,34 @@ task_queue = asyncio.Queue()
 _rsa_command_lock = asyncio.Lock()
 _last_rsa_command_at = 0.0
 _ORDER_COMMANDS = {"buy", "sell"}
+
+
+def _parse_rsa_order_command(command: str) -> tuple[str, float, str, str] | None:
+    """Parse a canonical ``!rsa`` order command into structured fields.
+
+    Args:
+        command: Outbound command string.
+
+    Returns:
+        Tuple of (action, quantity, ticker, broker) if parseable, otherwise None.
+    """
+
+    parts = command.strip().split()
+    if len(parts) < 5 or parts[0].lower() != "!rsa":
+        return None
+
+    action = parts[1].lower()
+    if action not in _ORDER_COMMANDS:
+        return None
+
+    try:
+        quantity = float(parts[2])
+    except ValueError:
+        return None
+
+    ticker = parts[3].upper()
+    broker = parts[4]
+    return action, quantity, ticker, broker
 
 
 async def _await_rsa_rate_limit() -> None:
@@ -165,6 +194,17 @@ async def send_sell_command(target, command: str, loop=None, bot=None):
         await target_channel.send(command)
         channel = getattr(target_channel, "channel", target_channel)
         channel_id = getattr(channel, "id", "unknown")
+        parsed_order = _parse_rsa_order_command(command)
+        if parsed_order is not None:
+            action, quantity, ticker, broker = parsed_order
+            record_sent_rsa_order(
+                command=command,
+                channel_id=channel_id,
+                ticker=ticker,
+                action=action,
+                quantity=quantity,
+                broker=broker,
+            )
         logger.info(f"Sent command: {command} to channel {channel_id}")
     except Exception as e:
         logger.error(f"Error sending sell command: {e}")
