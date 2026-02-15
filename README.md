@@ -134,6 +134,26 @@ count:
 ..snapshot 8
 ```
 
+
+## Sent order audit trail
+
+RSAssistant now records each outbound `!rsa` order command with send time, ticker,
+action, quantity, broker, and destination channel in `volumes/db/order_send_log.json`.
+
+Use Discord commands to inspect this data:
+
+```bash
+..orders
+..orders 20
+..orders TSLA
+..orders TSLA sell
+..lastorder
+..lastorder TSLA
+```
+
+`..orders` supports lightweight filtering by optional limit (max 50), ticker, and
+action (`buy`/`sell`).
+
 ## Plugins
 
 Plugins are opt-in via `ENABLED_PLUGINS` (comma-separated). The ULT-MA plugin ships

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from discord.ext import commands
 
@@ -10,6 +10,7 @@ from utils.csv_utils import sell_all_position
 from utils.order_exec import schedule_and_execute
 from rsassistant.bot.tasks import reschedule_past_due_orders
 from utils.order_queue_manager import list_order_queue_items, remove_order
+from utils.order_send_log_manager import latest_sent_rsa_order, list_sent_rsa_orders
 
 ORDER_COMMAND_USAGE = "..order <buy/sell> <ticker> [broker] [quantity] [time]"
 
@@ -60,7 +61,9 @@ class OrdersCog(commands.Cog):
     ) -> None:
         """Validate input and schedule an order for execution."""
 
-        invalid_usage_message = f"Invalid arguments. Expected format: `{ORDER_COMMAND_USAGE}`"
+        invalid_usage_message = (
+            f"Invalid arguments. Expected format: `{ORDER_COMMAND_USAGE}`"
+        )
 
         if not action or action.lower() not in {"buy", "sell"}:
             await ctx.send(invalid_usage_message)
@@ -136,13 +139,13 @@ class OrdersCog(commands.Cog):
                 else:
                     execution_time = next_open(now)
         except ValueError:
-            await ctx.send(
-                "Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd."
-            )
+            await ctx.send("Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd.")
             return
 
         if execution_time == now:
-            await ctx.send(f"Executing {action.upper()} {ticker.upper()} immediately (market open).")
+            await ctx.send(
+                f"Executing {action.upper()} {ticker.upper()} immediately (market open)."
+            )
         else:
             await ctx.send(
                 f"Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}"
@@ -169,7 +172,9 @@ class OrdersCog(commands.Cog):
         usage="<broker> [test_mode]",
         extras={"category": "Orders"},
     )
-    async def liquidate(self, ctx: commands.Context, broker: str, test_mode: str = "false") -> None:
+    async def liquidate(
+        self, ctx: commands.Context, broker: str, test_mode: str = "false"
+    ) -> None:
         """Liquidate holdings for a specific brokerage."""
 
         try:
@@ -239,6 +244,100 @@ class OrdersCog(commands.Cog):
             )
             return
         await ctx.send("That order could not be found. Please run `..queue` and retry.")
+
+    @commands.command(
+        name="orders",
+        aliases=["sentorders", "recentorders"],
+        help=(
+            "Show recently sent !rsa orders with optional ticker/action filters. "
+            "Usage examples: ..orders, ..orders 20, ..orders TSLA, ..orders TSLA sell"
+        ),
+        usage="[limit|ticker] [ticker|action] [action]",
+        extras={"category": "Orders"},
+    )
+    async def list_sent_orders(
+        self,
+        ctx: commands.Context,
+        first: str | None = None,
+        second: str | None = None,
+        third: str | None = None,
+    ) -> None:
+        """Show recently sent ``!rsa`` commands with light filtering support."""
+
+        limit = 10
+        ticker: str | None = None
+        action: str | None = None
+
+        tokens = [token for token in (first, second, third) if token]
+        for token in tokens:
+            normalized = token.lower()
+            if token.isdigit() and limit == 10:
+                limit = max(1, min(int(token), 50))
+                continue
+            if normalized in {"buy", "sell"} and action is None:
+                action = normalized
+                continue
+            if ticker is None:
+                ticker = token.upper()
+                continue
+
+        entries = list_sent_rsa_orders(limit=limit, ticker=ticker, action=action)
+        if not entries:
+            await ctx.send("No sent !rsa orders matched that query.")
+            return
+
+        lines = []
+        for index, entry in enumerate(entries, start=1):
+            sent_at_iso = entry.get("sent_at")
+            try:
+                sent_at = datetime.fromisoformat(sent_at_iso)
+                sent_display = sent_at.astimezone(timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                )
+            except Exception:
+                sent_display = str(sent_at_iso)
+
+            lines.append(
+                f"{index}. {sent_display} | {entry['action'].upper()} {entry['quantity']} "
+                f"{entry['ticker']} via {entry['broker']} | channel {entry['channel_id']}"
+            )
+
+        await ctx.send("**Recently Sent !rsa Orders:**\n" + "\n".join(lines))
+
+    @commands.command(
+        name="lastorder",
+        aliases=["lastsent", "lo"],
+        help="Show the latest sent !rsa order, optionally for a single ticker.",
+        usage="[ticker]",
+        extras={"category": "Orders"},
+    )
+    async def show_last_sent_order(
+        self, ctx: commands.Context, ticker: str | None = None
+    ) -> None:
+        """Display the most-recent sent ``!rsa`` command."""
+
+        entry = latest_sent_rsa_order(ticker=ticker.upper() if ticker else None)
+        if not entry:
+            if ticker:
+                await ctx.send(f"No sent !rsa orders found for {ticker.upper()}.")
+            else:
+                await ctx.send("No sent !rsa orders found yet.")
+            return
+
+        sent_at_iso = entry.get("sent_at")
+        try:
+            sent_at = datetime.fromisoformat(sent_at_iso)
+            sent_display = sent_at.astimezone(timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S UTC"
+            )
+        except Exception:
+            sent_display = str(sent_at_iso)
+
+        await ctx.send(
+            "Latest sent !rsa order: "
+            f"{sent_display} | {entry['action'].upper()} {entry['quantity']} "
+            f"{entry['ticker']} via {entry['broker']} | channel {entry['channel_id']}"
+        )
 
     @commands.command(
         name="queue_run",
