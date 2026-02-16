@@ -29,6 +29,31 @@ BASE_EXCEL_FILE = EXCEL_FILE_MAIN.name
 
 logger = logging.getLogger(__name__)
 
+
+def _excel_write_allowed(operation_name: str) -> bool:
+    """Return whether Excel write operations are permitted.
+
+    Args:
+        operation_name: Human-readable operation identifier used in logs.
+
+    Returns:
+        ``True`` when Excel writes are enabled; otherwise ``False``.
+    """
+
+    if EXCEL_DEPRECATED:
+        logger.warning(
+            "Excel logging is deprecated; skipping Excel write operation: %s",
+            operation_name,
+        )
+        return False
+    if not EXCEL_LOGGING_ENABLED:
+        logger.info(
+            "Excel logging disabled; skipping Excel write operation: %s",
+            operation_name,
+        )
+        return False
+    return True
+
 # Load Excel log settings
 stock_row = 1
 date_row = 1
@@ -56,11 +81,7 @@ def get_excel_file_path(directory=EXCEL_FILE_DIRECTORY, filename=EXCEL_FILE_NAME
     base_dir = Path(directory)
     base_excel_file_path = base_dir / BASE_EXCEL_FILE
 
-    if EXCEL_DEPRECATED:
-        logger.warning("Excel logging is deprecated; skipping Excel setup.")
-        return os.fspath(base_excel_file_path)
-
-    if not EXCEL_LOGGING_ENABLED:
+    if not _excel_write_allowed("get_excel_file_path"):
         return os.fspath(base_excel_file_path)
 
     logger.debug(f"directory={directory}, filename={filename}")
@@ -110,12 +131,7 @@ def copy_cell_format(source_cell, target_cell):
 def create_excel_backups(excel_backup):
     """Create a dated backup of the Excel log when enabled."""
 
-    if EXCEL_DEPRECATED:
-        logger.warning("Excel logging is deprecated; skipping backup creation.")
-        return
-
-    if not EXCEL_LOGGING_ENABLED:
-        logger.info("Excel logging disabled; skipping backup creation.")
+    if not _excel_write_allowed("create_excel_backups"):
         return
 
     if not os.path.exists(excel_backup):
@@ -130,10 +146,7 @@ def create_excel_backups(excel_backup):
 def excel_backups_checks():
     """Ensure today's and tomorrow's backups exist when enabled."""
 
-    if EXCEL_DEPRECATED:
-        return
-
-    if not EXCEL_LOGGING_ENABLED:
+    if not _excel_write_allowed("excel_backups_checks"):
         return
 
     archive_dir = os.path.join(EXCEL_FILE_DIRECTORY, "archive")
@@ -156,7 +169,9 @@ def load_excel_workbook(file_path):
     """
 
     if EXCEL_DEPRECATED:
-        logger.warning("Excel logging is deprecated; skipping workbook load.")
+        logger.warning(
+            "Excel logging is deprecated; skipping workbook load for %s.", file_path
+        )
         return None
 
     if not os.path.exists(file_path):
@@ -781,8 +796,7 @@ def delete_stale_backups(
 ):
     """Delete backup files older than the specified number of days."""
 
-    if EXCEL_DEPRECATED:
-        logger.warning("Excel logging is deprecated; skipping backup cleanup.")
+    if not _excel_write_allowed("delete_stale_backups"):
         return
 
     now = datetime.now()
@@ -880,12 +894,7 @@ def update_cell_value(ws, row, col, value):
 def save_workbook(wb, filename):
     """Persist the workbook if Excel logging is enabled."""
 
-    if EXCEL_DEPRECATED:
-        logger.warning("Excel logging is deprecated; skipping workbook save.")
-        return
-
-    if not EXCEL_LOGGING_ENABLED:
-        logger.info("Excel logging disabled; skipping workbook save.")
+    if not _excel_write_allowed("save_workbook"):
         return
 
     try:

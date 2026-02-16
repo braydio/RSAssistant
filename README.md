@@ -71,7 +71,7 @@ Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
 - `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot)
 - `volumes/logs/` (app logs, holdings logs)
-- `volumes/excel/` (ReverseSplitLog.xlsx)
+- `volumes/excel/` (legacy archive only; Excel writes are deprecated)
 
 Watchlist, sell list, and account mappings now live in the SQLite database
 (`watchlist`, `sell_list`, and `account_mappings` tables). Legacy JSON files are
