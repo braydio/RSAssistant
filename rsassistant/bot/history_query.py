@@ -83,7 +83,8 @@ async def show_sql_holdings_history(
             return
 
         # Convert date to datetime and sort
-        df["date"] = pd.to_datetime(df["date"])
+        df = df.copy()
+        df.loc[:, "date"] = pd.to_datetime(df["date"])
         df = df.sort_values(by="date")
 
         # Group by date to show cumulative quantities if multiple entries exist per date

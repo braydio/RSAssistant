@@ -3,7 +3,7 @@ RSDashboard/*
 auto-rsa/
 volumes/logs*
 heartbeat.txt
-
+*.local
 .venv/*
 *.env
 

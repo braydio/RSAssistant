@@ -1,0 +1,18 @@
+[Unit]
+Description=RSAssistant Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=braydenchaffee
+Group=braydenchaffee
+WorkingDirectory=/home/braydenchaffee/Production/RSAssistant
+ExecStart=/home/braydenchaffee/Production/RSAssistant/.venv/bin/python /home/braydenchaffee/Production/RSAssistant/RSAssistant.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/home/braydenchaffee/Production/RSAssistant/config/.env
+
+[Install]
+WantedBy=multi-user.target

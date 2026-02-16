@@ -18,6 +18,16 @@ class SECPolicyFetcher:
         "in lieu",
         "preserve round lot",
     ]
+    PREFERRED_FORMS = [
+        "8-K",
+        "DEF 14A",
+        "PRE 14A",
+        "S-1",
+        "S-3",
+        "S-4",
+        "10-K",
+        "10-Q",
+    ]
 
     def __init__(self, back_days=30):
         self.start_date = (datetime.today() - timedelta(days=back_days)).strftime(
@@ -43,11 +53,11 @@ class SECPolicyFetcher:
                 f"Searching SEC filings for {ticker} from {self.start_date} to {self.end_date}"
             )
             params = self.build_search_params(ticker)
-            response = requests.get(
+            with requests.get(
                 self.BASE_URL, params=params, headers=self.HEADERS, timeout=10
-            )
-            response.raise_for_status()
-            return response.json()
+            ) as response:
+                response.raise_for_status()
+                return response.json()
         except Exception as e:
             logger.error(f"Error fetching SEC search results: {e}")
             return None
@@ -56,9 +66,10 @@ class SECPolicyFetcher:
         """Retrieve and classify fractional-share handling from a filing URL."""
         try:
             logger.info(f"Fetching and analyzing SEC filing from {filing_url}")
-            response = requests.get(filing_url, headers=self.HEADERS, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
+            with requests.get(filing_url, headers=self.HEADERS, timeout=10) as response:
+                response.raise_for_status()
+                html = response.text
+            soup = BeautifulSoup(html, "html.parser")
             raw_text = soup.get_text(separator=" ")
             text_content = normalize_cash_in_lieu_phrases(raw_text).lower()
 
@@ -96,3 +107,50 @@ class SECPolicyFetcher:
 
         logger.warning(f"No valid policy extracted for {ticker}")
         return None
+
+    def _extract_filing_url(self, filing):
+        cik = filing["_source"].get("ciks", [""])[0]
+        accession_number = filing["_source"].get("adsh", "")
+        file_id = filing["_id"].split(":")[1]
+        if not cik or not accession_number or not file_id:
+            return None
+        return (
+            f"https://www.sec.gov/Archives/edgar/data/{cik}/"
+            f"{accession_number.replace('-', '')}/{file_id}"
+        )
+
+    def fetch_latest_filing_text(self, ticker):
+        search_data = self.search_filings(ticker)
+        if not search_data or "hits" not in search_data.get("hits", {}):
+            logger.warning(f"No filings found for ticker {ticker}")
+            return None
+
+        filings = search_data["hits"]["hits"]
+        if not filings:
+            logger.warning(f"No filings returned for ticker {ticker}")
+            return None
+        prioritized = None
+        for filing in filings:
+            form_type = filing["_source"].get("form", "")
+            if form_type in self.PREFERRED_FORMS:
+                prioritized = filing
+                break
+
+        latest = prioritized or filings[0]
+        filing_url = self._extract_filing_url(latest)
+        if not filing_url:
+            logger.warning("Unable to construct filing URL for %s", ticker)
+            return None
+
+        try:
+            logger.info("Fetching latest SEC filing text from %s", filing_url)
+            with requests.get(filing_url, headers=self.HEADERS, timeout=10) as response:
+                response.raise_for_status()
+                html = response.text
+            soup = BeautifulSoup(html, "html.parser")
+            raw_text = soup.get_text(separator=" ")
+            text_content = normalize_cash_in_lieu_phrases(raw_text)
+            return {"url": filing_url, "text": text_content}
+        except Exception as e:
+            logger.error("Error fetching latest SEC filing text: %s", e)
+            return None

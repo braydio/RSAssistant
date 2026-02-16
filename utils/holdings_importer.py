@@ -102,7 +102,9 @@ def import_holdings_file(path: Path | str | None = None) -> int:
         return 0
 
     file_path = Path(path or AUTO_RSA_HOLDINGS_FILE)
+    logger.info("Holdings import file path: %s", file_path)
     if not file_path.exists():
+        logger.warning("Holdings file missing: %s", file_path)
         return 0
 
     try:
@@ -112,6 +114,7 @@ def import_holdings_file(path: Path | str | None = None) -> int:
         return 0
 
     entries = _extract_entries(payload)
+    logger.info("Holdings payload entries extracted: %d", len(entries))
     normalized = []
     for entry in entries:
         normalized_entry = _normalize_entry(entry)
@@ -136,16 +139,23 @@ def import_holdings_if_updated(path: Path | str | None = None) -> int:
     """Import holdings only when the snapshot file changes."""
     global _last_import_mtime
     if not AUTO_RSA_HOLDINGS_ENABLED:
+        logger.info("Auto-RSA holdings import disabled; skipping.")
         return 0
     file_path = Path(path or AUTO_RSA_HOLDINGS_FILE)
+    logger.info("Holdings import check for file: %s", file_path)
     if not file_path.exists():
+        logger.warning("Holdings file missing: %s", file_path)
         return 0
     try:
         mtime = file_path.stat().st_mtime
     except OSError:
+        logger.warning("Unable to stat holdings file: %s", file_path)
         return 0
+    logger.info("Holdings file mtime: %s (last import: %s)", mtime, _last_import_mtime)
     if _last_import_mtime is not None and mtime <= _last_import_mtime:
+        logger.info("Holdings file unchanged; skipping import.")
         return 0
     imported = import_holdings_file(file_path)
     _last_import_mtime = mtime
+    logger.info("Holdings import finished; imported=%d", imported)
     return imported

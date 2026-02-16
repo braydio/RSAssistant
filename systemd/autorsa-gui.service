@@ -1,0 +1,18 @@
+[Unit]
+Description=Auto-RSA auto-starte service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=braydenchaffee
+Group=braydenchaffee
+WorkingDirectory=/home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local
+ExecStart=/home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/.venv/bin/python /home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/autoRSA.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/.env
+
+[Install]
+WantedBy=multi-user.target

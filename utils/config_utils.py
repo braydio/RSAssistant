@@ -225,6 +225,9 @@ TAGGED_ALERTS_FILE = _resolve_path_env(
 MARKET_HOLIDAYS_FILE = _resolve_path_env(
     "MARKET_HOLIDAYS_FILE", CONFIG_DIR / "market_holidays.txt"
 )
+AUTOBUY_CONFIG_FILE = _resolve_path_env(
+    "AUTOBUY_CONFIG_FILE", CONFIG_DIR / "autobuy_overrides.json"
+)
 
 
 def _load_ignore_entries_from_file(path: Path, entry_type: str) -> set:
@@ -522,8 +525,9 @@ logger.info(f"Resolved HOLDINGS_LOG_CSV: {HOLDINGS_LOG_CSV}")
 logger.info(f"Resolved ORDERS_LOG_CSV: {ORDERS_LOG_CSV}")
 logger.info(f"Resolved DATABASE_FILE: {SQL_DATABASE}")
 logger.info(f"Resolved ERROR_LOG: {ERROR_LOG_FILE}")
-logger.info(f"Resolved LEGACY_WATCH_FILE: {WATCH_FILE}")
-logger.info(f"Resolved LEGACY_SELL_FILE: {SELL_FILE}")
+logger.info(f"Resolved WATCH_FILE: {WATCH_FILE}")
+logger.info(f"Resolved SELLING_FILE: {SELL_FILE}")
+logger.info(f"Resolved AUTOBUY_CONFIG_FILE: {AUTOBUY_CONFIG_FILE}")
 
 ENABLE_TICKER_CLI = _get_env_bool("ENABLE_TICKER", False)
 logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
@@ -549,6 +553,46 @@ def load_account_mappings() -> dict:
     from utils import sql_utils
 
     return sql_utils.fetch_account_mappings()
+
+
+def load_autobuy_config() -> dict:
+    """Load autobuy override configuration from JSON file.
+
+    Returns a dictionary with keys:
+    - standard_order: dict with optional quantity/broker
+    - overrides: list of broker override dicts
+    """
+    defaults = {
+        "standard_order": {
+            "quantity": None,
+            "broker": "all",
+        },
+        "overrides": [],
+    }
+
+    if not AUTOBUY_CONFIG_FILE.exists():
+        return defaults
+
+    try:
+        with open(AUTOBUY_CONFIG_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            logger.error(
+                "Invalid autobuy config structure in %s. Expected a dictionary.",
+                AUTOBUY_CONFIG_FILE,
+            )
+            return defaults
+
+        standard = data.get("standard_order")
+        overrides = data.get("overrides")
+        resolved = {
+            "standard_order": standard if isinstance(standard, dict) else {},
+            "overrides": overrides if isinstance(overrides, list) else [],
+        }
+        return {**defaults, **resolved}
+    except json.JSONDecodeError as e:
+        logger.error("Error decoding JSON from %s: %s", AUTOBUY_CONFIG_FILE, e)
+        return defaults
 
 
 def save_account_mappings(mappings: dict) -> None:

@@ -23,7 +23,7 @@ from utils.config_utils import (
     ORDERS_LOG_CSV,
     CSV_LOGGING_ENABLED,
 )
-from utils.sql_utils import update_holdings_live
+from utils.sql_utils import update_holdings_live, update_holdings_live_batch
 from utils.order_exec import send_sell_command
 
 logger = logging.getLogger(__name__)
@@ -350,6 +350,7 @@ def save_holdings_to_csv(parsed_holdings):
         # Convert parsed_holdings into dicts and update existing rows by key.
         new_holdings = []
         updated_holdings = 0
+        sql_batch_holdings = []
         for holding in parsed_holdings:
             if isinstance(holding, dict):
                 # Map dictionary keys to standard CSV columns
@@ -426,21 +427,50 @@ def save_holdings_to_csv(parsed_holdings):
                     quantity_value,
                 )
             else:
-                try:
-                    update_holdings_live(
-                        broker=holding_dict["Broker Name"],
-                        broker_number=holding_dict["Broker Number"],
-                        account_number=holding_dict["Account Number"],
-                        ticker=holding_dict["Stock"],
-                        quantity=quantity_value,
-                        price=holding_dict["Price"],
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "SQL logging failed for holding %s: %s",
-                        holding_dict.get("Key", ""),
-                        exc,
-                    )
+                sql_batch_holdings.append(
+                    {
+                        "broker": holding_dict["Broker Name"],
+                        "broker_number": holding_dict["Broker Number"],
+                        "account_number": holding_dict["Account Number"],
+                        "ticker": holding_dict["Stock"],
+                        "quantity": quantity_value,
+                        "price": holding_dict["Price"],
+                    }
+                )
+
+        if sql_batch_holdings:
+            try:
+                inserted_rows = update_holdings_live_batch(sql_batch_holdings)
+                logger.info(
+                    "SQL holdings batch processed %d rows from %d candidates.",
+                    inserted_rows,
+                    len(sql_batch_holdings),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "SQL holdings batch failed (%d candidates). Falling back to row-by-row writes: %s",
+                    len(sql_batch_holdings),
+                    exc,
+                )
+                for row in sql_batch_holdings:
+                    try:
+                        update_holdings_live(
+                            broker=row["broker"],
+                            broker_number=row["broker_number"],
+                            account_number=row["account_number"],
+                            ticker=row["ticker"],
+                            quantity=row["quantity"],
+                            price=row["price"],
+                        )
+                    except Exception as row_exc:
+                        logger.warning(
+                            "SQL logging failed for holding %s/%s/%s/%s: %s",
+                            row["broker"],
+                            row["broker_number"],
+                            row["account_number"],
+                            row["ticker"],
+                            row_exc,
+                        )
 
         # Write the updated holdings to the CSV
         if new_holdings or updated_holdings:

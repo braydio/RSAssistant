@@ -15,7 +15,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
-from utils.config_utils import BOT_PREFIX, DISCORD_PRIMARY_CHANNEL, ENABLE_MARKET_REFRESH
+from utils.config_utils import (
+    BOT_PREFIX,
+    DISCORD_PRIMARY_CHANNEL,
+    ENABLE_MARKET_REFRESH,
+)
 from utils.order_exec import schedule_and_execute
 from utils.order_queue_manager import get_order_queue, update_order_time
 from utils.refresh_scheduler import MARKET_TZ, compute_next_refresh_datetime
@@ -45,11 +49,17 @@ async def reschedule_queued_orders(bot: commands.Bot) -> None:
         logger.info("No queued orders to reschedule.")
         return
 
-    channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
-    if not channel:
-        logger.error("Primary channel not found for rescheduling orders.")
-        return
+    # channel = resolve_reply_channel(bot, DISCORD_PRIMARY_CHANNEL)
+    # logger.info(f"Getting primary channel from resolver {DISCORD_PRIMARY_CHANNEL}")
 
+    # if not channel:
+    #    logger.error("Primary channel not found for rescheduling orders.")
+    #    return
+    channel = bot.get_channel(DISCORD_PRIMARY_CHANNEL)
+    logger.info(
+        f"Skipping that dumbass function to get the channel ID using the channel ID: {DISCORD_PRIMARY_CHANNEL}"
+    )
+    logger.info(f"Got the damn channel myself: {channel}")
     for order_id, data in queue.items():
         try:
             execution_time = datetime.strptime(data["time"], "%Y-%m-%d %H:%M:%S")

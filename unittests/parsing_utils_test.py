@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch
 
-from utils.parsing_utils import alert_channel_message
+from utils.parsing_utils import alert_channel_message, parse_order_message
 
 
 class AlertChannelMessageTest(unittest.TestCase):
@@ -15,6 +15,23 @@ class AlertChannelMessageTest(unittest.TestCase):
 
         self.assertEqual(result["ticker"], "SLE")
         self.assertTrue(result["reverse_split_confirmed"])
+
+
+class ParseOrderMessageTest(unittest.TestCase):
+    def test_robinhood_mfa_prompt_is_treated_as_notification(self) -> None:
+        message = (
+            "Robinhood 2: Check phone app for verification prompt. "
+            "You have ~60 seconds."
+        )
+
+        with (
+            patch("utils.parsing_utils.logger.error") as error_mock,
+            patch("utils.parsing_utils.logger.info") as info_mock,
+        ):
+            parse_order_message(message)
+
+        error_mock.assert_not_called()
+        info_mock.assert_called()
 
     def test_reverse_split_detects_reverse_stock_split_phrase(self) -> None:
         message = "Company announces reverse stock split (ABCD)"

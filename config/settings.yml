@@ -12,7 +12,7 @@
 # General settings
 general_settings:
   app_name:  'RSAssistant'
-  file_version: '2.0'
+  file_version: '2.1'
   
 # Header settings for csv logs
 header_settings:

@@ -4,6 +4,7 @@ import os
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
 from utils.config_utils import (
     ACCOUNT_MAPPING,
@@ -924,6 +925,91 @@ def update_holdings_live(
         except sqlite3.Error as e:
             logger.error(f"Error updating holdings: {e}")
             raise
+
+
+def update_holdings_live_batch(holdings: list[dict[str, Any]]) -> int:
+    """Insert many holdings into ``HoldingsLive`` in a single DB transaction.
+
+    Args:
+        holdings: Items with keys ``broker``, ``broker_number``,
+            ``account_number``, ``ticker``, ``quantity``, and ``price``.
+
+    Returns:
+        Number of rows inserted into ``HoldingsLive``.
+    """
+
+    if not SQL_LOGGING_ENABLED:
+        logger.info("SQL logging disabled; skipping holdings batch update.")
+        return 0
+
+    if not holdings:
+        return 0
+
+    inserted_rows = 0
+    account_id_cache: dict[tuple[str, str, str], int] = {}
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        rows_to_insert: list[tuple[int, str, float, float]] = []
+
+        for item in holdings:
+            broker = str(item.get("broker", "")).strip()
+            broker_number = str(item.get("broker_number", "")).strip()
+            account_number = str(item.get("account_number", "")).strip()
+            ticker = str(item.get("ticker", "")).strip()
+            if not (broker and account_number and ticker):
+                continue
+
+            try:
+                quantity = float(item.get("quantity", 0))
+                price = float(item.get("price", 0))
+            except (TypeError, ValueError):
+                continue
+            if quantity < 0:
+                continue
+
+            account_key = (broker, broker_number, account_number)
+            account_id = account_id_cache.get(account_key)
+            if account_id is None:
+                cursor.execute(
+                    """
+                    SELECT account_id
+                    FROM Accounts
+                    WHERE broker = ? AND broker_number = ? AND account_number = ?
+                    """,
+                    (broker, broker_number, account_number),
+                )
+                row = cursor.fetchone()
+                if row:
+                    account_id = int(row[0])
+                else:
+                    account_nickname = get_account_nickname_or_default(
+                        broker, broker_number, account_number
+                    )
+                    cursor.execute(
+                        """
+                        INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (broker, account_number, broker_number, account_nickname),
+                    )
+                    account_id = int(cursor.lastrowid)
+                account_id_cache[account_key] = account_id
+
+            rows_to_insert.append((account_id, ticker, quantity, price))
+
+        if rows_to_insert:
+            cursor.executemany(
+                """
+                INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
+                VALUES (?, ?, ?, ?, DATETIME('now'))
+                """,
+                rows_to_insert,
+            )
+            inserted_rows = len(rows_to_insert)
+            logger.info("Holdings batch update inserted %d rows.", inserted_rows)
+
+    return inserted_rows
 
 
 def update_historical_holdings():

@@ -8,12 +8,17 @@ providing sensible fallbacks when some IDs are omitted.
 
 from __future__ import annotations
 
+import logging
 from typing import Iterable, Optional
 
 from discord.ext import commands
 from discord.abc import Messageable
 
 from utils import config_utils
+from utils.logging_setup import setup_logging
+
+logger = logging.getLogger(__name__)
+setup_logging()
 
 
 def _configured_channel_ids() -> tuple[int, ...]:
@@ -28,6 +33,9 @@ def _configured_channel_ids() -> tuple[int, ...]:
     seen: set[int] = set()
     for channel_id in (
         config_utils.DISCORD_PRIMARY_CHANNEL,
+        logger.info(
+            f"DISCORD PRIMARY CHANNEL SET IN _configured_channel_ids in channel_resolver.py as {config_utils.DISCORD_PRIMARY_CHANNEL}"
+        ),
         config_utils.DISCORD_SECONDARY_CHANNEL,
         config_utils.DISCORD_TERTIARY_CHANNEL,
     ):
@@ -51,9 +59,7 @@ def _iter_preferred_ids(preferred_id: Optional[int]) -> Iterable[int]:
             yield channel_id
 
 
-def resolve_reply_channel(
-    bot: commands.Bot, preferred_id: Optional[int] = None
-):
+def resolve_reply_channel(bot: commands.Bot, preferred_id: Optional[int] = None):
     """Return the best available Discord channel for responses.
 
     Parameters

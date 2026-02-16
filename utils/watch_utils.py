@@ -276,6 +276,14 @@ class WatchListManager:
         ticker = ticker.upper()
 
         if self.remove_ticker(ticker):
+            try:
+                from utils import split_watch_utils
+
+                split_watch_utils.remove_split_watch(ticker)
+            except Exception as exc:
+                logging.warning(
+                    "Failed to remove %s from split watchlist: %s", ticker, exc
+                )
             await ctx.send(f"Stopped watching {ticker} across all accounts.")
             logging.info(f"Stopped watching {ticker}.")
         else:
@@ -304,6 +312,12 @@ async def send_reminder_message_embed(ctx):
             target_ctx = watch_channel
 
     expired_entries = watch_list_manager.move_expired_to_sell()
+    try:
+        from utils import split_watch_utils
+
+        split_watch_utils.cleanup_expired_tickers()
+    except Exception as exc:
+        logging.warning("Failed to cleanup split watchlist: %s", exc)
     if expired_entries:
         lines = [
             f"- {entry['ticker']} (Split Date: {entry['split_date']}, Ratio: {entry['split_ratio']})"
@@ -407,6 +421,12 @@ async def send_reminder_message(bot):
     logging.info(f"Automated reminder message for {datetime.now()}")
     update_historical_holdings()
     expired_entries = watch_list_manager.move_expired_to_sell()
+    try:
+        from utils import split_watch_utils
+
+        split_watch_utils.cleanup_expired_tickers()
+    except Exception as exc:
+        logging.warning("Failed to cleanup split watchlist: %s", exc)
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()

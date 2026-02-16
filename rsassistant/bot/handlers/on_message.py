@@ -2,10 +2,11 @@
 
 import re
 import asyncio
+import errno
 from datetime import datetime, timedelta, date
 from collections import defaultdict
+from pathlib import Path
 from typing import Sequence
-import requests
 
 from utils.logging_setup import logger
 from utils.config_utils import BOT_PREFIX, load_account_mappings
@@ -24,7 +25,7 @@ from utils.update_utils import update_and_restart, revert_and_restart
 from utils.order_exec import schedule_and_execute, send_sell_command
 from utils.order_queue_manager import get_order_queue
 from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
-from utils.monitor_utils import has_acted_today, record_action_today
+from utils.monitor_utils import try_record_action_today
 from utils.config_utils import (
     AUTO_BUY_WATCHLIST,
     AUTO_SELL_LIVE,
@@ -73,6 +74,14 @@ _refresh_discovery_task = None
 AREB_TICKER = "AREB"
 AREB_QUANTITY_THRESHOLD = 50
 _AREB_ALERT_SUFFIX = "_AREB_THRESHOLD"
+
+
+def _fd_usage_hint() -> str:
+    fd_dir = Path("/proc/self/fd")
+    try:
+        return f"fd_count={len(list(fd_dir.iterdir()))}"
+    except Exception:
+        return "fd_count=unknown"
 
 
 def format_mentions(user_ids: Sequence[str], enabled: bool, force: bool = False) -> str:
@@ -503,6 +512,15 @@ async def _await_refresh_window(bot, duration: timedelta) -> None:
     except asyncio.CancelledError:
         logger.info("Holdings refresh summary window cancelled before completion.")
         raise
+    except Exception as exc:
+        if isinstance(exc, OSError) and exc.errno == errno.EMFILE:
+            logger.error(
+                "Holdings refresh summary task failed: %s (%s)",
+                exc,
+                _fd_usage_hint(),
+            )
+        else:
+            logger.error("Holdings refresh summary task failed: %s", exc)
     finally:
         _reset_refresh_state(cancel_timer=False)
 
@@ -633,13 +651,10 @@ async def queue_missing_watchlist_autobuys(
 
 
 async def _audit_holdings(bot, message, parsed_holdings):
-    """Record and announce missing watchlist positions during a holdings audit."""
-
+    """Accumulate audit deltas for ..all without per-account message spam."""
     missing = compute_account_missing_tickers(parsed_holdings)
-    response_channel = resolve_message_destination(bot, message.channel)
     for account, tickers in missing.items():
         _missing_summary[account].update(tickers)
-        await response_channel.send(f"Missing in {account}: {', '.join(tickers)}")
 
     queued_count = await queue_missing_watchlist_autobuys(bot, message.channel, missing)
     if queued_count:
@@ -796,7 +811,7 @@ async def handle_primary_channel(bot, message):
                     if ticker == AREB_TICKER and quantity > AREB_QUANTITY_THRESHOLD:
                         if not is_broker_ignored(broker):
                             alert_key = f"{ticker}{_AREB_ALERT_SUFFIX}"
-                            if not has_acted_today(broker, account_name, alert_key):
+                            if try_record_action_today(broker, account_name, alert_key):
                                 areb_alerts.append(
                                     {
                                         "broker": broker,
@@ -805,13 +820,12 @@ async def handle_primary_channel(bot, message):
                                         "price": price,
                                     }
                                 )
-                                record_action_today(broker, account_name, alert_key)
 
                     if ticker in IGNORE_TICKERS_SET or is_broker_ignored(broker):
                         continue
                     if price < threshold or quantity <= 0:
                         continue
-                    if has_acted_today(broker, account_name, ticker):
+                    if not try_record_action_today(broker, account_name, ticker):
                         continue
 
                     # Accumulate for summary
@@ -830,8 +844,6 @@ async def handle_primary_channel(bot, message):
                         sell_cmd = f"!rsa sell {quantity} {ticker} {broker} false"
                         sell_commands.append(sell_cmd)
 
-                    # Record that we've acted to avoid duplicates the same day
-                    record_action_today(broker, account_name, ticker)
                 except Exception as exc:
                     logger.error(
                         f"Monitor/auto-sell step failed for holding {h}: {exc}"
@@ -902,7 +914,10 @@ async def handle_primary_channel(bot, message):
             if _audit_active:
                 await _audit_holdings(bot, message, parsed_holdings)
         except Exception as e:
-            logger.error(f"Error parsing embed message: {e}")
+            if isinstance(e, OSError) and e.errno == errno.EMFILE:
+                logger.error("Error parsing embed message: %s (%s)", e, _fd_usage_hint())
+            else:
+                logger.error(f"Error parsing embed message: {e}")
     elif message.author.bot:
         logger.info("Parsing regular order message.")
         lowered = lowered_content
@@ -1037,25 +1052,83 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         logger.info("Market closed – scheduling next market open")
 
     # Prepare scheduling details and enqueue
-    order_id = f"{ticker.upper()}_{exec_time.strftime('%Y%m%d_%H%M')}_buy"
+    from utils.config_utils import load_autobuy_config
+
+    config = load_autobuy_config()
+    standard_order = config.get("standard_order") or {}
+    overrides = [
+        item
+        for item in (config.get("overrides") or [])
+        if isinstance(item, dict)
+    ]
+
+    excluded_brokers = []
+    for item in overrides:
+        broker_name = (item.get("broker") or "").strip()
+        if broker_name:
+            excluded_brokers.append(broker_name)
+
+    broker_parts = ["all"]
+    if excluded_brokers:
+        broker_parts.append("not")
+        broker_parts.extend(excluded_brokers)
+
+    standard_broker = " ".join(broker_parts)
+    standard_quantity = standard_order.get("quantity")
+    if standard_quantity in (None, ""):
+        standard_quantity = quantity
+
+    standard_order_id = f"{ticker.upper()}_{exec_time.strftime('%Y%m%d_%H%M')}_buy"
     bot.loop.create_task(
         schedule_and_execute(
             ctx=target_channel,
             action="buy",
             ticker=ticker,
-            quantity=quantity,
-            broker="all",
+            quantity=standard_quantity,
+            broker=standard_broker,
             execution_time=exec_time,
             bot=bot,
-            order_id=order_id,
+            order_id=standard_order_id,
         )
     )
+
     confirmation = (
-        f"Scheduled autobuy: {ticker.upper()} x{quantity} at "
-        f"{exec_time.strftime('%Y-%m-%d %H:%M')} ({order_id})"
+        f"Scheduled autobuy: {ticker.upper()} x{standard_quantity} at "
+        f"{exec_time.strftime('%Y-%m-%d %H:%M')} ({standard_order_id})"
     )
+    if excluded_brokers:
+        confirmation += f" [excluded: {', '.join(excluded_brokers)}]"
     await target_channel.send(confirmation)
     logger.info(confirmation)
+
+    for item in overrides:
+        broker_name = (item.get("broker") or "").strip()
+        if not broker_name:
+            continue
+        override_quantity = item.get("quantity")
+        if override_quantity in (None, ""):
+            override_quantity = quantity
+        override_order_id = (
+            f"{ticker.upper()}_{exec_time.strftime('%Y%m%d_%H%M')}_buy_{broker_name.lower()}"
+        )
+        bot.loop.create_task(
+            schedule_and_execute(
+                ctx=target_channel,
+                action="buy",
+                ticker=ticker,
+                quantity=override_quantity,
+                broker=broker_name,
+                execution_time=exec_time,
+                bot=bot,
+                order_id=override_order_id,
+            )
+        )
+        override_confirmation = (
+            f"Scheduled autobuy override: {ticker.upper()} x{override_quantity} "
+            f"{broker_name} at {exec_time.strftime('%Y-%m-%d %H:%M')} ({override_order_id})"
+        )
+        await target_channel.send(override_confirmation)
+        logger.info(override_confirmation)
 
 
 def build_policy_summary(ticker, policy_info, fallback_url):

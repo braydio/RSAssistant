@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 /path/to/auto-rsa" >&2
+  echo "Usage: $0 /path/to/auto-rsa (looks for helper_api.py/helperAPI.py in src/ then root)" >&2
   exit 1
 fi
 
@@ -27,7 +27,45 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
-( cd "$auto_rsa_dir" && git apply "$patch_file" )
+target_src="$auto_rsa_dir/src/helper_api.py"
+target_root="$auto_rsa_dir/helper_api.py"
+target_src_alt="$auto_rsa_dir/src/helperAPI.py"
+target_root_alt="$auto_rsa_dir/helperAPI.py"
+
+if [[ -f "$target_src" ]]; then
+  echo "Applying patch to $target_src"
+  ( cd "$auto_rsa_dir" && git apply "$patch_file" )
+elif [[ -f "$target_root" ]]; then
+  echo "Applying patch to $target_root"
+  temp_patch="$(mktemp)"
+  sed \
+    -e 's|a/src/helper_api.py|a/helper_api.py|g' \
+    -e 's|b/src/helper_api.py|b/helper_api.py|g' \
+    "$patch_file" > "$temp_patch"
+  ( cd "$auto_rsa_dir" && git apply "$temp_patch" )
+  rm -f "$temp_patch"
+elif [[ -f "$target_src_alt" ]]; then
+  echo "Applying patch to $target_src_alt"
+  temp_patch="$(mktemp)"
+  sed \
+    -e 's|a/src/helper_api.py|a/src/helperAPI.py|g' \
+    -e 's|b/src/helper_api.py|b/src/helperAPI.py|g' \
+    "$patch_file" > "$temp_patch"
+  ( cd "$auto_rsa_dir" && git apply "$temp_patch" )
+  rm -f "$temp_patch"
+elif [[ -f "$target_root_alt" ]]; then
+  echo "Applying patch to $target_root_alt"
+  temp_patch="$(mktemp)"
+  sed \
+    -e 's|a/src/helper_api.py|a/helperAPI.py|g' \
+    -e 's|b/src/helper_api.py|b/helperAPI.py|g' \
+    "$patch_file" > "$temp_patch"
+  ( cd "$auto_rsa_dir" && git apply "$temp_patch" )
+  rm -f "$temp_patch"
+else
+  echo "helper_api.py/helperAPI.py not found in $auto_rsa_dir/src or $auto_rsa_dir" >&2
+  exit 1
+fi
 
 auto_rsa_holdings_file="${AUTO_RSA_HOLDINGS_FILE:-}"
 

@@ -168,19 +168,20 @@ def extract_reverse_split_details(
         len(clipped),
     )
     try:
-        response = requests.post(
+        with requests.post(
             OPENAI_CHAT_URL,
             headers=headers,
             json=payload,
             timeout=OPENAI_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        data = response.json()
+        ) as response:
+            response.raise_for_status()
+            data = response.json()
+            request_id = response.headers.get("x-request-id", "unknown")
+            status_code = response.status_code
         elapsed = time.monotonic() - start_time
-        request_id = response.headers.get("x-request-id", "unknown")
         logger.info(
             "OpenAI request succeeded (status=%s, elapsed=%.2fs, request_id=%s).",
-            response.status_code,
+            status_code,
             elapsed,
             request_id,
         )

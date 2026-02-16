@@ -5,9 +5,9 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-
 import requests
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 from utils.logging_setup import logger
 from utils.sec_policy_fetcher import SECPolicyFetcher
@@ -58,9 +58,10 @@ class SplitPolicyResolver:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
             }
-            response = requests.get(nasdaq_url, headers=headers, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
+            with requests.get(nasdaq_url, headers=headers, timeout=10) as response:
+                response.raise_for_status()
+                html = response.text
+            soup = BeautifulSoup(html, "html.parser")
             links = [
                 link["href"]
                 for link in soup.find_all("a", href=True)
@@ -111,14 +112,16 @@ class SplitPolicyResolver:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
             }
-            response = requests.get(sec_url, headers=headers, timeout=10)
-            response.raise_for_status()
+            with requests.get(sec_url, headers=headers, timeout=10) as response:
+                response.raise_for_status()
+                content_type = response.headers.get("Content-Type", "")
+                response_text = response.text
 
-            if "html" in response.headers.get("Content-Type", ""):
-                soup = BeautifulSoup(response.text, "html.parser")
+            if "html" in content_type:
+                soup = BeautifulSoup(response_text, "html.parser")
                 text = soup.get_text(separator=" ")
             else:
-                text = response.text
+                text = response_text
 
             text = " ".join(text.split())
             logger.info(f"Fetched SEC filing text ({len(text)} characters)")
@@ -131,6 +134,12 @@ class SplitPolicyResolver:
     def _extract_main_text(html_text: str) -> str:
         """Return the most relevant text block from an HTML document."""
         soup = BeautifulSoup(html_text, "html.parser")
+        unwanted_attr = re.compile(
+            r"(nav|menu|footer|header|sidebar|cookie|consent|subscribe|promo|banner|"
+            r"advert|ad-|ads|social|share|related|breadcrumb|search|modal|popup|cta|"
+            r"hero|announcement)",
+            re.IGNORECASE,
+        )
         for tag in soup(
             [
                 "script",
@@ -147,12 +156,52 @@ class SplitPolicyResolver:
         ):
             tag.decompose()
 
+        for tag in soup.find_all(True):
+            if not tag or not isinstance(tag, Tag):
+                continue
+            try:
+                class_list = tag.get("class") or []
+                attr_text = " ".join(
+                    filter(
+                        None,
+                        [
+                            tag.get("id", ""),
+                            " ".join(class_list),
+                            tag.get("role", ""),
+                        ],
+                    )
+                )
+            except Exception:
+                continue
+            if attr_text and unwanted_attr.search(attr_text):
+                tag.decompose()
+
         candidates = soup.find_all(["main", "article", "section", "div", "body"])
         best_text = ""
         best_score = 0
         for candidate in candidates:
             text = candidate.get_text(separator=" ", strip=True)
-            score = len(text.split())
+            words = text.split()
+            word_count = len(words)
+            if word_count < 40:
+                continue
+
+            link_text = " ".join(
+                link.get_text(separator=" ", strip=True)
+                for link in candidate.find_all("a")
+            )
+            link_word_count = len(link_text.split())
+            link_density = link_word_count / max(word_count, 1)
+
+            bonus = 0
+            if candidate.name in {"article", "main"}:
+                bonus += 50
+            if re.search(r"press release|news release|investor", text, re.IGNORECASE):
+                bonus += 20
+            if re.search(r"reverse (?:stock )?split", text, re.IGNORECASE):
+                bonus += 20
+
+            score = word_count * (1 - min(link_density, 0.9)) + bonus
             if score > best_score:
                 best_score = score
                 best_text = text
@@ -162,20 +211,92 @@ class SplitPolicyResolver:
 
         return " ".join(best_text.split())
 
+    @staticmethod
+    def _trim_to_context(text: str, ticker: str | None = None) -> str:
+        if not text:
+            return text
+
+        lowered = text.lower()
+        priorities = [
+            "fractional",
+            "fractional share",
+            "fractional shares",
+            "handling of fractional shares",
+            "cash in lieu",
+            "rounded up",
+            "round up",
+            "rounded to the nearest",
+        ]
+        triggers = ["reverse", "reverse stock split", "reverse split"]
+
+        start_idx = None
+
+        for phrase in priorities:
+            idx = lowered.find(phrase)
+            if idx != -1:
+                start_idx = idx if start_idx is None else min(start_idx, idx)
+
+        if start_idx is None and ticker:
+            idx = lowered.find(ticker.lower())
+            if idx != -1:
+                start_idx = idx
+
+        if start_idx is None:
+            for phrase in triggers:
+                idx = lowered.find(phrase)
+                if idx != -1:
+                    start_idx = idx if start_idx is None else min(start_idx, idx)
+
+        if start_idx is None:
+            return text
+
+        start_idx = max(0, start_idx - 120)
+        return text[start_idx:]
+
+    @staticmethod
+    def _needs_sec_fallback(
+        text: str | None, ticker: str | None, min_length: int = 400
+    ) -> bool:
+        if not text:
+            return True
+        if len(text) < min_length:
+            return True
+        lowered = text.lower()
+        triggers = ["reverse", "fractional", "shareholder"]
+        if any(trigger in lowered for trigger in triggers):
+            return False
+        if ticker and ticker.lower() in lowered:
+            return False
+        return True
+
     @classmethod
-    def fetch_body_text(cls, url):
+    def fetch_body_text(cls, url, ticker: str | None = None):
         """Retrieve cleaned main body text from a webpage."""
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
             }
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
+            response = None
+            with requests.get(url, headers=headers, timeout=10) as response:
+                response.raise_for_status()
+                html = response.text or ""
 
-            text = cls._extract_main_text(response.text)
+            text = cls._extract_main_text(html)
+            text = cls._trim_to_context(text, ticker=ticker)
             logger.info(f"Fetched body text ({len(text)} characters) from {url}")
             return text
         except Exception as e:
+            snippet = ""
+            try:
+                snippet = (response.text or "")[:200].replace("\n", " ")
+            except Exception:
+                snippet = ""
+            if snippet:
+                logger.error(
+                    "Body fetch failed for %s. HTML head snippet: %s",
+                    url,
+                    snippet,
+                )
             logger.error(f"Error fetching body text from {url}: {e}")
             return None
 
@@ -266,13 +387,14 @@ class SplitPolicyResolver:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
             }
-            response = requests.get(nasdaq_url, headers=headers, timeout=10)
-            response.raise_for_status()
+            with requests.get(nasdaq_url, headers=headers, timeout=10) as response:
+                response.raise_for_status()
+                html = response.text
 
-            normalized_text = normalize_cash_in_lieu_phrases(response.text).lower()
+            normalized_text = normalize_cash_in_lieu_phrases(html).lower()
             policy = cls.detect_policy_from_text(normalized_text, cls.NASDAQ_KEYWORDS)
             sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker=ticker)
-            press_url = cls.get_press_release_link_from_nasdaq(response.text)
+            press_url = cls.get_press_release_link_from_nasdaq(html)
 
             return {
                 "policy": policy,
@@ -441,7 +563,7 @@ class SplitPolicyResolver:
                 )
                 source_url = nasdaq_url
             if source_url:
-                body_text = cls.fetch_body_text(source_url)
+                body_text = cls.fetch_body_text(source_url, ticker=ticker)
                 if body_text:
                     cls.log_full_return(source_url, body_text)
                     nasdaq_result["body_text"] = body_text
@@ -449,6 +571,19 @@ class SplitPolicyResolver:
                         nasdaq_result["effective_date"] = cls.extract_effective_date(
                             body_text
                         )
+                    if cls._needs_sec_fallback(body_text, ticker):
+                        logger.info(
+                            "Body text lacks key triggers; attempting SEC fallback for %s",
+                            ticker,
+                        )
+                        sec_fallback = cls.sec_fetcher.fetch_latest_filing_text(
+                            ticker
+                        )
+                        if sec_fallback:
+                            body_text = sec_fallback["text"]
+                            source_url = sec_fallback["url"]
+                            nasdaq_result["body_text"] = body_text
+                            nasdaq_result["sec_url"] = source_url
                     llm_details = extract_reverse_split_details(
                         body_text, source_url=source_url, ticker=ticker
                     )

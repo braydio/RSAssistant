@@ -52,7 +52,9 @@ def mark_account_bought(ticker, account_name):
 def update_split_status():
     today = datetime.date.today()
     for ticker, info in data["watchlist"].items():
-        split_dt = datetime.datetime.strptime(info["split_date"], "%Y-%m-%d").date()
+        split_dt = _parse_split_date(info.get("split_date"))
+        if not split_dt:
+            continue
         if today >= split_dt and info["status"] == "buying":
             info["status"] = "selling"
     save_data()
@@ -81,6 +83,23 @@ def cleanup_completed_tickers():
     save_data()
 
 
+def cleanup_expired_tickers():
+    """Remove tickers whose split date has passed."""
+    today = datetime.date.today()
+    to_remove = []
+    for ticker, info in data["watchlist"].items():
+        split_dt = _parse_split_date(info.get("split_date"))
+        if not split_dt:
+            continue
+        if split_dt < today:
+            to_remove.append(ticker)
+    for ticker in to_remove:
+        del data["watchlist"][ticker]
+    if to_remove:
+        save_data()
+    return to_remove
+
+
 # Query functions
 def get_watchlist():
     return list(data["watchlist"].keys())
@@ -95,6 +114,15 @@ def get_full_watchlist():
     return data.get("watchlist", {})
 
 
+def remove_split_watch(ticker: str) -> bool:
+    ticker = ticker.upper()
+    if ticker in data["watchlist"]:
+        del data["watchlist"][ticker]
+        save_data()
+        return True
+    return False
+
+
 def get_all_accounts():
     """Returns a set of all known account names across the system. You can refine this later."""
     # For now, gather accounts seen in buy lists
@@ -102,6 +130,15 @@ def get_all_accounts():
     for ticker_info in data["watchlist"].values():
         accounts.update(ticker_info.get("accounts_bought", []))
     return accounts
+
+
+def _parse_split_date(split_date: str | None) -> datetime.date | None:
+    if not split_date:
+        return None
+    try:
+        return datetime.datetime.strptime(split_date, "%Y-%m-%d").date()
+    except ValueError:
+        return None
 
 
 # Initial load

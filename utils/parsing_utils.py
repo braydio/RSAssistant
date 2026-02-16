@@ -71,6 +71,14 @@ def _log_order_failure(reason: str, details: str) -> None:
     logger.warning("Order processing failed: %s | details=%s", reason, details)
 
 
+def _normalize_url_candidate(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    cleaned = url.strip().strip("<>()[]{}\"'`")
+    cleaned = cleaned.rstrip(").,;:]>")
+    return cleaned or None
+
+
 def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
     """Return a ticker symbol by inspecting a linked article when needed.
 
@@ -81,18 +89,19 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
         Optional[str]: Uppercase ticker if one can be resolved; otherwise ``None``.
     """
 
+    url = _normalize_url_candidate(url)
     if not url:
         logger.warning("No URL provided for remote ticker extraction.")
         return None
 
     try:
-        response = requests.get(url, headers=_REMOTE_FETCH_HEADERS, timeout=10)
-        response.raise_for_status()
+        with requests.get(url, headers=_REMOTE_FETCH_HEADERS, timeout=10) as response:
+            response.raise_for_status()
+            html = response.text or ""
     except RequestException as exc:
         logger.warning("Unable to fetch %s for remote ticker detection: %s", url, exc)
         return None
 
-    html = response.text or ""
     html = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html)
     text = re.sub(r"<[^>]+>", " ", html)
 
@@ -105,6 +114,25 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
 
     logger.warning("Ticker not found within remote source %s", url)
     return None
+
+
+def _remote_contains_reverse_split(url: Optional[str]) -> bool:
+    url = _normalize_url_candidate(url)
+    if not url:
+        return False
+    try:
+        with requests.get(url, headers=_REMOTE_FETCH_HEADERS, timeout=10) as response:
+            response.raise_for_status()
+            html = response.text or ""
+    except RequestException as exc:
+        logger.warning("Unable to fetch %s for reverse split detection: %s", url, exc)
+        return False
+
+    html = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html)
+    text = re.sub(r"<[^>]+>", " ", html)
+    return (
+        re.search(r"reverse\s+(?:stock\s+)?split", text, re.IGNORECASE) is not None
+    )
 
 
 # RIP
@@ -137,6 +165,11 @@ order_patterns = {
         "Chase": r"(Chase)\s(\d+)\saccount\s(\d{4}):\sThe\sorder\sverification\swas\ssuccessful",
         "Webull": r"(Webull)\s(\d+):\s(buy|sell)\s(\d+\.?\d*)\sof\s(\w+)\sin\s(?:xxxx|xxxx)?(\w+):\s(Success|Failed)",
     },
+    "notification": {
+        # Example:
+        # "Robinhood 2: Check phone app for verification prompt. You have ~60 seconds."
+        "Robinhood": r"(Robinhood)\s(\d+):\sCheck\sphone\sapp\sfor\sverification\sprompt\.\s*You\shave\s~?\d+\sseconds\.?",
+    },
 }
 
 
@@ -163,6 +196,8 @@ def parse_order_message(content):
                     handle_incomplete_order(match, broker_name, broker_number)
                 elif order_type == "verification":
                     handle_verification(match, broker_name, broker_number)
+                elif order_type == "notification":
+                    handle_notification(match, broker_name, broker_number)
                 return  # Exit once a match is found
 
     logger.error(f"No match found for message: {content}")
@@ -539,6 +574,15 @@ def handle_verification(match, broker_name, broker_number):
         )
     except Exception as e:
         logger.error(f"Unexpected error in handle_verification: {e}")
+
+
+def handle_notification(match, broker_name, broker_number):
+    """Handle known non-order broker messages (for example MFA prompts)."""
+    logger.info(
+        "Received %s %s verification prompt notification; no order action required.",
+        broker_name,
+        broker_number,
+    )
 
 
 def process_verified_orders(broker_name, broker_number, account_number, order):
@@ -1052,7 +1096,7 @@ def alert_channel_message(content):
     # Regex pattern to extract the URL
     url_pattern = r"http[s]?://[^\s]+"
     url_match = re.search(url_pattern, normalized_content)
-    url = url_match.group(0) if url_match else None
+    url = _normalize_url_candidate(url_match.group(0)) if url_match else None
 
     if url:
         logger.info(f"URL detected in alert message: {url}")
@@ -1076,6 +1120,8 @@ def alert_channel_message(content):
         re.search(r"reverse\s+(?:stock\s+)?split", normalized_content, re.IGNORECASE)
         is not None
     )
+    if not reverse_split_confirm and url:
+        reverse_split_confirm = _remote_contains_reverse_split(url)
     logger.info(
         "Reverse split detected=%s pattern=%s",
         reverse_split_confirm,

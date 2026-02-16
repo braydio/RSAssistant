@@ -12,11 +12,12 @@ def get_reverse_split_handler_from_url(url: str) -> str:
     """Return the detected fractional share policy from the provided URL."""
 
     try:
-        response = requests.get(url, timeout=5)
-        if response.status_code != 200:
-            return "unknown"
+        with requests.get(url, timeout=5) as response:
+            if response.status_code != 200:
+                return "unknown"
+            html = response.text
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(html, "html.parser")
         text = normalize_cash_in_lieu_phrases(soup.get_text(separator=" "))
 
         if "Roundup" in text:
