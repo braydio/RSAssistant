@@ -7,7 +7,7 @@ RSAssistant.py
   -> rsassistant/bot/core.py (bot setup + plugin loading)
     -> cogs + background tasks
       -> utils/ (parsing, policy resolution, scheduling, persistence)
-      -> volumes/ (DB, logs, Excel output)
+      -> volumes/ (DB, CSV logs, legacy archives)
 ```
 
 ## Module boundaries
@@ -22,8 +22,8 @@ RSAssistant.py
 All runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
 - `db/` (SQLite DB, split watchlist, order queue, auto-rsa holdings snapshot)
-- `logs/` (application + holdings logs)
-- `excel/` (ReverseSplitLog.xlsx)
+- `logs/` (application logs + CSV exports such as holdings/orders)
+- `excel/` (legacy archive only; no runtime writes)
 
 ## Auto-rsa integration
 
