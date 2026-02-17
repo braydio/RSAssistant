@@ -93,6 +93,8 @@ If auto-rsa writes a JSON snapshot to a shared volume, RSAssistant can ingest it
 
 RSAssistant polls for changes and updates `volumes/logs/holdings_log.csv`.
 
+RSAssistant validates holdings CSV schema during ingest (required/exact columns and numeric/timestamp coercion). If the file or rows are invalid, ingest is rejected and SQL state is not updated.
+
 ### Auto-rsa patch quickstart (holdings snapshot file)
 
 You do not need to clone auto-rsa inside this repo. The patch can be applied in any

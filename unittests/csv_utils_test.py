@@ -2,51 +2,42 @@ import csv
 import logging
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import csv_utils
 
 
-def run_save_holdings(tmp_path, missing_column, caplog):
-    file_path = tmp_path / "holdings.csv"
-    headers = [
-        "Key",
-        "Broker Name",
-        "Broker Number",
-        "Account Number",
-        "Stock",
-        "Quantity",
-        "Price",
-        "Position Value",
-        "Account Total",
-        "Timestamp",
-    ]
-    headers.remove(missing_column)
-    with open(file_path, "w", newline="") as f:
-        writer = csv.writer(f)
+def _write_holdings_csv(path, headers, rows):
+    """Write a holdings CSV fixture with explicit headers and rows."""
+
+    with open(path, "w", newline="") as file:
+        writer = csv.writer(file)
         writer.writerow(headers)
-        writer.writerow(
-            [
-                "abc" if missing_column != "Key" else "",
-                "Broker",
-                "1",
-                "A1",
-                "XYZ",
-                1,
-                2,
-                2,
-                3,
-                "2020-01-01 00:00:00" if missing_column != "Timestamp" else "",
-            ]
-        )
+        writer.writerows(rows)
+
+
+def test_missing_columns_fails_and_blocks_sql(tmp_path, caplog):
+    csv_path = tmp_path / "holdings.csv"
+    headers = [h for h in csv_utils.HOLDINGS_HEADERS if h != "Timestamp"]
+    _write_holdings_csv(
+        csv_path,
+        headers,
+        [["k1", "Broker", "1", "A1", "XYZ", 1, 2, 2, 3]],
+    )
+
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+
+    calls = {"count": 0}
+
+    def fake_batch(_):
+        calls["count"] += 1
+        return 0
+
+    csv_utils.update_holdings_live_batch = fake_batch
 
     caplog.clear()
-    csv_utils.HOLDINGS_LOG_CSV = str(file_path)
-    csv_utils.update_holdings_live = lambda **kwargs: None
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.ERROR)
     csv_utils.save_holdings_to_csv(
         [
             {
@@ -59,13 +50,100 @@ def run_save_holdings(tmp_path, missing_column, caplog):
             }
         ]
     )
-    return [r.message for r in caplog.records]
+
+    assert calls["count"] == 0
+    assert any("missing required columns" in r.message for r in caplog.records)
 
 
-@pytest.mark.parametrize("missing", ["Key", "Timestamp"])
-def test_missing_columns_warning(tmp_path, caplog, missing):
-    messages = run_save_holdings(tmp_path, missing, caplog)
-    assert any("missing columns" in m for m in messages)
+def test_extra_columns_fails_and_blocks_sql(tmp_path, caplog):
+    csv_path = tmp_path / "holdings.csv"
+    headers = csv_utils.HOLDINGS_HEADERS + ["Unexpected"]
+    _write_holdings_csv(
+        csv_path,
+        headers,
+        [
+            [
+                "k1",
+                "Broker",
+                "1",
+                "A1",
+                "XYZ",
+                1,
+                2,
+                2,
+                3,
+                "2020-01-01 00:00:00",
+                "extra",
+            ]
+        ],
+    )
+
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+
+    calls = {"count": 0}
+
+    def fake_batch(_):
+        calls["count"] += 1
+        return 0
+
+    csv_utils.update_holdings_live_batch = fake_batch
+
+    caplog.clear()
+    caplog.set_level(logging.ERROR)
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Broker",
+                "group": "1",
+                "account": "A1",
+                "ticker": "XYZ",
+                "quantity": 2,
+                "price": 3,
+            }
+        ]
+    )
+
+    assert calls["count"] == 0
+    assert any("unexpected columns" in r.message for r in caplog.records)
+
+
+def test_type_coercion_failure_blocks_sql(tmp_path, caplog):
+    csv_path = tmp_path / "holdings.csv"
+    _write_holdings_csv(
+        csv_path,
+        csv_utils.HOLDINGS_HEADERS,
+        [["k1", "Broker", "1", "A1", "XYZ", "bad", 2, 2, 3, "2020-01-01 00:00:00"]],
+    )
+
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+
+    calls = {"count": 0}
+
+    def fake_batch(_):
+        calls["count"] += 1
+        return 0
+
+    csv_utils.update_holdings_live_batch = fake_batch
+
+    caplog.clear()
+    caplog.set_level(logging.ERROR)
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Broker",
+                "group": "1",
+                "account": "A1",
+                "ticker": "XYZ",
+                "quantity": 2,
+                "price": 3,
+            }
+        ]
+    )
+
+    assert calls["count"] == 0
+    assert any("invalid Quantity value" in r.message for r in caplog.records)
 
 
 def test_get_top_holdings_refreshes_data(tmp_path):
@@ -136,10 +214,11 @@ def test_save_holdings_negative_quantity_skips_sql(tmp_path):
 
     calls = {"count": 0}
 
-    def fake_update(**kwargs):
+    def fake_batch(_rows):
         calls["count"] += 1
+        return 0
 
-    csv_utils.update_holdings_live = fake_update
+    csv_utils.update_holdings_live_batch = fake_batch
 
     csv_utils.save_holdings_to_csv(
         [
@@ -164,18 +243,18 @@ def test_save_holdings_negative_quantity_skips_sql(tmp_path):
     assert calls["count"] == 0
 
 
-def test_save_holdings_sql_error_does_not_block_csv(tmp_path, caplog):
+def test_successful_ingest_writes_sql_only_for_valid_rows(tmp_path):
     csv_path = tmp_path / "holdings.csv"
     csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
     csv_utils.CSV_LOGGING_ENABLED = True
 
-    def failing_update(**kwargs):
-        raise RuntimeError("boom")
+    sql_calls = []
 
-    csv_utils.update_holdings_live = failing_update
+    def fake_batch(rows):
+        sql_calls.append(rows)
+        return len(rows)
 
-    caplog.clear()
-    caplog.set_level(logging.WARNING)
+    csv_utils.update_holdings_live_batch = fake_batch
 
     csv_utils.save_holdings_to_csv(
         [
@@ -186,17 +265,25 @@ def test_save_holdings_sql_error_does_not_block_csv(tmp_path, caplog):
                 "ticker": "AMZE",
                 "quantity": 1,
                 "price": 1.25,
-            }
+            },
+            {
+                "broker": "Fennel",
+                "group": "1",
+                "account": "0002",
+                "ticker": "EJH",
+                "quantity": -1,
+                "price": 2.76,
+            },
         ]
     )
 
-    assert csv_path.exists()
-    with open(csv_path, newline="") as f:
-        rows = list(csv.DictReader(f))
+    with open(csv_path, newline="") as file:
+        rows = list(csv.DictReader(file))
 
-    assert len(rows) == 1
-    assert rows[0]["Stock"] == "AMZE"
-    assert any("SQL logging failed" in record.message for record in caplog.records)
+    assert len(rows) == 2
+    assert len(sql_calls) == 1
+    assert len(sql_calls[0]) == 1
+    assert sql_calls[0][0]["ticker"] == "AMZE"
 
 
 def test_save_order_to_csv_disabled(monkeypatch, tmp_path):

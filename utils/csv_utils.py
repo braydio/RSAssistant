@@ -11,19 +11,17 @@ import asyncio
 import csv
 import logging
 import os
-import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 
 import discord
-from discord import Embed
 
 from utils.config_utils import (
     HOLDINGS_LOG_CSV,
     ORDERS_LOG_CSV,
     CSV_LOGGING_ENABLED,
 )
-from utils.sql_utils import update_holdings_live, update_holdings_live_batch
+from utils.sql_utils import update_holdings_live_batch
 from utils.order_exec import send_sell_command
 
 logger = logging.getLogger(__name__)
@@ -52,6 +50,63 @@ ORDERS_HEADERS = [
     "Date",
     "Timestamp",
 ]
+
+
+class CsvSchemaValidationError(ValueError):
+    """Raised when a CSV file or row fails strict schema validation."""
+
+
+def _validate_csv_schema(fieldnames, required_headers, csv_label):
+    """Validate a CSV header row against an exact set of expected headers.
+
+    Args:
+        fieldnames (list[str] | None): Header names returned by ``csv.DictReader``.
+        required_headers (list[str]): Expected set of headers.
+        csv_label (str): Friendly label used in error messages.
+
+    Raises:
+        CsvSchemaValidationError: If required headers are missing or extra
+            headers are present.
+    """
+
+    headers = fieldnames or []
+    missing_headers = [header for header in required_headers if header not in headers]
+    unexpected_headers = [
+        header for header in headers if header not in required_headers
+    ]
+
+    errors = []
+    if missing_headers:
+        errors.append(f"missing required columns: {', '.join(missing_headers)}")
+    if unexpected_headers:
+        errors.append(f"unexpected columns: {', '.join(unexpected_headers)}")
+
+    if errors:
+        raise CsvSchemaValidationError(
+            f"{csv_label} schema invalid ({'; '.join(errors)})"
+        )
+
+
+def _coerce_float(raw_value, column_name, row_index):
+    """Coerce a numeric CSV value to ``float`` with a clear validation error."""
+
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise CsvSchemaValidationError(
+            f"Row {row_index}: invalid {column_name} value '{raw_value}'"
+        ) from exc
+
+
+def _coerce_datetime(raw_value, datetime_format, column_name, row_index):
+    """Coerce a datetime/date CSV value using a strict format."""
+
+    try:
+        return datetime.strptime(str(raw_value), datetime_format)
+    except (TypeError, ValueError) as exc:
+        raise CsvSchemaValidationError(
+            f"Row {row_index}: invalid {column_name} value '{raw_value}'"
+        ) from exc
 
 
 # Utility functions for external tools
@@ -222,13 +277,9 @@ def alert_negative_quantity(order_data):
     try:
         quantity = float(order_data.get("Quantity", 0))
         if quantity < 0:
-            logger.warning(
-                f"Negative Quantity detected in order: {order_data}"
-            )
+            logger.warning(f"Negative Quantity detected in order: {order_data}")
             # You can add additional alert mechanisms here (e.g., email, Discord message)
-            logger.warning(
-                f"ALERT: Negative Quantity detected in order: {order_data}"
-            )
+            logger.warning(f"ALERT: Negative Quantity detected in order: {order_data}")
     except ValueError:
         logger.error(
             f"Invalid Quantity value in order: {order_data.get('Quantity')}, unable to check for negativity."
@@ -287,54 +338,116 @@ def save_order_to_csv(order_data):
 # freshest data is used.
 
 
+def _normalize_holding_row(holding, row_index):
+    """Normalize and validate a holding row before CSV/SQL persistence.
+
+    Args:
+        holding (dict | list | tuple): Input row from parser output.
+        row_index (int): 1-based row index used for validation errors.
+
+    Returns:
+        dict: Normalized holding using :data:`HOLDINGS_HEADERS` keys.
+
+    Raises:
+        CsvSchemaValidationError: If the row cannot be normalized or contains
+            invalid numeric values.
+    """
+
+    if isinstance(holding, dict):
+        row = {
+            "Key": holding.get(
+                "Key",
+                f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
+            ),
+            "Broker Name": holding.get("broker") or holding.get("Broker Name", ""),
+            "Broker Number": holding.get("group") or holding.get("Broker Number", ""),
+            "Account Number": holding.get("account")
+            or holding.get("Account Number", ""),
+            "Stock": holding.get("ticker") or holding.get("Stock", ""),
+            "Quantity": holding.get("quantity", holding.get("Quantity", 0)),
+            "Price": holding.get("price", holding.get("Price", 0)),
+            "Position Value": holding.get("value", holding.get("Position Value", 0)),
+            "Account Total": holding.get(
+                "account_total", holding.get("Account Total", 0)
+            ),
+        }
+    elif isinstance(holding, (list, tuple)):
+        row = dict(zip(HOLDINGS_HEADERS, holding))
+    else:
+        raise CsvSchemaValidationError(
+            f"Row {row_index}: unsupported holding format {type(holding).__name__}"
+        )
+
+    for column in HOLDINGS_HEADERS:
+        row.setdefault(column, "")
+
+    row["Quantity"] = _coerce_float(row["Quantity"], "Quantity", row_index)
+    row["Price"] = _coerce_float(row["Price"], "Price", row_index)
+    row["Position Value"] = row["Quantity"] * row["Price"]
+    row["Account Total"] = _coerce_float(
+        row.get("Account Total", 0), "Account Total", row_index
+    )
+    return row
+
+
+def _validate_existing_holdings_csv(file_path):
+    """Load and validate existing holdings CSV data.
+
+    The function enforces exact header matching and validates per-row types for
+    Quantity, Price, Position Value/Account Total and Timestamp.
+
+    Args:
+        file_path (str): Holdings CSV path.
+
+    Returns:
+        list[dict]: Existing holdings rows if the file is valid.
+
+    Raises:
+        CsvSchemaValidationError: If the file headers or row values are invalid.
+    """
+
+    if not os.path.exists(file_path):
+        return []
+
+    with open(file_path, mode="r", newline="") as file:
+        reader = csv.DictReader(file)
+        _validate_csv_schema(reader.fieldnames, HOLDINGS_HEADERS, "Holdings CSV")
+
+        existing_rows = []
+        for row_index, row in enumerate(reader, start=2):
+            _coerce_float(row.get("Quantity"), "Quantity", row_index)
+            _coerce_float(row.get("Price"), "Price", row_index)
+            _coerce_float(row.get("Position Value"), "Position Value", row_index)
+            _coerce_float(row.get("Account Total"), "Account Total", row_index)
+            _coerce_datetime(
+                row.get("Timestamp"), "%Y-%m-%d %H:%M:%S", "Timestamp", row_index
+            )
+            existing_rows.append(row)
+
+    return existing_rows
+
+
 def save_holdings_to_csv(parsed_holdings):
-    """Save holdings data to the holdings CSV.
+    """Save holdings data to the holdings CSV with strict schema validation.
 
-    ``parsed_holdings`` may contain dictionaries or sequences.  Dictionary
-    entries should use keys such as ``broker``, ``group``, ``account`` and
-    ``ticker`` to represent the standard CSV columns (``Broker Name``, ``Broker
-    Number``, ``Account Number`` and ``Stock`` respectively).  Sequences are
-    interpreted positionally according to :data:`HOLDINGS_HEADERS` for backward
-    compatibility.
+    Existing holdings files are validated before ingest. The function fails when
+    required columns are missing, unexpected columns are present, or numeric/date
+    values cannot be coerced. Parsed holding rows are validated with the same
+    numeric coercion rules.
 
-    SQL persistence is best-effort. Holdings with negative quantities are still
-    written to the CSV log, but SQL logging is skipped to avoid violating the
-    non-negative quantity constraint on the ``HoldingsLive`` table. Any other
-    SQL failures are logged and do not abort the CSV write.
-
-    Each entry written to the CSV will contain all :data:`HOLDINGS_HEADERS`
-    fields plus a ``Timestamp``.  When loading an existing CSV the function
-    emits a warning if required columns such as ``Key`` or ``Timestamp`` are
-    missing. Logging can be disabled via :data:`CSV_LOGGING_ENABLED`.
+    To protect SQL state consistency, SQL writes occur only when all CSV schema
+    and row validations succeed.
     """
 
     if not CSV_LOGGING_ENABLED:
         logger.info("CSV logging disabled; skipping holdings save.")
         return
 
-    # Generate the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        # Load existing holdings from the CSV
-        existing_holdings = []
-        if os.path.exists(HOLDINGS_LOG_CSV):
-            with open(HOLDINGS_LOG_CSV, mode="r", newline="") as file:
-                reader = csv.DictReader(file)
-                if reader.fieldnames:
-                    missing_columns = [
-                        col
-                        for col in ("Key", "Timestamp")
-                        if col not in reader.fieldnames
-                    ]
-                    if missing_columns:
-                        logger.warning(
-                            "Holdings CSV missing columns: %s",
-                            ", ".join(missing_columns),
-                        )
-                existing_holdings = list(reader)
+        existing_holdings = _validate_existing_holdings_csv(HOLDINGS_LOG_CSV)
 
-        # Index existing holdings by their composite key for updates.
         existing_by_key = {}
         for holding in existing_holdings:
             holding_key = (
@@ -346,43 +459,16 @@ def save_holdings_to_csv(parsed_holdings):
             )
             existing_by_key[holding_key] = holding
 
-
-        # Convert parsed_holdings into dicts and update existing rows by key.
         new_holdings = []
         updated_holdings = 0
         sql_batch_holdings = []
-        for holding in parsed_holdings:
-            if isinstance(holding, dict):
-                # Map dictionary keys to standard CSV columns
-                holding_dict = {
-                    "Key": holding.get(
-                        "Key",
-                        f"{holding.get('broker','')}_{holding.get('group','')}_{holding.get('account','')}_{holding.get('ticker','')}",
-                    ),
-                    "Broker Name": holding.get("broker")
-                    or holding.get("Broker Name", ""),
-                    "Broker Number": holding.get("group")
-                    or holding.get("Broker Number", ""),
-                    "Account Number": holding.get("account")
-                    or holding.get("Account Number", ""),
-                    "Stock": holding.get("ticker") or holding.get("Stock", ""),
-                    "Quantity": holding.get("quantity") or holding.get("Quantity", 0),
-                    "Price": holding.get("price") or holding.get("Price", 0),
-                    "Position Value": holding.get("value")
-                    or holding.get("Position Value", 0),
-                    "Account Total": holding.get("account_total")
-                    or holding.get("Account Total", 0),
-                }
-            elif isinstance(holding, (list, tuple)):
-                # Assume legacy list/tuple format
-                holding_dict = dict(zip(HOLDINGS_HEADERS, holding))
-            else:
-                logger.warning(f"Unsupported holding format: {type(holding).__name__}")
-                continue
+        normalized_new_rows = []
+        for row_index, holding in enumerate(parsed_holdings, start=1):
+            normalized_row = _normalize_holding_row(holding, row_index)
+            normalized_row["Timestamp"] = timestamp
+            normalized_new_rows.append(normalized_row)
 
-            # Ensure all expected keys exist
-            for column in HOLDINGS_HEADERS:
-                holding_dict.setdefault(column, "")
+        for holding_dict in normalized_new_rows:
             holding_key = (
                 holding_dict["Key"],
                 holding_dict["Broker Name"],
@@ -391,24 +477,6 @@ def save_holdings_to_csv(parsed_holdings):
                 holding_dict["Stock"],
             )
 
-            # Ensure numeric fields are valid
-            try:
-                holding_dict["Quantity"] = float(holding_dict["Quantity"])
-                holding_dict["Price"] = float(holding_dict["Price"])
-                holding_dict["Position Value"] = (
-                    holding_dict["Quantity"] * holding_dict["Price"]
-                )  # Recalculate Position Value
-                holding_dict["Account Total"] = float(
-                    holding_dict.get("Account Total", 0)
-                )  # Optional field
-            except (ValueError, KeyError):
-                logger.warning(f"Invalid numeric value in holding: {holding_dict}")
-                continue  # Skip invalid entries
-
-            # Add timestamp
-            holding_dict["Timestamp"] = timestamp
-
-            # Check if this holding is a duplicate
             if holding_key in existing_by_key:
                 existing_by_key[holding_key] = holding_dict
                 updated_holdings += 1
@@ -439,40 +507,13 @@ def save_holdings_to_csv(parsed_holdings):
                 )
 
         if sql_batch_holdings:
-            try:
-                inserted_rows = update_holdings_live_batch(sql_batch_holdings)
-                logger.info(
-                    "SQL holdings batch processed %d rows from %d candidates.",
-                    inserted_rows,
-                    len(sql_batch_holdings),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "SQL holdings batch failed (%d candidates). Falling back to row-by-row writes: %s",
-                    len(sql_batch_holdings),
-                    exc,
-                )
-                for row in sql_batch_holdings:
-                    try:
-                        update_holdings_live(
-                            broker=row["broker"],
-                            broker_number=row["broker_number"],
-                            account_number=row["account_number"],
-                            ticker=row["ticker"],
-                            quantity=row["quantity"],
-                            price=row["price"],
-                        )
-                    except Exception as row_exc:
-                        logger.warning(
-                            "SQL logging failed for holding %s/%s/%s/%s: %s",
-                            row["broker"],
-                            row["broker_number"],
-                            row["account_number"],
-                            row["ticker"],
-                            row_exc,
-                        )
+            inserted_rows = update_holdings_live_batch(sql_batch_holdings)
+            logger.info(
+                "SQL holdings batch processed %d rows from %d candidates.",
+                inserted_rows,
+                len(sql_batch_holdings),
+            )
 
-        # Write the updated holdings to the CSV
         if new_holdings or updated_holdings:
             with open(HOLDINGS_LOG_CSV, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
@@ -487,8 +528,10 @@ def save_holdings_to_csv(parsed_holdings):
         else:
             logger.info("No new holdings to add.")
 
-    except Exception as e:
-        logger.error(f"Error saving holdings: {e}")
+    except CsvSchemaValidationError as exc:
+        logger.error("Error saving holdings: %s", exc)
+    except Exception as exc:
+        logger.error("Error saving holdings: %s", exc)
 
 
 def clear_holdings_log(filename):
