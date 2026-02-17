@@ -69,9 +69,16 @@ Then open `http://127.0.0.1:8765` in your browser.
 
 Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
-- `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot)
+- `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot, reverse split history)
 - `volumes/logs/` (app logs, holdings logs)
 - `volumes/excel/` (legacy archive only; Excel writes are deprecated)
+
+Reverse split persistence uses SQL append-only tables:
+
+- `ReverseSplitLog` stores ticker-level split history (`ticker`, `split_ratio`,
+  `split_date`, `ingestion_timestamp`, `source`).
+- `ReverseSplitAccountEntries` stores account-level cost/proceeds style entries
+  (`account_id`, `ticker`, `entry_type`, `price`, `timestamp`, `source`).
 
 Watchlist, sell list, and account mappings now live in the SQLite database
 (`watchlist`, `sell_list`, and `account_mappings` tables). Legacy JSON files are

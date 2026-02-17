@@ -107,6 +107,53 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
         self.assertEqual(written, 1)
         self.assertEqual(set(sql_utils.fetch_sell_list_entries().keys()), {"NEW"})
 
+    def test_reverse_split_log_helpers(self):
+        sql_utils.insert_reverse_split_log_entry(
+            ticker="TST",
+            split_ratio="1-20",
+            split_date="04/22",
+            source="unit-test",
+            ingestion_timestamp="2025-01-01 08:30:00",
+        )
+        sql_utils.insert_reverse_split_log_entry(
+            ticker="TST",
+            split_ratio="1-25",
+            split_date="05/22",
+            source="unit-test",
+            ingestion_timestamp="2025-01-02 08:30:00",
+        )
+
+        history = sql_utils.fetch_reverse_split_history("tst")
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[0]["split_ratio"], "1-25")
+        self.assertEqual(history[1]["split_ratio"], "1-20")
+        self.assertEqual(history[0]["ticker"], "TST")
+
+    def test_reverse_split_account_entry_helpers(self):
+        account_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1001")
+        sql_utils.insert_reverse_split_account_entry(
+            account_id=account_id,
+            ticker="TST",
+            entry_type="cost",
+            price=2.5,
+            source="unit-test",
+            timestamp="2025-01-01 09:15:00",
+        )
+        sql_utils.insert_reverse_split_account_entry(
+            account_id=account_id,
+            ticker="TST",
+            entry_type="proceeds",
+            price=3.0,
+            source="unit-test",
+            timestamp="2025-01-01 09:16:00",
+        )
+
+        entries = sql_utils.fetch_reverse_split_account_entries(account_id, "tst")
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["entry_type"], "proceeds")
+        self.assertEqual(entries[1]["entry_type"], "cost")
+        self.assertEqual(entries[0]["ticker"], "TST")
+
     def test_migrate_legacy_json_data_imports_and_archives(self):
         sql_utils.ACCOUNT_MAPPING.write_text(
             json.dumps({"BrokerA": {"1": {"1001": "Primary"}}}), encoding="utf-8"

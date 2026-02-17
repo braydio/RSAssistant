@@ -15,11 +15,17 @@ from utils.config_utils import (
     ACCOUNT_MAPPING,
     ERROR_LOG_FILE,
     EXCEL_FILE_MAIN,
-    get_account_nickname_or_default,
     load_account_mappings,
     EXCEL_LOGGING_ENABLED,
 )
-from utils.sql_utils import clear_account_nicknames, sync_account_mappings, upsert_account_mapping
+from utils.sql_utils import (
+    clear_account_nicknames,
+    get_or_create_account_id,
+    insert_reverse_split_account_entry,
+    insert_reverse_split_log_entry,
+    sync_account_mappings,
+    upsert_account_mapping,
+)
 
 EXCEL_DEPRECATED = True
 
@@ -53,6 +59,7 @@ def _excel_write_allowed(operation_name: str) -> bool:
         )
         return False
     return True
+
 
 # Load Excel log settings
 stock_row = 1
@@ -150,6 +157,7 @@ def excel_backups_checks():
         return
 
     archive_dir = os.path.join(EXCEL_FILE_DIRECTORY, "archive")
+    today, tomorrow = _get_backup_dates()
     prior_backup = os.path.join(archive_dir, f"Backup_{EXCEL_FILE_NAME}.{today}.xlsx")
     new_backup = os.path.join(archive_dir, f"Backup_{EXCEL_FILE_NAME}.{tomorrow}.xlsx")
 
@@ -540,75 +548,32 @@ def generate_account_nickname(
 
 
 async def add_stock_to_excel_log(ctx, ticker, split_date, split_ratio):
-    """Add a stock ticker to the Excel log.
+    """Record a reverse split event in SQL history.
 
-    Excel logging is deprecated, so this function logs a warning and exits.
+    This function preserves the legacy command surface while routing writes to
+    ``ReverseSplitLog`` instead of the deprecated Excel workbook.
+
+    Args:
+        ctx: Discord context used for user-facing status messages.
+        ticker: Symbol associated with the reverse split.
+        split_date: Effective split date string.
+        split_ratio: Reverse split ratio string.
     """
-    if EXCEL_DEPRECATED:
-        await ctx.send("Excel logging is deprecated; no Excel updates were made.")
-        logger.warning("Excel log update requested for %s; skipping.", ticker)
-        return
 
-    wb = None
-    try:
-        # Load the Excel workbook and the 'Reverse Split Log' sheet (no await because it's a sync operation)
-        wb = load_excel_workbook(EXCEL_FILE_PATH)
-
-        logger.info("Loaded Excel log workbook")
-
-        if not wb:
-            logger.error("Workbook could not be loaded.")
-            return
-
-        if "Reverse Split Log" not in wb.sheetnames:
-            logger.error("Sheet 'Reverse Split Log' not found in the workbook.")
-            return
-        ws = wb["Reverse Split Log"]
-
-        # Find the last filled column in the row where stock tickers are listed
-        last_filled_column = find_last_filled_column(ws, stock_row)
-        logger.info(f"Last filled column: {last_filled_column}")
-
-        # Find the next available columns for the ticker and split ratio
-        cost_col = last_filled_column + 1
-        proceeds_col = cost_col + 1
-        spacer_col = proceeds_col + 1
-        logger.info(
-            f"Columns Letters: Ticker is {get_column_letter(cost_col)}, Date is {get_column_letter(proceeds_col)}"
-        )
-
-        # Copy the previous columns to maintain formatting
-        previous_cost_col = last_filled_column
-        previous_proceeds_col = last_filled_column + 1
-        previous_spacer_col = last_filled_column + 2
-
-        copy_column(ws, previous_cost_col, cost_col)
-        copy_column(ws, previous_proceeds_col, proceeds_col)
-        copy_column(ws, previous_spacer_col, spacer_col)
-
-        # Set ticker, date, ratio, values in the new columns
-        ws.cell(row=stock_row, column=cost_col).value = ticker
-        ws.cell(row=date_row, column=proceeds_col).value = split_date
-        ws.cell(row=ratio_row, column=cost_col).value = "Split Ratio:"
-        ws.cell(row=ratio_row, column=proceeds_col).value = split_ratio
-        ws.cell(row=order_row, column=cost_col).value = "Cost"
-        ws.cell(row=order_row, column=proceeds_col).value = "Proceeds"
-
-        # Save the workbook and close it (no await)
-        save_workbook(wb, EXCEL_FILE_PATH)
-        logger.info(
-            f"Added {ticker} to Excel log at column {get_column_letter(cost_col)} with split date {split_date}."
-        )
-
+    inserted = insert_reverse_split_log_entry(
+        ticker=ticker,
+        split_ratio=split_ratio,
+        split_date=split_date,
+        source="excel_utils.add_stock_to_excel_log",
+    )
+    if inserted:
         await ctx.send(
-            f"Added {ticker} to Excel log at column {get_column_letter(cost_col)} with split date {split_date}."
+            f"Recorded reverse split history for {ticker.upper()} on {split_date}."
         )
-
-    except Exception as e:
-        logger.error(f"Error adding stock to Excel log: {e}")
-    finally:
-        if wb:
-            wb.close()
+    else:
+        await ctx.send(
+            "SQL logging is disabled; reverse split history was not recorded."
+        )
 
 
 def copy_column(worksheet, source_col, target_col):
@@ -640,110 +605,72 @@ def find_last_filled_column(ws, row):
 
 
 def update_excel_log(order_data, order_type=None, filename=BASE_EXCEL_FILE):
-    """Update the Excel log with buy or sell orders.
+    """Persist account-level order entries to SQL.
 
-    Excel logging is deprecated, so this function logs a warning and exits.
+    This legacy helper previously wrote to the Excel workbook. It now appends
+    rows to ``ReverseSplitAccountEntries`` for compatibility with existing call
+    sites.
+
+    Args:
+        order_data: A single order dictionary or list of dictionaries.
+        order_type: Optional entry type override.
+        filename: Unused legacy argument retained for API compatibility.
     """
-    if EXCEL_DEPRECATED:
-        logger.warning("Excel logging is deprecated; skipping order log update.")
-        return
 
-    logger.info("Updating excel log.")
+    del filename  # retained for backward compatibility
+
     if isinstance(order_data, dict):
         order_data = [order_data]
     elif not isinstance(order_data, list):
         logger.error("order_data must be a list or dict.")
         return
 
-    logger.debug(f"order_data received: {order_data}")
-
-    wb = load_excel_workbook(EXCEL_FILE_PATH)
-    if not wb:
-        logger.error("Workbook loading failed.")
-        return
-
-    ws = get_or_create_sheet(wb, "Reverse Split Log")
-    try:
-        order_data = validate_order_data(order_data)
-        logger.debug(f"Validated order_data: {order_data}")
-    except TypeError as e:
-        logger.error(f"Invalid order_data format: {str(e)}")
-        return
+    logger.debug("order_data received for SQL account entries: %s", order_data)
 
     for order in order_data:
         if not isinstance(order, dict):
-            logger.error(
-                f"Invalid order format, expected dict but got {type(order)}: {order}"
-            )
-            continue  # Skip malformed entries
-        order_identifier = "unknown"
+            logger.error("Invalid order format, expected dict but got %s", type(order))
+            continue
+
         try:
-            # Extract order details
-            broker_name = order["Broker Name"]
-            broker_number = int(order["Broker Number"])
-            account_number = order["Account Number"]
-            order_type = order_type or order["Order Type"]
-            stock = order["Stock"]
-            quantity = order["Quantity"]
+            broker_name = str(order["Broker Name"])
+            broker_number = str(order["Broker Number"])
+            account_number = str(order["Account Number"])
+            stock = str(order["Stock"])
             price = float(order["Price"])
-            date = order["Date"]
-            order_identifier = f"{broker_name} {broker_number} {account_number} {order_type} {stock} {price}"
+            effective_type = str(order_type or order["Order Type"]).lower()
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.error("Invalid order payload for reverse split account log: %s", exc)
+            continue
 
-            # Log the extracted details
-            logger.debug(f"Processing order: {order}")
-
-            account_nickname = get_account_nickname_or_default(
-                broker_name, broker_number, account_number
+        account_id = get_or_create_account_id(
+            broker_name,
+            broker_number,
+            account_number,
+        )
+        if account_id is None:
+            logger.warning(
+                "Unable to determine account_id for %s/%s/%s; skipping entry.",
+                broker_name,
+                broker_number,
+                account_number,
             )
-            excel_nickname = f"{broker_name} {account_nickname}"
-            logger.info(f"Finding for {excel_nickname}")
+            continue
 
-            # Locate the account row
-            account_row = locate_row_for_lookup(ws, excel_nickname, account_start_row)
-            if account_row:
-                # Locate the stock column
-                stock_col = locate_column_for_lookup(
-                    ws, stock_row, stock, account_start_column
-                )
-                if stock_col:
-                    # Adjust column if 'sell' type
-                    if order_type.lower() == "sell":
-                        stock_col += 1
-
-                    # Update the cell value
-                    update_cell_value(ws, account_row, stock_col, price)
-                    confirm_update = get_column_letter(stock_col)
-                    logger.info(
-                        f"Updated log for {broker_name} {account_nickname} at cell {confirm_update}{account_row}"
-                    )
-
-                    # save_workbook(wb, EXCEL_FILE_PATH)
-                    # logger.info(f"Saved excel log workboodk: {wb} filename: {EXCEL_FILE_PATH}")
-
-                    # Remove error logs on success
-                    remove_error_from_log(ERROR_LOG_FILE, order_identifier)
-                else:
-                    # Record the error if the stock is not found
-                    error_message = (
-                        f"Stock {stock} not found for account {account_nickname}."
-                    )
-                    record_error_message(error_message, order_identifier)
-            else:
-                # Record an error if the account row is not found
-                error_message = (
-                    f"{broker_name} - {account_nickname} not found in Excel."
-                )
-                record_error_message(error_message, order_identifier)
-
-        except (KeyError, TypeError, ValueError) as e:
-            error_message = f"{type(e).__name__}: {str(e)}"
-            record_error_message(error_message, order_identifier)
-
-    # Save the workbook and close it after processing
-    save_workbook(wb, EXCEL_FILE_PATH)
-    logger.info(f"Saved workbook {EXCEL_FILE_PATH}")
-    delete_stale_backups(EXCEL_FILE_DIRECTORY, "archive", days_keep_backup)
-    wb.close()
+        inserted = insert_reverse_split_account_entry(
+            account_id=account_id,
+            ticker=stock,
+            entry_type=effective_type,
+            price=price,
+            source="excel_utils.update_excel_log",
+        )
+        if inserted:
+            logger.info(
+                "Recorded reverse split account entry for account_id=%s ticker=%s type=%s",
+                account_id,
+                stock,
+                effective_type,
+            )
 
 
 def record_error_message(error_message, order_details, error_log_file=ERROR_LOG_FILE):

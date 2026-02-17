@@ -21,9 +21,10 @@ RSAssistant.py
 
 All runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
-- `db/` (SQLite DB, split watchlist, order queue, auto-rsa holdings snapshot)
+- `db/` (SQLite DB, split watchlist, order queue, auto-rsa holdings snapshot,
+  `ReverseSplitLog`, and `ReverseSplitAccountEntries` tables)
 - `logs/` (application + holdings logs)
-- `excel/` (ReverseSplitLog.xlsx)
+- `excel/` (legacy archive only; active writes are deprecated)
 
 ## Auto-rsa integration
 
