@@ -85,6 +85,17 @@ Watchlist, sell list, and account mappings now live in the SQLite database
 migrated automatically on startup when SQL logging is enabled (only when the
 matching SQL tables are empty), and can also be migrated manually with:
 
+### Migration note for legacy Excel users
+
+If your workflow previously depended on `volumes/excel/ReverseSplitLog.xlsx`,
+use SQL and CSV outputs instead:
+
+- Account mappings/watchlist/sell list are read from SQLite (`volumes/db/`).
+- Operational logs are emitted as CSV files in `volumes/logs/` (for example
+  holdings and orders logs).
+- `volumes/excel/` is retained only as an archive and is not updated at runtime.
+
+
 ```bash
 python scripts/migrate_json_to_sql.py
 # optional: archive imported JSON files to *.migrated
@@ -99,6 +110,8 @@ If auto-rsa writes a JSON snapshot to a shared volume, RSAssistant can ingest it
 - `AUTO_RSA_HOLDINGS_FILE=volumes/db/auto_rsa_holdings.json`
 
 RSAssistant polls for changes and updates `volumes/logs/holdings_log.csv`.
+
+RSAssistant validates holdings CSV schema during ingest (required/exact columns and numeric/timestamp coercion). If the file or rows are invalid, ingest is rejected and SQL state is not updated.
 
 ### Auto-rsa patch quickstart (holdings snapshot file)
 

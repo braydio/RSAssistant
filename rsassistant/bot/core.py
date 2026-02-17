@@ -108,6 +108,20 @@ def _build_command_usage(prefix: str | None, command: commands.Command | None) -
     return effective_prefix
 
 
+def _build_account_setup_message() -> str:
+    """Return startup guidance when SQL account mappings are missing.
+
+    The assistant now persists operational state in SQL and CSV logs.
+    """
+
+    return (
+        "**(╯°□°）╯**\n\n"
+        "Account mappings not found in SQL. Use `..addmap` to define mappings or\n"
+        "run `..loadmap` to import legacy JSON/Excel-era mapping data into SQL.\n"
+        "Runtime logs are written to CSV files under `volumes/logs/`."
+    )
+
+
 class RSAssistantBot(commands.Bot):
     """Discord bot configured with modular cogs and background tasks."""
 
@@ -142,11 +156,7 @@ class RSAssistantBot(commands.Bot):
         logger.info("V3.1 | Running in CLI | Runtime Environment: Production")
 
         channel = resolve_reply_channel(self, DISCORD_PRIMARY_CHANNEL)
-        account_setup_message = (
-            "**(╯°□°）╯**\n\n"
-            "Account mappings not found. Use `..addmap` to define mappings or\n"
-            "run `..loadmap` to migrate legacy JSON into SQL."
-        )
+        account_setup_message = _build_account_setup_message()
         ready_message = (
             account_setup_message
             if not has_account_mappings()
