@@ -30,3 +30,47 @@ class ExcelUtilsDeprecationTest(TestCase):
             excel_utils.save_workbook(workbook, "dummy.xlsx")
 
         workbook.save.assert_not_called()
+
+    def test_add_stock_to_excel_log_writes_reverse_split_history(self):
+        """Legacy add_stock helper should now route writes to SQL helper."""
+
+        class DummyCtx:
+            def __init__(self):
+                self.sent = []
+
+            async def send(self, message):
+                self.sent.append(message)
+
+        ctx = DummyCtx()
+
+        with patch.object(
+            excel_utils, "insert_reverse_split_log_entry", return_value=True
+        ) as mock_insert:
+            import asyncio
+
+            asyncio.run(excel_utils.add_stock_to_excel_log(ctx, "TST", "01/02", "1-5"))
+
+        mock_insert.assert_called_once()
+        self.assertIn("Recorded reverse split history for TST", ctx.sent[0])
+
+    def test_update_excel_log_writes_account_entries(self):
+        """Legacy update helper should append SQL account entries."""
+        order_data = {
+            "Broker Name": "BrokerA",
+            "Broker Number": "1",
+            "Account Number": "1001",
+            "Order Type": "buy",
+            "Stock": "TST",
+            "Price": "2.50",
+        }
+
+        with patch.object(
+            excel_utils, "get_or_create_account_id", return_value=77
+        ) as mock_get_id:
+            with patch.object(
+                excel_utils, "insert_reverse_split_account_entry", return_value=True
+            ) as mock_insert:
+                excel_utils.update_excel_log(order_data)
+
+        mock_get_id.assert_called_once_with("BrokerA", "1", "1001")
+        mock_insert.assert_called_once()
