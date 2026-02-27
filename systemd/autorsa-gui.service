@@ -1,5 +1,5 @@
 [Unit]
-Description=Auto-RSA auto-starte service
+Description=Auto-RSA Discord bot service
 After=network-online.target
 Wants=network-online.target
 
@@ -8,7 +8,7 @@ Type=simple
 User=braydenchaffee
 Group=braydenchaffee
 WorkingDirectory=/home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local
-ExecStart=/home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/.venv/bin/python /home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/autoRSA.py
+ExecStart=/home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/.venv/bin/python /home/braydenchaffee/Production/RSAssistant/AutoRSA-GUI.local/autoRSA.py discord
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -35,6 +36,25 @@ class SplitPolicyResolver:
     sec_fetcher = SECPolicyFetcher()
 
     @staticmethod
+    def _request_headers_for_url(url: str | None = None) -> dict:
+        default_ua = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+        )
+        headers = {"User-Agent": default_ua}
+        if url and "sec.gov" in url.lower():
+            sec_ua = (
+                os.getenv("SEC_REQUEST_USER_AGENT")
+                or os.getenv("SEC_USER_AGENT")
+                or "RSAssistant/3.1 (ops@example.com)"
+            )
+            headers["User-Agent"] = sec_ua
+            sec_from = os.getenv("SEC_REQUEST_FROM") or os.getenv("SEC_FROM")
+            if sec_from:
+                headers["From"] = sec_from
+        return headers
+
+    @staticmethod
     def get_press_release_link_from_nasdaq(html_text):
         try:
             soup = BeautifulSoup(html_text, "html.parser")
@@ -62,45 +82,80 @@ class SplitPolicyResolver:
                 response.raise_for_status()
                 html = response.text
             soup = BeautifulSoup(html, "html.parser")
-            links = [
-                link["href"]
-                for link in soup.find_all("a", href=True)
-                if any(
-                    domain in link["href"].lower()
-                    for domain in ["sec.gov", "quotemedia.com"]
+            candidates = []
+            seen = set()
+            for link in soup.find_all("a", href=True):
+                href = (link.get("href") or "").strip()
+                if not href:
+                    continue
+                full_href = urljoin(nasdaq_url, href)
+                href_lower = full_href.lower()
+                text = " ".join(link.get_text(" ", strip=True).split())
+                text_lower = text.lower()
+
+                is_sec_domain = any(
+                    domain in href_lower for domain in ["sec.gov", "quotemedia.com"]
                 )
-            ]
+                is_sec_label = bool(
+                    re.search(r"\bsec filing\b|\bform\s+\d", text_lower)
+                )
+                if not (is_sec_domain or is_sec_label):
+                    continue
 
-            if not links:
-                text_link = soup.find("a", string=re.compile("SEC Filing", re.I))
-                if text_link and text_link.get("href"):
-                    links.append(text_link["href"])
+                if full_href in seen:
+                    continue
+                seen.add(full_href)
+                candidates.append((full_href, text))
 
-            if not links:
+            if not candidates:
                 logger.warning("No SEC Filing links found on NASDAQ page.")
                 return None
 
-            # Prefer newer links or links associated with the correct ticker
-            filtered_links = []
-            for link in links:
-                if "/rules/sro/" in link:
-                    logger.info(f"Skipping rules/sro link: {link}")
-                    continue
+            def _score(candidate: tuple[str, str]) -> int:
+                link, text = candidate
+                link_lower = link.lower()
+                text_lower = text.lower()
+                score = 0
 
-                if ticker and ticker.lower() in link.lower():
-                    filtered_links.append(link)
-                elif re.search(r"/20\d{2}/", link):
-                    filtered_links.append(link)
+                if "/rules/sro/" in link_lower:
+                    # Rule filings are usually generic exchange docs, not issuer filings.
+                    score -= 1000
+                if re.fullmatch(r"https?://(?:www\.)?sec\.gov/?", link_lower):
+                    # SEC homepage is not a filing link.
+                    score -= 1000
+                if "sec.gov/archives/edgar" in link_lower:
+                    score += 120
+                if "/ixviewer/" in link_lower:
+                    score += 60
+                if "quotemedia.com" in link_lower:
+                    score += 25
+                if "sec filing" in text_lower:
+                    score += 40
+                if re.search(r"\b(?:8-k|6-k|20-f|10-k|10-q)\b", f"{link_lower} {text_lower}"):
+                    score += 35
+                if ticker and (
+                    ticker.lower() in link_lower or ticker.lower() in text_lower
+                ):
+                    score += 20
+                if re.search(r"/20\d{2}/", link_lower):
+                    score += 10
+                return score
 
-            if filtered_links:
-                sec_link = filtered_links[0]
-                if sec_link.startswith("/"):
-                    sec_link = "https://www.nasdaqtrader.com" + sec_link
-                logger.info(f"SEC Filing link selected: {sec_link}")
-                return sec_link
+            scored = sorted(candidates, key=_score, reverse=True)
+            sec_link, sec_text = scored[0]
+            top_score = _score(scored[0])
+            if top_score <= 0:
+                logger.warning("No valid SEC Filing link after filtering.")
+                return None
 
-            logger.warning("No valid SEC Filing link after filtering.")
-            return None
+            logger.info(
+                "SEC Filing link selected: %s (score=%s, label=%s, candidates=%s)",
+                sec_link,
+                top_score,
+                sec_text or "N/A",
+                len(candidates),
+            )
+            return sec_link
 
         except Exception as e:
             logger.error(f"Failed to retrieve SEC link from NASDAQ: {e}")
@@ -109,9 +164,7 @@ class SplitPolicyResolver:
     @staticmethod
     def fetch_sec_filing_text(sec_url):
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
+            headers = SplitPolicyResolver._request_headers_for_url(sec_url)
             with requests.get(sec_url, headers=headers, timeout=10) as response:
                 response.raise_for_status()
                 content_type = response.headers.get("Content-Type", "")
@@ -135,9 +188,9 @@ class SplitPolicyResolver:
         """Return the most relevant text block from an HTML document."""
         soup = BeautifulSoup(html_text, "html.parser")
         unwanted_attr = re.compile(
-            r"(nav|menu|footer|header|sidebar|cookie|consent|subscribe|promo|banner|"
-            r"advert|ad-|ads|social|share|related|breadcrumb|search|modal|popup|cta|"
-            r"hero|announcement)",
+            r"(?<![a-z])(nav|menu|footer|header|sidebar|cookie|consent|subscribe|"
+            r"promo|banner|advert|ads?|social|related|breadcrumb|search|modal|"
+            r"popup|cta|hero)(?![a-z])",
             re.IGNORECASE,
         )
         for tag in soup(
@@ -176,7 +229,23 @@ class SplitPolicyResolver:
             if attr_text and unwanted_attr.search(attr_text):
                 tag.decompose()
 
-        candidates = soup.find_all(["main", "article", "section", "div", "body"])
+        preferred_selectors = [
+            "article",
+            "main",
+            "[itemprop='articleBody']",
+            ".article-body",
+            ".news-release-body",
+            ".story-body",
+        ]
+        candidates = []
+        for selector in preferred_selectors:
+            for match in soup.select(selector):
+                if match not in candidates:
+                    candidates.append(match)
+        for match in soup.find_all(["main", "article", "section", "div", "body"]):
+            if match not in candidates:
+                candidates.append(match)
+
         best_text = ""
         best_score = 0
         for candidate in candidates:
@@ -196,6 +265,10 @@ class SplitPolicyResolver:
             bonus = 0
             if candidate.name in {"article", "main"}:
                 bonus += 50
+            classes = " ".join(candidate.get("class") or [])
+            cid = candidate.get("id") or ""
+            if re.search(r"article|story|body|content|release", f"{classes} {cid}", re.I):
+                bonus += 25
             if re.search(r"press release|news release|investor", text, re.IGNORECASE):
                 bonus += 20
             if re.search(r"reverse (?:stock )?split", text, re.IGNORECASE):
@@ -222,12 +295,26 @@ class SplitPolicyResolver:
             "fractional share",
             "fractional shares",
             "handling of fractional shares",
+            "no fractional shares",
             "cash in lieu",
             "rounded up",
             "round up",
             "rounded to the nearest",
+            "rounded up to the next whole number",
+            "next whole number",
+            "share consolidation",
+            "stock consolidation",
+            "reverse share split",
         ]
-        triggers = ["reverse", "reverse stock split", "reverse split"]
+        triggers = [
+            "reverse",
+            "reverse stock split",
+            "reverse split",
+            "reverse share split",
+            "share consolidation",
+            "stock consolidation",
+            "consolidation",
+        ]
 
         start_idx = None
 
@@ -251,6 +338,9 @@ class SplitPolicyResolver:
             return text
 
         start_idx = max(0, start_idx - 120)
+        # Avoid trimming deep into the article; we still want title/lead context
+        # so the LLM sees what event is being discussed.
+        start_idx = min(start_idx, 400)
         return text[start_idx:]
 
     @staticmethod
@@ -273,17 +363,23 @@ class SplitPolicyResolver:
     def fetch_body_text(cls, url, ticker: str | None = None):
         """Retrieve cleaned main body text from a webpage."""
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
+            headers = cls._request_headers_for_url(url)
             response = None
             with requests.get(url, headers=headers, timeout=10) as response:
                 response.raise_for_status()
                 html = response.text or ""
 
-            text = cls._extract_main_text(html)
-            text = cls._trim_to_context(text, ticker=ticker)
-            logger.info(f"Fetched body text ({len(text)} characters) from {url}")
+            extracted = cls._extract_main_text(html)
+            text = cls._trim_to_context(extracted, ticker=ticker)
+            lowered = text.lower()
+            logger.info(
+                "Fetched body text (%s chars, extracted=%s chars, has_reverse=%s, has_fractional=%s) from %s",
+                len(text),
+                len(extracted),
+                "reverse split" in lowered or "reverse stock split" in lowered,
+                "fractional share" in lowered or "fractional shares" in lowered,
+                url,
+            )
             return text
         except Exception as e:
             snippet = ""
@@ -482,11 +578,11 @@ class SplitPolicyResolver:
         return "Policy not clearly stated."
 
     @classmethod
-    def full_analysis(cls, nasdaq_url):
+    def full_analysis(cls, nasdaq_url, ticker_hint: str | None = None):
         """Gather policy info, effective date, and source text from NASDAQ notice."""
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
-            ticker = cls.extract_ticker_from_url(nasdaq_url)
+            ticker = ticker_hint or cls.extract_ticker_from_url(nasdaq_url)
             if PROGRAMMATIC_POLICY_ENABLED:
                 nasdaq_result = cls.analyze_nasdaq_notice(nasdaq_url, ticker=ticker)
             else:
@@ -499,6 +595,40 @@ class SplitPolicyResolver:
                     "sec_url": None,
                     "press_url": None,
                 }
+                # Even in LLM-only mode, discover better source links for context.
+                # Nasdaq notices often contain Press Release / SEC links.
+                if "nasdaqtrader.com/tradernews.aspx" in nasdaq_url.lower():
+                    try:
+                        headers = {
+                            "User-Agent": (
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/112.0.0.0 Safari/537.36"
+                            )
+                        }
+                        with requests.get(
+                            nasdaq_url, headers=headers, timeout=10
+                        ) as response:
+                            response.raise_for_status()
+                            html = response.text or ""
+                        nasdaq_result["press_url"] = cls.get_press_release_link_from_nasdaq(
+                            html
+                        )
+                        nasdaq_result["sec_url"] = cls.get_sec_link_from_nasdaq(
+                            nasdaq_url, ticker=ticker
+                        )
+                        logger.info(
+                            "LLM-only mode link discovery for %s -> press_url=%s sec_url=%s",
+                            nasdaq_url,
+                            nasdaq_result.get("press_url"),
+                            nasdaq_result.get("sec_url"),
+                        )
+                    except Exception as link_err:
+                        logger.warning(
+                            "LLM-only mode link discovery failed for %s: %s",
+                            nasdaq_url,
+                            link_err,
+                        )
             if not nasdaq_result:
                 logger.warning("NASDAQ notice analysis failed or returned no result.")
                 return None
@@ -556,7 +686,7 @@ class SplitPolicyResolver:
                                 policy_text
                             )
 
-            source_url = nasdaq_result.get("press_url") or nasdaq_result.get("sec_url")
+            source_url = nasdaq_result.get("sec_url") or nasdaq_result.get("press_url")
             if not source_url:
                 logger.info(
                     "No press/SEC URL found; falling back to NASDAQ notice for body text."
@@ -564,6 +694,15 @@ class SplitPolicyResolver:
                 source_url = nasdaq_url
             if source_url:
                 body_text = cls.fetch_body_text(source_url, ticker=ticker)
+                if not body_text and source_url != nasdaq_url:
+                    logger.warning(
+                        "Primary source fetch failed for %s; falling back to NASDAQ notice %s",
+                        source_url,
+                        nasdaq_url,
+                    )
+                    body_text = cls.fetch_body_text(nasdaq_url, ticker=ticker)
+                    if body_text:
+                        source_url = nasdaq_url
                 if body_text:
                     cls.log_full_return(source_url, body_text)
                     nasdaq_result["body_text"] = body_text
@@ -571,7 +710,7 @@ class SplitPolicyResolver:
                         nasdaq_result["effective_date"] = cls.extract_effective_date(
                             body_text
                         )
-                    if cls._needs_sec_fallback(body_text, ticker):
+                    if ticker and cls._needs_sec_fallback(body_text, ticker):
                         logger.info(
                             "Body text lacks key triggers; attempting SEC fallback for %s",
                             ticker,

@@ -34,6 +34,14 @@ _REMOTE_FETCH_HEADERS = {
     )
 }
 
+# Reverse split phrasing varies by issuer/region. This list intentionally
+# includes common equivalent language such as "share consolidation".
+_REVERSE_SPLIT_PATTERNS = [
+    r"reverse\s+(?:stock\s+)?split",
+    r"(?:share|stock)\s+consolidation",
+    r"consolidation\s+of\s+(?:its\s+)?(?:common\s+)?(?:shares|stock)",
+]
+
 # Load account mappings once at import time
 account_mapping = load_account_mappings()
 
@@ -116,23 +124,29 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
     return None
 
 
-def _remote_contains_reverse_split(url: Optional[str]) -> bool:
+def _detect_reverse_split_phrase(text: str) -> Optional[str]:
+    for pattern in _REVERSE_SPLIT_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return pattern
+    return None
+
+
+def _remote_contains_reverse_split(url: Optional[str]) -> Tuple[bool, Optional[str]]:
     url = _normalize_url_candidate(url)
     if not url:
-        return False
+        return False, None
     try:
         with requests.get(url, headers=_REMOTE_FETCH_HEADERS, timeout=10) as response:
             response.raise_for_status()
             html = response.text or ""
     except RequestException as exc:
         logger.warning("Unable to fetch %s for reverse split detection: %s", url, exc)
-        return False
+        return False, None
 
     html = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html)
     text = re.sub(r"<[^>]+>", " ", html)
-    return (
-        re.search(r"reverse\s+(?:stock\s+)?split", text, re.IGNORECASE) is not None
-    )
+    matched_pattern = _detect_reverse_split_phrase(text)
+    return matched_pattern is not None, matched_pattern
 
 
 # RIP
@@ -1116,16 +1130,14 @@ def alert_channel_message(content):
         ticker = _extract_ticker_from_remote_source(url)
 
     # Case-insensitive check for "reverse split" phrases in the alert message
-    reverse_split_confirm = (
-        re.search(r"reverse\s+(?:stock\s+)?split", normalized_content, re.IGNORECASE)
-        is not None
-    )
+    matched_pattern = _detect_reverse_split_phrase(normalized_content)
+    reverse_split_confirm = matched_pattern is not None
     if not reverse_split_confirm and url:
-        reverse_split_confirm = _remote_contains_reverse_split(url)
+        reverse_split_confirm, matched_pattern = _remote_contains_reverse_split(url)
     logger.info(
         "Reverse split detected=%s pattern=%s",
         reverse_split_confirm,
-        r"reverse\s+(?:stock\s+)?split",
+        matched_pattern,
     )
 
     # Return the parsed information

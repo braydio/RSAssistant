@@ -3,6 +3,7 @@
 import json
 import re
 import time
+import uuid
 from datetime import datetime
 
 import requests
@@ -26,6 +27,45 @@ _ALLOWED_POLICIES = {
     "unclear",
     "not_mentioned",
 }
+
+
+def _clip_notice_text(text: str, max_chars: int = 6000) -> str:
+    """Clip notice text while prioritizing reverse-split context."""
+    if not text:
+        return text
+    if len(text) <= max_chars:
+        return text
+
+    lowered = text.lower()
+    anchors = [
+        "fractional shares",
+        "fractional share",
+        "cash in lieu",
+        "rounded up",
+        "rounded to the next whole number",
+        "rounded to next whole number",
+        "rounded down",
+        "reverse stock split",
+        "reverse split",
+        "share consolidation",
+        "stock consolidation",
+    ]
+
+    start_idx = None
+    for phrase in anchors:
+        idx = lowered.find(phrase)
+        if idx != -1:
+            start_idx = idx if start_idx is None else min(start_idx, idx)
+
+    if start_idx is None:
+        return text[:max_chars]
+
+    # Include leading context when possible.
+    start_idx = max(0, start_idx - 500)
+    end_idx = start_idx + max_chars
+    if end_idx >= len(text):
+        return text[-max_chars:]
+    return text[start_idx:end_idx]
 
 
 def _extract_json_block(text: str) -> str | None:
@@ -65,7 +105,7 @@ def _normalize_date(value: str | None) -> str | None:
 def _normalize_policy(value: str | None) -> str:
     if not value:
         return "not_mentioned"
-    normalized = value.strip().lower().replace(" ", "_")
+    normalized = value.strip().lower().replace(" ", "_").replace("-", "_")
     if normalized in _ALLOWED_POLICIES:
         return normalized
     if "cash" in normalized:
@@ -126,7 +166,7 @@ def extract_reverse_split_details(
         logger.warning("No text supplied for OpenAI parsing.")
         return None
 
-    clipped = text[:6000]
+    clipped = _clip_notice_text(text, max_chars=6000)
     url_hint = f"Source URL: {source_url}" if source_url else "Source URL: N/A"
     ticker_hint = f"Expected ticker: {ticker}" if ticker else "Expected ticker: N/A"
 
@@ -137,13 +177,12 @@ def extract_reverse_split_details(
         "ticker, reverse_split_confirmed, split_ratio, effective_date, "
         "fractional_share_policy. "
         "fractional_share_policy must be one of: "
-        "rounded_to_nearest_whole, rounded_up, rounded_down, cash_in_lieu, "
-        "no_fractional_shares, unclear, not_mentioned. "
+        "rounded_up, rounded_to_nearest_whole, rounded_down, cash_in_lieu, no_fractional_shares, unclear, not_mentioned. "
         "split_ratio should be normalized as 'X-Y' (e.g., 1-10 for 1-for-10). "
-        "effective_date should be YYYY-MM-DD. Use null for unknown values."
+        "effective_date should be YYYY-MM-DD. This is the record date, (NOT ANNOUNCEMENT DATE)"
         "Be mindful of the wording to accurately determine whether a full share"
-        "will be returned when a trader has a fractional share"
-        "If the total share amount returned is greater than the initial share amount this is a definitive <rounded up> or <rounded to the nearest whole> case."
+        "will be returned to a trader who would have received a fractional share. "
+        "If there is no mention if how fractional shares will be handled then fractional_share_policy MUST be returned as unclear. "
     )
     user_prompt = f"{url_hint}\n{ticker_hint}\n\n" "Notice text:\n" f"{clipped}"
 
@@ -161,11 +200,24 @@ def extract_reverse_split_details(
         "max_tokens": 400,
     }
 
+    call_id = uuid.uuid4().hex[:8]
+    openai_log_extra = {"never_dedupe": True}
     start_time = time.monotonic()
     logger.info(
-        "OpenAI request started (model=%s, text_chars=%s).",
+        "OpenAI request started (call_id=%s, model=%s, text_chars=%s, source_url=%s, ticker=%s).",
+        call_id,
         OPENAI_MODEL,
         len(clipped),
+        source_url or "N/A",
+        ticker or "N/A",
+        extra=openai_log_extra,
+    )
+    logger.info(
+        "OpenAI request payload (call_id=%s): system_prompt=%s | user_prompt=%s",
+        call_id,
+        system_prompt,
+        user_prompt,
+        extra=openai_log_extra,
     )
     try:
         with requests.post(
@@ -180,27 +232,49 @@ def extract_reverse_split_details(
             status_code = response.status_code
         elapsed = time.monotonic() - start_time
         logger.info(
-            "OpenAI request succeeded (status=%s, elapsed=%.2fs, request_id=%s).",
+            "OpenAI request succeeded (call_id=%s, status=%s, elapsed=%.2fs, request_id=%s).",
+            call_id,
             status_code,
             elapsed,
             request_id,
+            extra=openai_log_extra,
         )
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        logger.info(
+            "OpenAI raw response content (call_id=%s): %s",
+            call_id,
+            content,
+            extra=openai_log_extra,
+        )
     except Exception as e:
         elapsed = time.monotonic() - start_time
-        logger.error(f"OpenAI request failed: {e}")
-        logger.error("OpenAI request failed after %.2fs.", elapsed)
+        logger.error(
+            "OpenAI request failed (call_id=%s, elapsed=%.2fs, error=%s).",
+            call_id,
+            elapsed,
+            e,
+            extra=openai_log_extra,
+        )
         return None
 
     json_blob = _extract_json_block(content)
     if not json_blob:
-        logger.warning("OpenAI response did not contain JSON.")
+        logger.warning(
+            "OpenAI response did not contain JSON (call_id=%s).",
+            call_id,
+            extra=openai_log_extra,
+        )
         return None
 
     try:
         parsed = json.loads(json_blob)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode OpenAI JSON: {e}")
+        logger.error(
+            "Failed to decode OpenAI JSON (call_id=%s, error=%s).",
+            call_id,
+            e,
+            extra=openai_log_extra,
+        )
         return None
 
     return _normalize_llm_payload(parsed)

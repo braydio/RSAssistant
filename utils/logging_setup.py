@@ -125,19 +125,25 @@ def setup_logging(config=None, verbose=False):
 
             def filter(self, record):
                 current_time = time.time()
+                message_text = record.getMessage()
+                if getattr(record, "never_dedupe", False):
+                    record.msg = self.truncate_message(message_text)
+                    record.args = ()
+                    return True
                 try:
-                    msg_key = hash(record.msg)
+                    msg_key = hash(message_text)
                 except TypeError:
-                    if isinstance(record.msg, (list, dict)):
-                        self.log_sample(record.msg, "Unhashable message")
+                    if isinstance(message_text, (list, dict)):
+                        self.log_sample(message_text, "Unhashable message")
                         return False
-                    msg_key = id(record.msg)
+                    msg_key = id(message_text)
                 if (
                     msg_key in self.logged_messages
                     and current_time - self.logged_messages[msg_key] < self.interval
                 ):
                     return False
-                record.msg = self.truncate_message(record.msg)
+                record.msg = self.truncate_message(message_text)
+                record.args = ()
                 self.logged_messages[msg_key] = current_time
                 return True
 

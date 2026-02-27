@@ -62,3 +62,17 @@ def test_extract_main_text_prefers_primary_content():
     text = SplitPolicyResolver._extract_main_text(html)
     assert "Reverse Split Notice" in text
     assert "Navigation links" not in text
+
+
+def test_extract_main_text_keeps_shareholder_content():
+    html = """
+    <html>
+      <body>
+        <div class="shareholder-content">
+          <p>Fractional shares will be rounded up to the nearest whole share.</p>
+        </div>
+      </body>
+    </html>
+    """
+    text = SplitPolicyResolver._extract_main_text(html)
+    assert "Fractional shares will be rounded up" in text

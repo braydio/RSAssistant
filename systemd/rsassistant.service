@@ -1,5 +1,5 @@
 [Unit]
-Description=RSAssistant Discord bot
+Description=RSAssistant Discord Bot
 After=network-online.target
 Wants=network-online.target
 

@@ -964,7 +964,7 @@ async def handle_secondary_channel(bot, message):
 
     try:
         logger.info(f"Policy resolution for {url}")
-        policy_info = OnMessagePolicyResolver.full_analysis(url)
+        policy_info = OnMessagePolicyResolver.full_analysis(url, ticker_hint=ticker)
         if not policy_info:
             logger.warning(f"No policy info for {ticker}")
             return
@@ -1227,11 +1227,11 @@ class OnMessagePolicyResolver:
     resolver = PolicyResolver()
 
     @classmethod
-    def full_analysis(cls, nasdaq_url):
+    def full_analysis(cls, nasdaq_url, ticker_hint=None):
         """Perform complete policy analysis for a NASDAQ notice URL."""
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
-            return cls.resolver.full_analysis(nasdaq_url)
+            return cls.resolver.full_analysis(nasdaq_url, ticker_hint=ticker_hint)
         except Exception as e:
             logger.error(f"Critical failure during full_analysis: {e}")
             return None

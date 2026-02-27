@@ -16,6 +16,28 @@ class AlertChannelMessageTest(unittest.TestCase):
         self.assertEqual(result["ticker"], "SLE")
         self.assertTrue(result["reverse_split_confirmed"])
 
+    def test_reverse_split_detects_share_consolidation_phrase(self) -> None:
+        message = "PTLE Announces 1-for-20 Share Consolidation (PTLE)"
+        result = alert_channel_message(message)
+
+        self.assertEqual(result["ticker"], "PTLE")
+        self.assertTrue(result["reverse_split_confirmed"])
+
+    def test_reverse_split_with_url_uses_remote_consolidation_detection(self) -> None:
+        message = "PTLE update https://example.com/news"
+
+        with (
+            patch("utils.parsing_utils._extract_ticker_from_remote_source", return_value="PTLE"),
+            patch(
+                "utils.parsing_utils._remote_contains_reverse_split",
+                return_value=(True, r"(?:share|stock)\\s+consolidation"),
+            ),
+        ):
+            result = alert_channel_message(message)
+
+        self.assertEqual(result["ticker"], "PTLE")
+        self.assertTrue(result["reverse_split_confirmed"])
+
 
 class ParseOrderMessageTest(unittest.TestCase):
     def test_robinhood_mfa_prompt_is_treated_as_notification(self) -> None:
