@@ -84,3 +84,82 @@ def test_track_ticker_summary_marks_broker_with_position(tmp_path, monkeypatch):
 
     assert statuses == {"TestBroker": ("✅", 1, 1)}
     assert timestamp == "2024-01-01 10:00:00"
+
+
+def test_track_ticker_summary_does_not_overwrite_positive_match(
+    tmp_path, monkeypatch
+):
+    holdings_file = tmp_path / "holdings.csv"
+    fieldnames = [
+        "Timestamp",
+        "Broker Name",
+        "Broker Number",
+        "Account Number",
+        "Stock",
+        "Quantity",
+        "Price",
+        "Account Total",
+        "Key",
+    ]
+    rows = [
+        {
+            "Timestamp": "2024-01-01 10:00:00",
+            "Broker Name": "TestBroker",
+            "Broker Number": "1",
+            "Account Number": "1234",
+            "Stock": "AAPL",
+            "Quantity": "5",
+            "Price": "10",
+            "Account Total": "100",
+            "Key": "TestBroker LegacyKey",
+        },
+        {
+            "Timestamp": "2024-01-01 10:00:01",
+            "Broker Name": "TestBroker",
+            "Broker Number": "1",
+            "Account Number": "1234",
+            "Stock": "MSFT",
+            "Quantity": "3",
+            "Price": "20",
+            "Account Total": "100",
+            "Key": "TestBroker LegacyKey",
+        },
+    ]
+    with holdings_file.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    mapping = {"TestBroker": {"1": {"1234": "Alpha"}}}
+
+    def fake_load_account_mappings():
+        return mapping
+
+    def fake_get_account_nickname(broker_name, broker_number, account_number):
+        broker_key = broker_name
+        group_key = str(broker_number)
+        account_key = str(account_number)
+        return (
+            mapping.setdefault(broker_key, {})
+            .setdefault(group_key, {})
+            .setdefault(account_key, "Alpha")
+        )
+
+    monkeypatch.setattr(
+        utility_utils, "load_account_mappings", fake_load_account_mappings
+    )
+    monkeypatch.setattr(
+        utility_utils, "get_account_nickname", fake_get_account_nickname
+    )
+
+    statuses, timestamp = asyncio.run(
+        utility_utils.track_ticker_summary(
+            ctx=None,
+            ticker="AAPL",
+            collect=True,
+            holding_logs_file=holdings_file,
+        )
+    )
+
+    assert statuses == {"TestBroker": ("✅", 1, 1)}
+    assert timestamp == "2024-01-01 10:00:01"

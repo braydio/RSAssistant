@@ -94,3 +94,29 @@ def test_load_account_mappings_uses_sql_only_when_enabled(monkeypatch):
     mappings = config_utils.load_account_mappings()
 
     assert mappings == {}
+
+
+def test_history_query_toggle_defaults_false_when_not_configured(monkeypatch, tmp_path):
+    missing_settings = tmp_path / "missing.yml"
+    monkeypatch.setattr(config_utils, "_SETTINGS_YAML_CANDIDATES", (missing_settings,))
+
+    assert config_utils._get_history_query_enabled_from_settings() is False
+
+
+def test_history_query_toggle_reads_feature_flags_block(monkeypatch, tmp_path):
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text(
+        "feature_flags:\n  history_query_enabled: true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_utils, "_SETTINGS_YAML_CANDIDATES", (settings_path,))
+
+    assert config_utils._get_history_query_enabled_from_settings() is True
+
+
+def test_history_query_toggle_reads_top_level_fallback(monkeypatch, tmp_path):
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text("history_query_enabled: yes\n", encoding="utf-8")
+    monkeypatch.setattr(config_utils, "_SETTINGS_YAML_CANDIDATES", (settings_path,))
+
+    assert config_utils._get_history_query_enabled_from_settings() is True

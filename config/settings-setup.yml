@@ -1,0 +1,51 @@
+###########################################
+# Copy this file and rename to settings.yml
+###########################################
+
+# General settings
+general_settings:
+  app_name:  'RSAssistant'
+  file_version: '2.2'
+
+feature_flags:
+  history_query_enabled: false 
+
+  # Header settings for csv logs
+header_settings:
+  holdings_headers:
+  - Key
+  - Broker Name
+  - Broker Number
+  - Account Number
+  - Stock
+  - Quantity
+  - Price
+  - Position Value
+  - Account Total
+  - Timestamp
+  orders_headers:
+  - Broker Name
+  - Broker Number
+  - Account Number
+  - Order Type
+  - Stock
+  - Quantity
+  - Price
+  - Date
+  - Timestamp
+
+# Logging settings - Adjust logging levels and rotation settings.
+logging:
+  level: "INFO"                 # Logging level options: DEBUG, INFO, WARNING, ERROR
+  file: volumes/logs/rsassistant.log  # Log file location
+  max_size: 10MB                # Maximum log file size before rotation
+  backup_count: 2               # Number of old log files to retain (adjustable)
+<Find>
+# Runtime environment for development or production - Set to "production" for production
+environment:
+  mode: production
+
+# Optional feature flags
+feature_flags:
+  history_query_enabled: false  # Set true to enable the ..history command
+y the "USER SPECIFIC SETTINGS" unless updating your personal IDs and account mappings.

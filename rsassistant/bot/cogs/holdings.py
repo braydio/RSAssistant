@@ -9,7 +9,12 @@ from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from rsassistant.bot.history_query import show_sql_holdings_history
-from utils.config_utils import DISCORD_HOLDINGS_CHANNEL, DISCORD_PRIMARY_CHANNEL, HOLDINGS_LOG_CSV
+from utils.config_utils import (
+    DISCORD_HOLDINGS_CHANNEL,
+    DISCORD_PRIMARY_CHANNEL,
+    HISTORY_QUERY_ENABLED,
+    HOLDINGS_LOG_CSV,
+)
 from utils.csv_utils import clear_holdings_log
 from utils.holdings_snapshot import build_holdings_snapshot_embeds
 from utils.utility_utils import track_ticker_summary
@@ -169,4 +174,9 @@ class HoldingsCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(HoldingsCog(bot))
+    cog = HoldingsCog(bot)
+    await bot.add_cog(cog)
+    if not HISTORY_QUERY_ENABLED:
+        command = bot.get_command("history")
+        if command and command.cog is cog:
+            bot.remove_command("history")

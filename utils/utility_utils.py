@@ -194,7 +194,7 @@ async def track_ticker_summary(
                     "Price": price,
                     "Account Total": account_total,
                 }
-            else:
+            elif account_key not in holdings[broker_name]:
                 holdings[broker_name][account_key] = {
                     "status": "❌",
                     "Quantity": "N/A",

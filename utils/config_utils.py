@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 import dotenv
+import yaml
 
 import logging
 from typing import Optional
@@ -227,6 +228,61 @@ MARKET_HOLIDAYS_FILE = _resolve_path_env(
 )
 AUTOBUY_CONFIG_FILE = _resolve_path_env(
     "AUTOBUY_CONFIG_FILE", CONFIG_DIR / "autobuy_overrides.json"
+)
+_SETTINGS_YAML_CANDIDATES: tuple[Path, ...] = (
+    BASE_DIR / "settings.yml",
+    BASE_DIR / "settings.yaml",
+    CONFIG_DIR / "settings.yaml",
+    CONFIG_DIR / "settings.yml",
+)
+
+
+def _coerce_to_bool(value, default: bool = False) -> bool:
+    """Convert common bool-like values to ``bool`` with ``default`` fallback."""
+
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "y", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "n", "off"}:
+            return False
+    return default
+
+
+def _load_legacy_settings() -> dict:
+    """Load the first available legacy settings YAML, if present."""
+
+    for path in _SETTINGS_YAML_CANDIDATES:
+        if not path.exists() or path.is_dir():
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                data = yaml.safe_load(file) or {}
+            if isinstance(data, dict):
+                return data
+            logger.warning("Legacy settings file is not a mapping: %s", path)
+        except Exception as exc:
+            logger.warning("Failed to parse legacy settings %s: %s", path, exc)
+    return {}
+
+
+def _get_history_query_enabled_from_settings(default: bool = False) -> bool:
+    """Return history query command toggle from legacy settings files."""
+
+    settings = _load_legacy_settings()
+    feature_flags = settings.get("feature_flags", {})
+    if isinstance(feature_flags, dict) and "history_query_enabled" in feature_flags:
+        return _coerce_to_bool(feature_flags.get("history_query_enabled"), default)
+    return _coerce_to_bool(settings.get("history_query_enabled"), default)
+
+
+# Enable ``..history`` holdings query command (default off unless explicitly enabled)
+HISTORY_QUERY_ENABLED = _get_env_bool(
+    "HISTORY_QUERY_ENABLED", _get_history_query_enabled_from_settings(False)
 )
 
 
@@ -745,6 +801,9 @@ def load_config():
             "csv": CSV_LOGGING_ENABLED,
             "excel": EXCEL_LOGGING_ENABLED,
             "sql": SQL_LOGGING_ENABLED,
+        },
+        "feature_flags": {
+            "history_query_enabled": HISTORY_QUERY_ENABLED,
         },
     }
 
