@@ -38,6 +38,27 @@ class AlertChannelMessageTest(unittest.TestCase):
         self.assertEqual(result["ticker"], "PTLE")
         self.assertTrue(result["reverse_split_confirmed"])
 
+    def test_reverse_split_parses_tsx_venture_suffix_ticker_without_false_match(self) -> None:
+        message = (
+            "TORONTO, ON / ACCESS Newswire / March 11, 2026 / Alturas Minerals Corp. "
+            "(TSX-V:ALT.V) is pleased to announce that the Company will be seeking "
+            "shareholder approval for a consolidation of the Company's outstanding "
+            "common shares."
+        )
+
+        result = alert_channel_message(message)
+
+        self.assertEqual(result["ticker"], "ALT")
+        self.assertTrue(result["reverse_split_confirmed"])
+
+    def test_reverse_split_does_not_treat_single_letter_parenthetical_as_ticker(self) -> None:
+        message = "Company announces reverse split on the basis of up to 1-for-10 (the \"Shares\")"
+
+        result = alert_channel_message(message)
+
+        self.assertIsNone(result["ticker"])
+        self.assertTrue(result["reverse_split_confirmed"])
+
 
 class ParseOrderMessageTest(unittest.TestCase):
     def test_robinhood_mfa_prompt_is_treated_as_notification(self) -> None:
