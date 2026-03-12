@@ -34,12 +34,21 @@ _REMOTE_FETCH_HEADERS = {
     )
 }
 
+_EXCHANGE_QUALIFIER_PATTERN = re.compile(
+    r"(?:NASDAQ(?:CM|GM|GS)?|NASDAQ CAPITAL MARKET|NASDAQ STOCK MARKET|"
+    r"NYSE(?: AMERICAN| ARCA| MKT)?|NYSEMKT|NYSEARCA|AMEX|OTC(?:QX|QB|MKTS|BB)?|"
+    r"TSX(?:\s*[- ]?(?:VENTURE|V))?|TSXV|CSE|ASX|LSE|AIM)",
+    re.IGNORECASE,
+)
+
+_EXCHANGE_SUFFIXES_TO_STRIP = {"V", "TO", "AX", "L", "CN", "NE"}
+
 # Reverse split phrasing varies by issuer/region. This list intentionally
 # includes common equivalent language such as "share consolidation".
 _REVERSE_SPLIT_PATTERNS = [
     r"reverse\s+(?:stock\s+)?split",
     r"(?:share|stock)\s+consolidation",
-    r"consolidation\s+of\s+(?:its\s+)?(?:common\s+)?(?:shares|stock)",
+    r"consolidation\s+of\s+(?:[A-Za-z'\-]+\s+){0,6}(?:shares|stock)",
 ]
 
 # Load account mappings once at import time
@@ -53,7 +62,7 @@ _REMOTE_TICKER_PATTERNS = [
     re.compile(
         r"\b(?:NASDAQ(?:CM|GM|GS)?|NASDAQ CAPITAL MARKET|NASDAQ STOCK MARKET|"
         r"NYSE(?: AMERICAN| ARCA| MKT)?|NYSEMKT|NYSEARCA|AMEX|OTC(?:QX|QB|MKTS|BB)?|"
-        r"TSX(?: VENTURE)?|TSXV|CSE|ASX|LSE|AIM)\b\s*[:=\-–]\s*"
+        r"TSX(?:\s*[- ]?(?:VENTURE|V))?|TSXV|CSE|ASX|LSE|AIM)\b\s*[:=\-–]\s*"
         r"([A-Z][A-Z0-9.\-]{0,5})\b",
         re.IGNORECASE,
     ),
@@ -66,6 +75,60 @@ _REMOTE_TICKER_PATTERNS = [
         re.IGNORECASE,
     ),
 ]
+
+_ALERT_TICKER_PATTERNS = [
+    re.compile(
+        r"\(\s*(?:NASDAQ(?:CM|GM|GS)?|NASDAQ CAPITAL MARKET|NASDAQ STOCK MARKET|"
+        r"NYSE(?: AMERICAN| ARCA| MKT)?|NYSEMKT|NYSEARCA|AMEX|OTC(?:QX|QB|MKTS|BB)?|"
+        r"TSX(?:\s*[- ]?(?:VENTURE|V))?|TSXV|CSE|ASX|LSE|AIM)\s*[:=\-–]\s*"
+        r"([A-Za-z][A-Za-z0-9.\-]{0,9})\s*\)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\(([A-Za-z][A-Za-z0-9]{0,9})\)"),
+]
+
+
+def _normalize_ticker_symbol(raw_ticker: Optional[str]) -> Optional[str]:
+    """Normalize ticker candidates extracted from alert text or remote sources.
+
+    This strips whitespace, removes exchange prefixes, and removes known
+    non-U.S. exchange suffixes (for example ``ALT.V`` -> ``ALT``).
+    """
+
+    if not raw_ticker:
+        return None
+
+    candidate = raw_ticker.strip().upper().strip("()[]{}\"'` ")
+    if not candidate:
+        return None
+
+    if ":" in candidate:
+        candidate = candidate.split(":")[-1].strip()
+
+    if "." in candidate:
+        base, suffix = candidate.split(".", 1)
+        if base and suffix in _EXCHANGE_SUFFIXES_TO_STRIP:
+            candidate = base
+
+    return candidate or None
+
+
+def _extract_ticker_from_alert_text(content: str) -> Optional[str]:
+    """Extract ticker candidate from raw alert message content."""
+
+    for pattern in _ALERT_TICKER_PATTERNS:
+        match = pattern.search(content)
+        if match:
+            return _normalize_ticker_symbol(match.group(1))
+
+    exchange_match = _EXCHANGE_QUALIFIER_PATTERN.search(content)
+    if exchange_match:
+        tail = content[exchange_match.end() :]
+        candidate_match = re.search(r"\s*[:=\-–]\s*([A-Za-z][A-Za-z0-9.\-]{0,9})", tail)
+        if candidate_match:
+            return _normalize_ticker_symbol(candidate_match.group(1))
+
+    return None
 
 
 def _log_order_failure(reason: str, details: str) -> None:
@@ -116,7 +179,9 @@ def _extract_ticker_from_remote_source(url: Optional[str]) -> Optional[str]:
     for pattern in _REMOTE_TICKER_PATTERNS:
         match = pattern.search(text)
         if match:
-            ticker = match.group(1).upper()
+            ticker = _normalize_ticker_symbol(match.group(1))
+            if not ticker:
+                continue
             logger.info("Resolved ticker %s from remote source %s", ticker, url)
             return ticker
 
@@ -1119,10 +1184,7 @@ def alert_channel_message(content):
         preview = normalized_content[:240]
         logger.info("Alert content preview (normalized): %s", preview)
 
-    # Regex pattern to extract the ticker inside parentheses
-    ticker_pattern = r"\(([A-Za-z0-9]+)\)"  # Allows uppercase and lowercase tickers
-    ticker_match = re.search(ticker_pattern, normalized_content)
-    ticker = ticker_match.group(1).upper() if ticker_match else None
+    ticker = _extract_ticker_from_alert_text(normalized_content)
 
     if ticker:
         logger.info(f"Ticker detected in alert message: {ticker}")

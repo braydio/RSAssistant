@@ -65,6 +65,11 @@ Then open `http://127.0.0.1:8765` in your browser.
 2. LLM parsing runs when `OPENAI_POLICY_ENABLED=true` and can fill in missing ratio/date/policy details.
 3. The resolved policy and effective date drive watchlist scheduling and reminders.
 
+Alert ticker parsing includes exchange-aware normalization to reduce false
+positives from non-U.S. formats in press releases (for example, `TSX-V:ALT.V`
+is normalized to `ALT` and parenthetical prose like `(the "Shares")` is
+ignored as a ticker).
+
 ## Data & persistence
 
 Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
