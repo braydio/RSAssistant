@@ -11,19 +11,17 @@ can be imported as `plugins.ultma`. In this monorepo, it already resides at
 
 ## Configure
 
-1. Copy the example config:
+Store ULT-MA variables in RSAssistant's `config/.env` (or your `ENV_FILE`
+target). Do not rely on `plugins/ultma/config/.env` for operator workflows.
 
-```bash
-cp plugins/ultma/config/example.env plugins/ultma/config/.env
-```
-
-2. Update values in `plugins/ultma/config/.env` (or set `ULTMA_ENV_FILE` to a
-   custom path).
+If you must load a dedicated env file for local experimentation, set
+`ULTMA_ENV_FILE`, but production/operator setups should keep a single source of
+truth in `config/.env`.
 
 ## Enable in RSAssistant
 
 Enable plugins from the RSAssistant config so the core bot controls what loads.
-Set `ENABLED_PLUGINS` in `config/.env` (or your environment):
+Set `ENABLED_PLUGINS` in `config/.env` (or your `ENV_FILE` target):
 
 ```bash
 ENABLED_PLUGINS=ultma

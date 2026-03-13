@@ -32,6 +32,16 @@ application does not load a `.env` file inside the container.
 
 ## Configuration basics
 
+RSAssistant configuration is sourced from exactly one env file:
+
+1. `ENV_FILE=/absolute/or/relative/path.env` (only this file is loaded)
+2. Docker: process environment only (`env_file` / `environment` in Compose)
+3. Local default: `config/.env`
+
+Use `config/.env.example` as the canonical key list. Keep all RSAssistant and
+plugin keys in `config/.env` (or your `ENV_FILE` target); avoid ad hoc per-plugin
+env files for operations.
+
 Required settings in `config/.env`:
 
 - `BOT_TOKEN`
@@ -45,11 +55,8 @@ Optional channels:
 - `DISCORD_WATCHLIST_CHANNEL` (watchlist-only output)
 - `AUTO_BUY_WATCHLIST` (when `true`, `..all` queues `!rsa buy 1 <ticker> <broker> false` if a watched ticker is missing and no queued order exists)
 
-Env file loading order:
-
-1. `ENV_FILE=/absolute/or/relative/path.env` (only this file is loaded)
-2. Docker: process environment only
-3. Local default: `config/.env`
+`ENABLED_PLUGINS` controls optional runtime modules (for example `ultma`).
+Plugin-specific keys are also read from `config/.env` / `ENV_FILE`.
 
 ## Optional env GUI
 
@@ -137,9 +144,9 @@ Or use the helper script from this repo:
 ./scripts/apply-auto-rsa-patch.sh /path/to/auto-rsa
 ```
 
-The patcher reads `AUTO_RSA_HOLDINGS_FILE` from your environment (or
-`config/.env`) and writes it into the auto-rsa `.env` (override with
-`AUTO_RSA_ENV_FILE=/path/to/auto-rsa.env`). Then set the same
+The patcher reads `AUTO_RSA_HOLDINGS_FILE` from `config/.env` (or your
+configured `ENV_FILE`) and writes it into the auto-rsa `.env` (override with
+`AUTO_RSA_ENV_FILE=/path/to/auto-rsa.env` for the auto-rsa side only). Then set the same
 `AUTO_RSA_HOLDINGS_FILE` value in RSAssistant so both containers share the
 snapshot path.
 

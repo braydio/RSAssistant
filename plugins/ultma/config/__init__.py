@@ -11,30 +11,26 @@ import dotenv
 logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(__file__).resolve().parent
-DEFAULT_ENV_PATH = CONFIG_DIR / ".env"
 
 
 def load_env() -> None:
-    """Load plugin-specific environment variables."""
+    """Load plugin-specific environment variables from an explicit override only."""
 
     env_file_override = os.getenv("ULTMA_ENV_FILE")
-    if env_file_override:
-        override_path = Path(env_file_override)
-        if not override_path.is_absolute():
-            override_path = (CONFIG_DIR / override_path).resolve()
-        if override_path.exists():
-            dotenv.load_dotenv(dotenv_path=override_path)
-            logger.info("ULT-MA env loaded from ULTMA_ENV_FILE=%s", override_path)
-        else:
-            logger.warning(
-                "ULTMA_ENV_FILE set to %s but file not found; using process env only.",
-                override_path,
-            )
+    if not env_file_override:
         return
 
-    if DEFAULT_ENV_PATH.exists():
-        dotenv.load_dotenv(dotenv_path=DEFAULT_ENV_PATH)
-        logger.info("ULT-MA env loaded from %s", DEFAULT_ENV_PATH)
+    override_path = Path(env_file_override)
+    if not override_path.is_absolute():
+        override_path = (CONFIG_DIR / override_path).resolve()
+    if override_path.exists():
+        dotenv.load_dotenv(dotenv_path=override_path)
+        logger.info("ULT-MA env loaded from ULTMA_ENV_FILE=%s", override_path)
+    else:
+        logger.warning(
+            "ULTMA_ENV_FILE set to %s but file not found; using process env only.",
+            override_path,
+        )
 
 
 load_env()
