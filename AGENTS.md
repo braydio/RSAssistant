@@ -28,6 +28,7 @@
 - Module boundaries: keep Discord I/O in `rsassistant/`, helpers in `utils/`.
 
 ## Documentation Guidelines
+- Always update the /config/.env.example or similar with any configuration updates.
 - Keep `README.md` focused on setup, config, and operator workflows.
 - Keep architecture notes in `docs/architecture.md`.
 - Prune stale docs instead of accumulating duplicates.

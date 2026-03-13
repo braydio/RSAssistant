@@ -5,6 +5,7 @@ from __future__ import annotations
 from discord.ext import commands
 
 from utils.csv_utils import send_top_holdings_embed
+from utils.holdings_importer import import_holdings_if_updated
 from utils.utility_utils import (
     generate_broker_summary_embed,
     generate_owner_totals_embed,
@@ -26,6 +27,7 @@ class ReportingCog(commands.Cog):
         extras={"category": "Reporting"},
     )
     async def broker_has(self, ctx: commands.Context, ticker: str, *args: str) -> None:
+        import_holdings_if_updated()
         specific_broker = args[0] if args else None
         await track_ticker_summary(
             ctx,

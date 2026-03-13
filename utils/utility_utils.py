@@ -20,6 +20,21 @@ from utils.config_utils import (
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_identity_field(value):
+    """Normalize broker/account style identifiers for robust matching."""
+
+    return " ".join(str(value or "").strip().split())
+
+
+def _normalize_ticker_symbol(value):
+    """Normalize ticker input across commands and holdings rows."""
+
+    ticker = _normalize_identity_field(value)
+    if ticker.startswith("$"):
+        ticker = ticker[1:].strip()
+    return ticker.upper()
+
 def check_holdings_timestamp(filename):
     """Reads the latest timestamp from the specified CSV file."""
     try:
@@ -103,10 +118,13 @@ async def track_ticker_summary(
         otherwise ``None`` because embeds are sent via ``ctx``.
     """
     holdings = {}
-    ticker = ticker.upper().strip()  # Standardize ticker format
+    ticker = _normalize_ticker_symbol(ticker)
 
     # Load account mappings
     mapped_accounts = load_account_mappings()
+    broker_name_lookup = {
+        _normalize_identity_field(name).lower(): name for name in mapped_accounts
+    }
 
     try:
         # Read holdings log and keep only the latest row per account + ticker
@@ -115,22 +133,18 @@ async def track_ticker_summary(
             csv_reader = csv.DictReader(file)
 
             for row in csv_reader:
-                broker_name = row.get("Broker Name")
+                broker_name_raw = row.get("Broker Name")
+                broker_name_normalized = _normalize_identity_field(broker_name_raw)
+                broker_name = broker_name_lookup.get(
+                    broker_name_normalized.lower(), broker_name_normalized
+                )
                 if not broker_name:
                     continue
 
                 broker_number_raw = row.get("Broker Number")
                 account_number_raw = row.get("Account Number")
-                broker_number = (
-                    str(broker_number_raw).strip()
-                    if broker_number_raw not in (None, "")
-                    else ""
-                )
-                account_number = (
-                    str(account_number_raw).strip()
-                    if account_number_raw not in (None, "")
-                    else ""
-                )
+                broker_number = _normalize_identity_field(broker_number_raw)
+                account_number = _normalize_identity_field(account_number_raw)
 
                 # Resolve the canonical "<Broker> <Account Nickname>" identifier.
                 account_nickname = None
@@ -167,7 +181,7 @@ async def track_ticker_summary(
                     timestamp = datetime.min
 
                 stock_raw = row.get("Stock", "")
-                stock = stock_raw.upper().strip() if isinstance(stock_raw, str) else ""
+                stock = _normalize_ticker_symbol(stock_raw)
                 key = (broker_name, account_key, stock)
                 if key not in latest_rows or timestamp > latest_rows[key]["_ts"]:
                     row["_ts"] = timestamp

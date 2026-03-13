@@ -163,3 +163,54 @@ def test_track_ticker_summary_does_not_overwrite_positive_match(
 
     assert statuses == {"TestBroker": ("✅", 1, 1)}
     assert timestamp == "2024-01-01 10:00:01"
+
+
+def test_track_ticker_summary_normalizes_ticker_and_broker_name(tmp_path, monkeypatch):
+    holdings_file = tmp_path / "holdings.csv"
+    fieldnames = [
+        "Timestamp",
+        "Broker Name",
+        "Broker Number",
+        "Account Number",
+        "Stock",
+        "Quantity",
+        "Price",
+        "Account Total",
+        "Key",
+    ]
+    holdings_row = {
+        "Timestamp": "2024-01-01 10:00:00",
+        "Broker Name": " testbroker ",
+        "Broker Number": " 1 ",
+        "Account Number": " 1234 ",
+        "Stock": " $aapl ",
+        "Quantity": "5",
+        "Price": "10",
+        "Account Total": "100",
+        "Key": "testbroker legacy",
+    }
+    with holdings_file.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(holdings_row)
+
+    mapping = {"TestBroker": {"1": {"1234": "Alpha"}}}
+
+    monkeypatch.setattr(utility_utils, "load_account_mappings", lambda: mapping)
+    monkeypatch.setattr(
+        utility_utils,
+        "get_account_nickname",
+        lambda _broker, _group, _account: "Alpha",
+    )
+
+    statuses, timestamp = asyncio.run(
+        utility_utils.track_ticker_summary(
+            ctx=None,
+            ticker=" $AAPL ",
+            collect=True,
+            holding_logs_file=holdings_file,
+        )
+    )
+
+    assert statuses == {"TestBroker": ("✅", 1, 1)}
+    assert timestamp == "2024-01-01 10:00:00"

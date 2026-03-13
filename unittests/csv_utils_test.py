@@ -325,3 +325,46 @@ def test_save_holdings_to_csv_disabled(monkeypatch, tmp_path):
         ]
     )
     assert not (tmp_path / "holdings.csv").exists()
+
+
+def test_save_holdings_normalizes_identity_fields_and_dedupes(tmp_path):
+    csv_path = tmp_path / "holdings.csv"
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+    csv_utils.update_holdings_live_batch = lambda _rows: 0
+
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "fennel ",
+                "group": " 1",
+                "account": " 0001 ",
+                "ticker": " $amze ",
+                "quantity": 1,
+                "price": 1.25,
+            }
+        ]
+    )
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "fennel",
+                "group": "1 ",
+                "account": "0001",
+                "ticker": "AMZE",
+                "quantity": 2,
+                "price": 1.5,
+            }
+        ]
+    )
+
+    with open(csv_path, newline="") as file:
+        rows = list(csv.DictReader(file))
+
+    assert len(rows) == 1
+    assert rows[0]["Broker Name"] == "fennel"
+    assert rows[0]["Broker Number"] == "1"
+    assert rows[0]["Account Number"] == "0001"
+    assert rows[0]["Stock"] == "AMZE"
+    assert rows[0]["Key"] == "fennel_1_0001_AMZE"
+    assert float(rows[0]["Quantity"]) == 2.0

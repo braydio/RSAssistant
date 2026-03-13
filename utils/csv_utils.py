@@ -26,6 +26,21 @@ from utils.order_exec import send_sell_command
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_text_field(value):
+    """Normalize free-text CSV identity fields with stable whitespace."""
+
+    return " ".join(str(value or "").strip().split())
+
+
+def _normalize_ticker_symbol(ticker):
+    """Normalize ticker symbols for dedupe/lookups."""
+
+    normalized = _normalize_text_field(ticker)
+    if normalized.startswith("$"):
+        normalized = normalized[1:].strip()
+    return normalized.upper()
+
 HOLDINGS_HEADERS = [
     "Key",
     "Broker Name",
@@ -381,11 +396,20 @@ def _normalize_holding_row(holding, row_index):
     for column in HOLDINGS_HEADERS:
         row.setdefault(column, "")
 
+    row["Broker Name"] = _normalize_text_field(row.get("Broker Name", ""))
+    row["Broker Number"] = _normalize_text_field(row.get("Broker Number", ""))
+    row["Account Number"] = _normalize_text_field(row.get("Account Number", ""))
+    row["Stock"] = _normalize_ticker_symbol(row.get("Stock", ""))
+
     row["Quantity"] = _coerce_float(row["Quantity"], "Quantity", row_index)
     row["Price"] = _coerce_float(row["Price"], "Price", row_index)
     row["Position Value"] = row["Quantity"] * row["Price"]
     row["Account Total"] = _coerce_float(
         row.get("Account Total", 0), "Account Total", row_index
+    )
+    row["Key"] = (
+        f"{row['Broker Name']}_{row['Broker Number']}_"
+        f"{row['Account Number']}_{row['Stock']}"
     )
     return row
 
@@ -449,7 +473,8 @@ def save_holdings_to_csv(parsed_holdings):
         existing_holdings = _validate_existing_holdings_csv(HOLDINGS_LOG_CSV)
 
         existing_by_key = {}
-        for holding in existing_holdings:
+        for row_index, holding in enumerate(existing_holdings, start=1):
+            holding = _normalize_holding_row(holding, row_index)
             holding_key = (
                 holding.get("Key", ""),
                 holding.get("Broker Name", ""),

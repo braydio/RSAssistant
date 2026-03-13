@@ -13,10 +13,11 @@ index 3c86c6b..f1e0a3b 100644
 +import json
  import operator
  import os
-@@ -716,6 +717,7 @@ def print_all_holdings(
+@@ -716,6 +717,8 @@ def print_all_holdings(
      print(
          f"\n==============================\n{broker_obj.get_name()} Holdings\n==============================",
      )
++    broker_name = broker_obj.get_name()
 +    snapshot_entries: list[dict[str, Any]] = []
      for key in broker_obj.get_account_numbers():
          for account in broker_obj.get_account_numbers(key):
@@ -27,7 +28,6 @@ index 3c86c6b..f1e0a3b 100644
                      total = holdings[stock]["total"]
                      print_string += f"{stock}: {quantity} @ ${format(price, '0.2f')} = ${format(total, '0.2f')}\n"
 +                    group = key
-+                    broker_name = broker_obj.get_name()
 +                    if isinstance(key, str) and key.startswith(f"{broker_name} "):
 +                        group = key[len(f"{broker_name} ") :].strip() or key
 +                    snapshot_entries.append(
@@ -44,14 +44,29 @@ index 3c86c6b..f1e0a3b 100644
 +                    )
              print_string += f"Total: ${format(broker_obj.get_account_totals(key, account), '0.2f')}\n"
              print(print_string)
-@@ -757,4 +777,11 @@ def print_all_holdings(
+@@ -757,4 +778,25 @@ def print_all_holdings(
              )
              embed["fields"].append(field)
 +    snapshot_path = os.getenv("AUTO_RSA_HOLDINGS_FILE", "")
 +    if snapshot_path:
 +        try:
++            existing_entries: list[dict[str, Any]] = []
++            if os.path.exists(snapshot_path):
++                with open(snapshot_path, "r", encoding="utf-8") as handle:
++                    loaded = json.load(handle)
++                    if isinstance(loaded, list):
++                        existing_entries = [item for item in loaded if isinstance(item, dict)]
++
++            current_broker_key = str(broker_name).strip().lower()
++            merged_entries = [
++                item
++                for item in existing_entries
++                if str(item.get("broker", "")).strip().lower() != current_broker_key
++            ]
++            merged_entries.extend(snapshot_entries)
++
 +            with open(snapshot_path, "w", encoding="utf-8") as handle:
-+                json.dump(snapshot_entries, handle)
++                json.dump(merged_entries, handle)
 +        except Exception as exc:
 +            print(f"Failed to write holdings snapshot to {snapshot_path}: {exc}")
      print_and_discord(embed, loop, embed=True)
