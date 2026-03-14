@@ -4,36 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
-
-import dotenv
 
 logger = logging.getLogger(__name__)
-
-CONFIG_DIR = Path(__file__).resolve().parent
-
-
-def load_env() -> None:
-    """Load plugin-specific environment variables from an explicit override only."""
-
-    env_file_override = os.getenv("ULTMA_ENV_FILE")
-    if not env_file_override:
-        return
-
-    override_path = Path(env_file_override)
-    if not override_path.is_absolute():
-        override_path = (CONFIG_DIR / override_path).resolve()
-    if override_path.exists():
-        dotenv.load_dotenv(dotenv_path=override_path)
-        logger.info("ULT-MA env loaded from ULTMA_ENV_FILE=%s", override_path)
-    else:
-        logger.warning(
-            "ULTMA_ENV_FILE set to %s but file not found; using process env only.",
-            override_path,
-        )
-
-
-load_env()
 
 
 def _parse_trading_brokers(raw_value: str) -> list[str]:
