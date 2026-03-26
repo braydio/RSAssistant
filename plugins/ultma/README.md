@@ -12,11 +12,8 @@ can be imported as `plugins.ultma`. In this monorepo, it already resides at
 ## Configure
 
 Store ULT-MA variables in RSAssistant's `config/.env` (or your `ENV_FILE`
-target). Do not rely on `plugins/ultma/config/.env` for operator workflows.
-
-If you must load a dedicated env file for local experimentation, set
-`ULTMA_ENV_FILE`, but production/operator setups should keep a single source of
-truth in `config/.env`.
+target). ULT-MA reads from the process environment only, so operator workflows
+should keep a single source of truth in RSAssistant's centralized env loading.
 
 ## Enable in RSAssistant
 
