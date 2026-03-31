@@ -176,6 +176,7 @@ DISCORD_SECONDARY_CHANNEL = _get_env_int("DISCORD_SECONDARY_CHANNEL", 0)
 DISCORD_TERTIARY_CHANNEL = _get_env_int("DISCORD_TERTIARY_CHANNEL", 0)
 DISCORD_HOLDINGS_CHANNEL = _get_env_int("DISCORD_HOLDINGS_CHANNEL", 0)
 DISCORD_WATCHLIST_CHANNEL = _get_env_int("DISCORD_WATCHLIST_CHANNEL", 0)
+AUTO_RSA_DIR = os.getenv("AUTO_RSA_DIR", "").strip()
 # Auto-RSA holdings import (file-based)
 AUTO_RSA_HOLDINGS_ENABLED = _get_env_bool("AUTO_RSA_HOLDINGS_ENABLED", True)
 AUTO_RSA_HOLDINGS_FILE = _resolve_path_env(
@@ -194,6 +195,18 @@ PROGRAMMATIC_POLICY_ENABLED = _get_env_bool("PROGRAMMATIC_POLICY_ENABLED", True)
 RSA_COMMAND_MIN_INTERVAL_SECONDS = _get_env_float("RSA_COMMAND_MIN_INTERVAL_SECONDS", 2)
 # Enable scheduled ``..all`` refreshes every 15 minutes during market hours
 ENABLE_MARKET_REFRESH = _get_env_bool("ENABLE_MARKET_REFRESH", False)
+# Watch primary-channel error messages and invoke codex remediation workflows.
+AUTO_RSA_ERROR_WATCHER_ENABLED = _get_env_bool("AUTO_RSA_ERROR_WATCHER_ENABLED", False)
+AUTO_RSA_ERROR_WATCHER_COOLDOWN_SECONDS = _get_env_int(
+    "AUTO_RSA_ERROR_WATCHER_COOLDOWN_SECONDS", 120
+)
+AUTO_RSA_ERROR_WATCHER_TIMEOUT_SECONDS = _get_env_int(
+    "AUTO_RSA_ERROR_WATCHER_TIMEOUT_SECONDS", 300
+)
+AUTO_RSA_ERROR_WATCHER_MAX_OUTPUT_CHARS = _get_env_int(
+    "AUTO_RSA_ERROR_WATCHER_MAX_OUTPUT_CHARS", 3500
+)
+CODEX_EXEC_COMMAND = os.getenv("CODEX_EXEC_COMMAND", "codex exec").strip()
 
 # --- Feature toggles and thresholds ---
 # Automatically trigger holdings refresh when the watchlist reminder is sent

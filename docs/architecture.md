@@ -31,6 +31,11 @@ RSAssistant does not import auto-rsa code. It communicates via Discord commands
 and can optionally ingest a holdings snapshot JSON file if auto-rsa writes it to
 a shared path (`AUTO_RSA_HOLDINGS_FILE`).
 
+When `AUTO_RSA_ERROR_WATCHER_ENABLED=true`, RSAssistant also monitors the
+primary Discord channel for error-like messages and invokes `codex exec` with
+runtime context so Codex can attempt automatic remediation in `AUTO_RSA_DIR`
+(or provide a manual summary/patch when write access is unavailable).
+
 ## Policy parsing
 
 1. Programmatic parsing runs when `PROGRAMMATIC_POLICY_ENABLED=true`.
