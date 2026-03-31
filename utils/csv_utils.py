@@ -26,6 +26,8 @@ from utils.order_exec import send_sell_command
 
 logger = logging.getLogger(__name__)
 
+_ACTIVE_HOLDINGS_REFRESH_TARGET = None
+
 
 def _normalize_text_field(value):
     """Normalize free-text CSV identity fields with stable whitespace."""
@@ -179,6 +181,69 @@ def ensure_csv_file_exists(file_path, headers):
         with open(file_path, mode="w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(headers)
+
+
+def _get_holdings_staging_path(filename):
+    return f"{filename}.next"
+
+
+def begin_holdings_refresh(filename=HOLDINGS_LOG_CSV):
+    """Start a full holdings refresh using a staging CSV."""
+
+    global _ACTIVE_HOLDINGS_REFRESH_TARGET
+
+    if not CSV_LOGGING_ENABLED:
+        logger.info("CSV logging disabled; skipping holdings refresh staging.")
+        return None
+
+    staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
+    if os.path.exists(staging_path):
+        _ACTIVE_HOLDINGS_REFRESH_TARGET = staging_path
+        logger.info("Holdings refresh staging already active at %s", staging_path)
+        return staging_path
+
+    with open(staging_path, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(HOLDINGS_HEADERS)
+
+    _ACTIVE_HOLDINGS_REFRESH_TARGET = staging_path
+    logger.info("Started holdings refresh staging at %s", staging_path)
+    return staging_path
+
+
+def finalize_holdings_refresh(filename=HOLDINGS_LOG_CSV):
+    """Atomically promote the staged holdings CSV into the live snapshot."""
+
+    global _ACTIVE_HOLDINGS_REFRESH_TARGET
+
+    staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
+    if not os.path.exists(staging_path):
+        logger.warning("No staged holdings file found to finalize: %s", staging_path)
+        _ACTIVE_HOLDINGS_REFRESH_TARGET = None
+        return False
+
+    _validate_existing_holdings_csv(staging_path)
+    os.replace(staging_path, filename)
+    _ACTIVE_HOLDINGS_REFRESH_TARGET = None
+    logger.info("Promoted staged holdings snapshot from %s to %s", staging_path, filename)
+    return True
+
+
+def abort_holdings_refresh(filename=HOLDINGS_LOG_CSV):
+    """Discard any in-progress staged holdings refresh."""
+
+    global _ACTIVE_HOLDINGS_REFRESH_TARGET
+
+    staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
+    if os.path.exists(staging_path):
+        os.remove(staging_path)
+        logger.info("Discarded staged holdings snapshot at %s", staging_path)
+    _ACTIVE_HOLDINGS_REFRESH_TARGET = None
+
+
+def holdings_refresh_in_progress(filename=HOLDINGS_LOG_CSV):
+    staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
+    return os.path.exists(staging_path)
 
 
 def load_csv_log(file_path):
@@ -451,7 +516,7 @@ def _validate_existing_holdings_csv(file_path):
     return existing_rows
 
 
-def save_holdings_to_csv(parsed_holdings):
+def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True):
     """Save holdings data to the holdings CSV with strict schema validation.
 
     Existing holdings files are validated before ingest. The function fails when
@@ -470,7 +535,11 @@ def save_holdings_to_csv(parsed_holdings):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        existing_holdings = _validate_existing_holdings_csv(HOLDINGS_LOG_CSV)
+        target_file = filename or HOLDINGS_LOG_CSV
+        if use_refresh_target and _ACTIVE_HOLDINGS_REFRESH_TARGET:
+            target_file = _ACTIVE_HOLDINGS_REFRESH_TARGET
+
+        existing_holdings = _validate_existing_holdings_csv(target_file)
 
         existing_by_key = {}
         for row_index, holding in enumerate(existing_holdings, start=1):
@@ -540,13 +609,14 @@ def save_holdings_to_csv(parsed_holdings):
             )
 
         if new_holdings or updated_holdings:
-            with open(HOLDINGS_LOG_CSV, mode="w", newline="") as file:
+            with open(target_file, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
                 writer.writeheader()
                 writer.writerows(existing_by_key.values())
 
             logger.info(
-                "Holdings saved, with %d new entries and %d updates.",
+                "Holdings saved to %s, with %d new entries and %d updates.",
+                target_file,
                 len(new_holdings),
                 updated_holdings,
             )
@@ -569,6 +639,7 @@ def clear_holdings_log(filename):
         logger.info("CSV logging disabled; skipping clear for %s", filename)
         return True, "CSV logging disabled; nothing to clear."
     try:
+        abort_holdings_refresh(filename)
         # Check if the file exists
         if not os.path.exists(filename):
             return False, f'Holdings at: "{filename}" does not exist.'

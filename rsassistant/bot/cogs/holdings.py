@@ -16,6 +16,8 @@ from utils.config_utils import (
     HOLDINGS_LOG_CSV,
 )
 from utils.csv_utils import clear_holdings_log
+from utils.csv_utils import abort_holdings_refresh, finalize_holdings_refresh
+from utils.holdings_importer import import_holdings_if_updated
 from utils.holdings_snapshot import build_holdings_snapshot_embeds
 from utils.utility_utils import track_ticker_summary
 from rsassistant.bot.handlers.on_message import (
@@ -56,8 +58,7 @@ class HoldingsCog(commands.Cog):
         extras={"category": "Reporting"},
     )
     async def show_reminder(self, ctx: commands.Context) -> None:
-        await ctx.send("Clearing the current holdings for refresh.")
-        await self._clear_holdings_log(ctx)
+        await ctx.send("Refreshing holdings using a staged snapshot.")
         channel = resolve_reply_channel(self.bot, DISCORD_PRIMARY_CHANNEL)
         if channel:
             await send_reminder_message_embed(channel)
@@ -69,6 +70,7 @@ class HoldingsCog(commands.Cog):
                 completed = await wait_for_holdings_completion(timeout=600)
                 if not completed:
                     raise asyncio.TimeoutError
+                finalize_holdings_refresh(HOLDINGS_LOG_CSV)
                 summary = get_audit_summary()
                 disable_audit()
                 if summary:
@@ -106,6 +108,7 @@ class HoldingsCog(commands.Cog):
                 await ctx.send(embed=summary_embed)
             except asyncio.TimeoutError:
                 disable_audit()
+                abort_holdings_refresh(HOLDINGS_LOG_CSV)
                 await ctx.send("Timed out waiting for AutoRSA response.")
             finally:
                 reset_holdings_completion_tracking()
@@ -136,6 +139,7 @@ class HoldingsCog(commands.Cog):
         top_n = max(1, min(top_n, 10))
         channel = resolve_reply_channel(self.bot, DISCORD_HOLDINGS_CHANNEL) or ctx.channel
 
+        import_holdings_if_updated()
         embeds, error = build_holdings_snapshot_embeds(broker_filter=broker, top_n=top_n)
         if error:
             await ctx.send(error)

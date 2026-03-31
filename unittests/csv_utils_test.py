@@ -368,3 +368,52 @@ def test_save_holdings_normalizes_identity_fields_and_dedupes(tmp_path):
     assert rows[0]["Stock"] == "AMZE"
     assert rows[0]["Key"] == "fennel_1_0001_AMZE"
     assert float(rows[0]["Quantity"]) == 2.0
+
+
+def test_holdings_refresh_stages_until_finalize(tmp_path):
+    csv_path = tmp_path / "holdings.csv"
+    csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
+    csv_utils.CSV_LOGGING_ENABLED = True
+    csv_utils.update_holdings_live_batch = lambda _rows: 0
+
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Broker",
+                "group": "1",
+                "account": "A1",
+                "ticker": "AAA",
+                "quantity": 1,
+                "price": 1,
+            }
+        ]
+    )
+
+    csv_utils.begin_holdings_refresh(str(csv_path))
+    csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Broker",
+                "group": "1",
+                "account": "A1",
+                "ticker": "BBB",
+                "quantity": 2,
+                "price": 3,
+            }
+        ]
+    )
+
+    with open(csv_path, newline="") as file:
+        live_rows = list(csv.DictReader(file))
+
+    assert len(live_rows) == 1
+    assert live_rows[0]["Stock"] == "AAA"
+
+    csv_utils.finalize_holdings_refresh(str(csv_path))
+
+    with open(csv_path, newline="") as file:
+        promoted_rows = list(csv.DictReader(file))
+
+    assert len(promoted_rows) == 1
+    assert promoted_rows[0]["Stock"] == "BBB"
+    assert not Path(f"{csv_path}.next").exists()

@@ -130,7 +130,7 @@ def import_holdings_file(path: Path | str | None = None) -> int:
             f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
         )
 
-    save_holdings_to_csv(normalized)
+    save_holdings_to_csv(normalized, use_refresh_target=False)
     logger.info("Imported %d holdings entries from %s", len(normalized), file_path)
     return len(normalized)
 

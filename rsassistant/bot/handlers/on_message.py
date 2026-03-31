@@ -15,7 +15,12 @@ from utils.parsing_utils import (
     parse_embed_message,
     parse_order_message,
 )
-from utils.csv_utils import save_holdings_to_csv
+from utils.csv_utils import (
+    begin_holdings_refresh,
+    finalize_holdings_refresh,
+    holdings_refresh_in_progress,
+    save_holdings_to_csv,
+)
 from utils.watch_utils import (
     parse_bulk_watchlist_message,
     add_entries_from_message,
@@ -368,6 +373,7 @@ async def _finalize_discovered_brokers_after_idle() -> None:
         return
     _set_configured_brokers_from_discovery(_refresh_discovered_brokers)
     _refresh_completion_event.set()
+    finalize_holdings_refresh_if_complete()
 
 
 def _reset_discovery_timer(bot) -> None:
@@ -421,6 +427,20 @@ async def wait_for_holdings_completion(timeout: float) -> bool:
         await asyncio.wait_for(_refresh_completion_event.wait(), timeout=timeout)
         return True
     except asyncio.TimeoutError:
+        return False
+
+
+def finalize_holdings_refresh_if_complete() -> bool:
+    """Promote staged holdings once broker completion has been reached."""
+
+    if not _refresh_completion_event or not _refresh_completion_event.is_set():
+        return False
+    if not holdings_refresh_in_progress():
+        return False
+    try:
+        return finalize_holdings_refresh()
+    except Exception as exc:
+        logger.error("Failed to finalize staged holdings refresh: %s", exc)
         return False
 
 
@@ -761,6 +781,7 @@ async def handle_primary_channel(bot, message):
     if "!rsa holdings" in lowered_content:
         start_refresh_window(bot, message.channel, REFRESH_WINDOW_DURATION)
         start_holdings_completion_tracking(bot, force=False)
+        begin_holdings_refresh()
         logger.info("Detected start of holdings refresh; buffering alerts with timer.")
 
     if message.content.startswith(BOT_PREFIX):
@@ -785,6 +806,7 @@ async def handle_primary_channel(bot, message):
                 )
 
             save_holdings_to_csv(parsed_holdings)
+            finalize_holdings_refresh_if_complete()
 
             # After saving, optionally alert and auto-sell tickers over threshold
             try:
