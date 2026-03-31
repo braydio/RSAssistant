@@ -53,6 +53,7 @@ _CORE_COGS: tuple[str, ...] = (
     "rsassistant.bot.cogs.split_monitor",
     "rsassistant.bot.cogs.reporting",
     "rsassistant.bot.cogs.aliases",
+    "rsassistant.bot.cogs.primary_channel_error_watcher",
 )
 
 discord.gateway.DiscordWebSocket.resume_timeout = 60

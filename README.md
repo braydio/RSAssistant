@@ -54,6 +54,9 @@ Optional channels:
 - `DISCORD_HOLDINGS_CHANNEL` (auto-rsa holdings embeds)
 - `DISCORD_WATCHLIST_CHANNEL` (watchlist-only output)
 - `AUTO_BUY_WATCHLIST` (when `true`, `..all` queues `!rsa buy 1 <ticker> <broker> false` if a watched ticker is missing and no queued order exists)
+- `AUTO_RSA_ERROR_WATCHER_ENABLED` (when `true`, watches the primary channel for error-like messages and runs `codex exec` with runtime context)
+- `CODEX_EXEC_COMMAND` (override command used by the watcher; defaults to `codex exec`)
+- `AUTO_RSA_DIR` (optional working directory used when invoking `codex exec`; typically your auto-rsa repo path)
 
 `ENABLED_PLUGINS` controls optional runtime modules (for example `ultma`).
 Plugin-specific keys are also read from `config/.env` / `ENV_FILE`.
