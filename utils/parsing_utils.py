@@ -87,6 +87,16 @@ _ALERT_TICKER_PATTERNS = [
     re.compile(r"\(([A-Za-z][A-Za-z0-9]{0,9})\)"),
 ]
 
+_HOLDINGS_LINE_PATTERN = re.compile(
+    r"([\w\s]+):\s*([-+]?\d[\d,]*(?:\.\d+)?)\s*@\s*\$([-+]?\d[\d,]*(?:\.\d+)?)\s*=\s*\$([-+]?\d[\d,]*(?:\.\d+)?)"
+)
+
+
+def _normalize_numeric_capture(raw_value: str) -> str:
+    """Normalize parsed numeric text for downstream float coercion."""
+
+    return str(raw_value).replace(",", "").strip()
+
 
 def _normalize_ticker_symbol(raw_ticker: Optional[str]) -> Optional[str]:
     """Normalize ticker candidates extracted from alert text or remote sources.
@@ -904,14 +914,12 @@ def parse_general_embed_message(embed):
         for line in value_field.splitlines():
             if "No holdings in Account" in line:
                 continue
-            match = re.match(
-                r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line
-            )
+            match = _HOLDINGS_LINE_PATTERN.match(line)
             if match:
                 stock = match.group(1).strip()
-                quantity = match.group(2)
-                price = match.group(3)
-                total_value = match.group(4)
+                quantity = _normalize_numeric_capture(match.group(2))
+                price = _normalize_numeric_capture(match.group(3))
+                total_value = _normalize_numeric_capture(match.group(4))
                 new_holdings.append(
                     {
                         "account_name": account_name,
@@ -981,14 +989,12 @@ def parse_webull_embed_message(embed):
         for line in value_field.splitlines():
             if "No holdings in Account" in line:
                 continue
-            match = re.match(
-                r"([\w\s]+): (\d+\.\d+) @ \$(\d+\.\d+) = \$(\d+\.\d+)", line
-            )
+            match = _HOLDINGS_LINE_PATTERN.match(line)
             if match:
                 stock = match.group(1).strip()
-                quantity = match.group(2)
-                price = match.group(3)
-                total_value = match.group(4)
+                quantity = _normalize_numeric_capture(match.group(2))
+                price = _normalize_numeric_capture(match.group(3))
+                total_value = _normalize_numeric_capture(match.group(4))
                 new_holdings.append(
                     {
                         "account_name": account_name,
@@ -1045,14 +1051,12 @@ def parse_fennel_embed_message(embed):
             for line in value_field.splitlines():
                 if "No holdings in Account" in line:
                     continue
-                match = re.match(
-                    r"([\w\s]+): ([\-\d\.]+) @ \$(\d+\.\d+) = \$(\-?\d+\.\d+)", line
-                )
+                match = _HOLDINGS_LINE_PATTERN.match(line)
                 if match:
                     stock = match.group(1).strip()
-                    quantity = match.group(2)
-                    price = match.group(3)
-                    total_value = match.group(4)
+                    quantity = _normalize_numeric_capture(match.group(2))
+                    price = _normalize_numeric_capture(match.group(3))
+                    total_value = _normalize_numeric_capture(match.group(4))
                     new_holdings.append(
                         {
                             "account_name": account_key,
