@@ -1,9 +1,14 @@
 """Unit tests for :mod:`utils.parsing_utils`."""
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from utils.parsing_utils import alert_channel_message, parse_order_message
+from utils.parsing_utils import (
+    alert_channel_message,
+    parse_general_embed_message,
+    parse_order_message,
+)
 
 
 class AlertChannelMessageTest(unittest.TestCase):
@@ -97,6 +102,34 @@ class ParseOrderMessageTest(unittest.TestCase):
 
         self.assertEqual(result["ticker"], "SLE")
         self.assertTrue(result["reverse_split_confirmed"])
+
+
+class ParseHoldingsEmbedTest(unittest.TestCase):
+    """Validate holdings extraction from broker embed content."""
+
+    @staticmethod
+    def _build_embed(field_name: str, field_value: str):
+        return SimpleNamespace(
+            fields=[SimpleNamespace(name=field_name, value=field_value)]
+        )
+
+    def test_general_embed_parses_integer_and_comma_values(self) -> None:
+        embed = self._build_embed(
+            "Schwab 1 xxxxx1234",
+            "ABC: 5 @ $10 = $50\nXYZ: 1,250 @ $2.50 = $3,125\nTotal: $3,175",
+        )
+
+        holdings = parse_general_embed_message(embed)
+
+        self.assertEqual(len(holdings), 2)
+        self.assertEqual(holdings[0]["ticker"], "ABC")
+        self.assertEqual(holdings[0]["quantity"], "5")
+        self.assertEqual(holdings[0]["price"], "10")
+        self.assertEqual(holdings[1]["ticker"], "XYZ")
+        self.assertEqual(holdings[1]["quantity"], "1250")
+        self.assertEqual(holdings[1]["price"], "2.50")
+        self.assertEqual(holdings[1]["value"], "3125")
+        self.assertEqual(holdings[1]["account_total"], "3,175")
 
 
 if __name__ == "__main__":
