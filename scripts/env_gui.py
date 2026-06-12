@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -14,6 +15,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 CONFIG_DIR = BASE_DIR / "config"
 ENV_PATH = CONFIG_DIR / ".env"
 TEMPLATE_PATH = CONFIG_DIR / ".env.example"
+CODEX_PROMPT_LIMIT = 4000
 
 
 def _parse_env_lines(lines: list[str]) -> list[dict[str, Any]]:
@@ -290,6 +292,26 @@ def _build_html(entries: list[dict[str, Any]]) -> str:
       color: var(--muted);
       font-size: 13px;
     }
+    .codex-section {
+      margin-top: 32px;
+      border-top: 1px solid var(--stroke);
+      padding-top: 24px;
+    }
+    .codex-field {
+      margin-top: 14px;
+    }
+    .codex-field textarea {
+      width: 100%;
+      min-height: 130px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--stroke);
+      font-family: "Fira Mono", "Cascadia Mono", "Courier New", monospace;
+      font-size: 14px;
+      background: rgba(255,255,255,0.04);
+      color: var(--ink);
+      resize: vertical;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -312,6 +334,27 @@ def _build_html(entries: list[dict[str, Any]]) -> str:
         <button id="saveBtn">Save .env</button>
         <span id="status" class="status"></span>
       </div>
+      <section class="codex-section" aria-labelledby="codexTitle">
+        <h2 id="codexTitle">Codex Change Request</h2>
+        <p class="status">Describe a feature request or change and run Codex CLI from this page.</p>
+        <div class="codex-field">
+          <label for="changeType">Request Type</label>
+          <select id="changeType">
+            <option value="feature">Feature</option>
+            <option value="bugfix">Bug Fix</option>
+            <option value="refactor">Refactor</option>
+            <option value="docs">Documentation</option>
+          </select>
+        </div>
+        <div class="codex-field">
+          <label for="changeRequest">Change Details</label>
+          <textarea id="changeRequest" placeholder="Describe exactly what Codex should build or update."></textarea>
+        </div>
+        <div class="actions">
+          <button id="submitChangeBtn">Submit to Codex CLI</button>
+          <span id="codexStatus" class="status"></span>
+        </div>
+      </section>
     </div>
   </main>
   <script>
@@ -319,6 +362,7 @@ def _build_html(entries: list[dict[str, Any]]) -> str:
     const container = document.getElementById('fields');
     const status = document.getElementById('status');
     const themeSelect = document.getElementById('themeSelect');
+    const codexStatus = document.getElementById('codexStatus');
     const themes = [
       { id: 'nightfox', label: 'Nightfox' },
       { id: 'rose-pine', label: 'Rose Pine' },
@@ -382,6 +426,23 @@ def _build_html(entries: list[dict[str, Any]]) -> str:
       const result = await response.json();
       status.textContent = result.message;
     });
+
+    document.getElementById('submitChangeBtn').addEventListener('click', async () => {
+      const requestText = document.getElementById('changeRequest').value.trim();
+      const requestType = document.getElementById('changeType').value;
+      if (!requestText) {
+        codexStatus.textContent = 'Please add change details before submitting.';
+        return;
+      }
+      codexStatus.textContent = 'Submitting to Codex CLI...';
+      const response = await fetch('/codex-change', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({request_type: requestType, request_text: requestText}),
+      });
+      const result = await response.json();
+      codexStatus.textContent = result.message;
+    });
   </script>
 </body>
  </html>"""
@@ -404,7 +465,8 @@ class EnvGuiHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, html)
 
     def do_POST(self) -> None:  # noqa: N802
-        if urlparse(self.path).path != "/save":
+        route = urlparse(self.path).path
+        if route not in {"/save", "/codex-change"}:
             self._send(HTTPStatus.NOT_FOUND, "Not found", "text/plain")
             return
         content_length = int(self.headers.get("Content-Length", "0"))
@@ -419,18 +481,85 @@ class EnvGuiHandler(BaseHTTPRequestHandler):
             )
             return
 
-        entries = _load_example_entries()
-        env_values = _load_env_map(ENV_PATH)
-        example_keys = {
-            entry["key"] for entry in entries if entry.get("type") == "kv"
-        }
-        extras = {key: value for key, value in env_values.items() if key not in example_keys}
-        _write_entries(entries, updates, extras)
+        if route == "/save":
+            entries = _load_example_entries()
+            env_values = _load_env_map(ENV_PATH)
+            example_keys = {
+                entry["key"] for entry in entries if entry.get("type") == "kv"
+            }
+            extras = {
+                key: value
+                for key, value in env_values.items()
+                if key not in example_keys
+            }
+            _write_entries(entries, updates, extras)
+            self._send(
+                HTTPStatus.OK,
+                json.dumps({"message": "Saved config/.env successfully."}),
+                "application/json",
+            )
+            return
+
+        request_type = str(updates.get("request_type", "")).strip().lower()
+        request_text = str(updates.get("request_text", "")).strip()
+        result = submit_codex_change_request(request_type, request_text)
         self._send(
-            HTTPStatus.OK,
-            json.dumps({"message": "Saved config/.env successfully."}),
+            result["status"],
+            json.dumps({"message": result["message"]}),
             "application/json",
         )
+
+
+def submit_codex_change_request(request_type: str, request_text: str) -> dict[str, Any]:
+    """Submit a change request through Codex CLI.
+
+    Args:
+        request_type: The selected request category from the GUI.
+        request_text: The free-form change description entered by the operator.
+
+    Returns:
+        A dictionary containing an HTTP status code and user-facing message.
+    """
+    if not request_text:
+        return {
+            "status": HTTPStatus.BAD_REQUEST,
+            "message": "Change details are required.",
+        }
+    if len(request_text) > CODEX_PROMPT_LIMIT:
+        return {
+            "status": HTTPStatus.BAD_REQUEST,
+            "message": f"Change details exceed {CODEX_PROMPT_LIMIT} characters.",
+        }
+
+    prompt = (
+        f"Request type: {request_type or 'general'}\\n"
+        "Implement the following change in the current repository:\\n"
+        f"{request_text}"
+    )
+    try:
+        completed = subprocess.run(
+            ["codex", "exec", prompt],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return {
+            "status": HTTPStatus.INTERNAL_SERVER_ERROR,
+            "message": f"Unable to run Codex CLI: {exc}",
+        }
+
+    if completed.returncode != 0:
+        stderr = completed.stderr.strip() or "Codex CLI returned a non-zero exit code."
+        return {
+            "status": HTTPStatus.INTERNAL_SERVER_ERROR,
+            "message": f"Codex request failed: {stderr}",
+        }
+    return {
+        "status": HTTPStatus.OK,
+        "message": "Codex CLI request submitted successfully.",
+    }
 
 
 def main() -> None:
