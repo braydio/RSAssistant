@@ -25,6 +25,10 @@ All runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 - `logs/` (application logs + CSV exports such as holdings/orders)
 - `excel/` (legacy archive only; no runtime writes)
 
+## Local operations UI
+
+`scripts/env_gui.py` provides a local-only web UI for editing `config/.env` and now includes a Codex request panel that can invoke `codex exec` with operator-entered change instructions.
+
 ## Auto-rsa integration
 
 RSAssistant does not import auto-rsa code. It communicates via Discord commands

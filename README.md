@@ -70,6 +70,8 @@ python scripts/env_gui.py
 
 Then open `http://127.0.0.1:8765` in your browser.
 
+The GUI includes a **Codex Change Request** panel where operators can choose a request type, enter implementation instructions, and submit them to `codex exec` from the same page.
+
 ## Policy parsing flow
 
 1. Programmatic parsing (NASDAQ/SEC/press release) runs when `PROGRAMMATIC_POLICY_ENABLED=true`.
