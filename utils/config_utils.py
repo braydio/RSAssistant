@@ -185,7 +185,10 @@ AUTO_RSA_HOLDINGS_FILE = _resolve_path_env(
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_PREFIX = os.getenv("BOT_PREFIX", "..")
 # OpenAI parsing for reverse split notices
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_API_KEY = (
+    os.getenv("OPENAI_API_KEY_RSASSISTANT", "").strip()
+    or os.getenv("OPENAI_API_KEY", "").strip()
+)
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_TIMEOUT_SECONDS = _get_env_int("OPENAI_TIMEOUT_SECONDS", 20)
 OPENAI_POLICY_ENABLED = _get_env_bool("OPENAI_POLICY_ENABLED", False)

@@ -3,7 +3,7 @@
 import re
 import asyncio
 import errno
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from collections import defaultdict
 from pathlib import Path
 from typing import Sequence
@@ -200,11 +200,13 @@ def _format_watch_date(split_date: str) -> str:
 
 
 def _resolve_round_up_confirmation(policy_info: dict) -> bool:
-    """Resolve round-up confirmation, preferring LLM when available."""
+    """Resolve explicit round-up confirmation without accepting conflicts."""
+    if policy_info.get("reconciliation_conflicts"):
+        return False
     llm_details = policy_info.get("llm_details") or {}
     llm_policy = llm_details.get("fractional_share_policy")
-    if llm_policy:
-        return llm_policy in {"rounded_to_nearest_whole", "rounded_up"}
+    if policy_info.get("llm_policy_accepted") and llm_policy:
+        return llm_policy == "rounded_up"
     return bool(policy_info.get("round_up_confirmed"))
 
 
@@ -212,10 +214,11 @@ def _resolve_fractional_handling_text(policy_info: dict) -> str:
     """Return the resolved fractional share handling text."""
     llm_details = policy_info.get("llm_details") or {}
     llm_policy = llm_details.get("fractional_share_policy")
-    if llm_policy:
+    if policy_info.get("llm_policy_accepted") and llm_policy:
         return llm_policy
     return (
-        policy_info.get("sec_policy")
+        policy_info.get("fractional_share_policy")
+        or policy_info.get("sec_policy")
         or policy_info.get("policy")
         or "Policy not clearly stated."
     )
@@ -1040,8 +1043,27 @@ async def handle_secondary_channel(bot, message):
         if _resolve_round_up_confirmation(policy_info):
             summary = build_policy_summary(ticker, policy_info, url)
             await post_policy_summary(bot, ticker, summary)
-            split_date = policy_info.get("effective_date") or date.today().isoformat()
-            split_ratio = policy_info.get("split_ratio") or "N/A"
+            split_date = policy_info.get("effective_date")
+            split_ratio = policy_info.get("split_ratio")
+            if not split_date or not split_ratio:
+                missing = []
+                if not split_date:
+                    missing.append("effective date")
+                if not split_ratio:
+                    missing.append("split ratio")
+                handling = ", ".join(missing)
+                logger.warning(
+                    "Round-up confirmed for %s, but automation skipped: missing %s.",
+                    ticker,
+                    handling,
+                )
+                await post_alert_detection(
+                    bot,
+                    ticker,
+                    f"Round-up confirmed for {ticker}; automation skipped because "
+                    f"the {handling} is not explicitly supported.",
+                )
+                return
             watch_date = _format_watch_date(split_date)
             await _process_round_up_flow(
                 bot,
@@ -1162,22 +1184,26 @@ def build_policy_summary(ticker, policy_info, fallback_url):
     if "sec_url" in policy_info:
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
-    llm_details = policy_info.get("llm_details") or {}
-    effective_date = llm_details.get("effective_date") or policy_info.get(
-        "effective_date"
-    )
+    effective_date = policy_info.get("effective_date")
     if effective_date:
         summary += f"**Effective Date:** {effective_date}\n"
 
-    split_ratio = llm_details.get("split_ratio") or policy_info.get("split_ratio")
+    record_date = policy_info.get("record_date")
+    if record_date:
+        summary += f"**Record Date:** {record_date}\n"
+
+    split_ratio = policy_info.get("split_ratio")
     if split_ratio:
         summary += f"**Split Ratio:** {split_ratio}\n"
 
-    llm_policy = llm_details.get("fractional_share_policy") or policy_info.get(
-        "fractional_share_policy"
-    )
-    if llm_policy:
-        summary += f"**Fractional Share Policy (LLM):** {llm_policy}"
+    policy = policy_info.get("fractional_share_policy")
+    if policy:
+        source = "LLM-validated" if policy_info.get("llm_policy_accepted") else "local"
+        summary += f"**Fractional Share Policy ({source}):** {policy}"
+
+    conflicts = policy_info.get("reconciliation_conflicts") or []
+    if conflicts:
+        summary += "\n**Automation:** disabled due to conflicting source data"
 
     snippet = policy_info.get("snippet")
     if snippet:

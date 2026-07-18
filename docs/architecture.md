@@ -39,8 +39,22 @@ runtime context so Codex can attempt automatic remediation in `AUTO_RSA_DIR`
 ## Policy parsing
 
 1. Programmatic parsing runs when `PROGRAMMATIC_POLICY_ENABLED=true`.
-2. LLM parsing runs when `OPENAI_POLICY_ENABLED=true` and fills in missing details.
-3. The resolved policy + effective date drive watchlist scheduling and reminders.
+2. LLM parsing uses the OpenAI Responses API with a strict JSON schema and fills
+   only missing facts supported by evidence from the notice.
+3. Programmatic/LLM conflicts are retained for review and prevent automation.
+4. A matching ticker, confirmed reverse split, explicit upward rounding,
+   effective date, and split ratio are required before watchlist automation.
+
+Source cleanup preserves the complete extracted article before the request-level
+passage selector applies its character budget, so exact evidence is not damaged
+at the start of the article. Evidence validation failures are retained as
+specific field-level rejection reasons for operator diagnostics.
+
+Nasdaq Trader source discovery prefers the mobile `TraderNews.aspx` endpoint and
+validates its visible notice content before parsing. This prevents HTTP-200 bot
+challenge pages from being mistaken for notices. Press-release and SEC link
+parsers reuse that single response, with the canonical desktop endpoint retained
+as a fallback.
 
 ## Plugins
 

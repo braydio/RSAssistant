@@ -1,7 +1,7 @@
 ## General settings
 general_settings:
   app_name:  'RSAssistant'
-  file_version: '2.1'
+  file_version: '2.6'
 
 feature_flags:
   history_query_enabled: false 

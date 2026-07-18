@@ -73,8 +73,24 @@ Then open `http://127.0.0.1:8765` in your browser.
 ## Policy parsing flow
 
 1. Programmatic parsing (NASDAQ/SEC/press release) runs when `PROGRAMMATIC_POLICY_ENABLED=true`.
-2. LLM parsing runs when `OPENAI_POLICY_ENABLED=true` and can fill in missing ratio/date/policy details.
-3. The resolved policy and effective date drive watchlist scheduling and reminders.
+2. LLM parsing runs when `OPENAI_POLICY_ENABLED=true` and fills only missing,
+   explicitly supported ratio/date/policy details. Set the project-scoped
+   `OPENAI_API_KEY_RSASSISTANT`; `OPENAI_API_KEY` is retained as a fallback.
+3. Conflicting sources, ticker mismatches, nearest-whole rounding, or missing
+   effective-date/ratio evidence disable automated round-up actions.
+4. Only an explicit upward-rounding policy with a validated effective date and
+   ratio can drive watchlist scheduling and reminders.
+
+Source cleanup preserves complete lead sentences before selecting relevant
+passages. Model evidence must be copied as a contiguous excerpt from those
+passages; rejection logs identify the exact missing or unmatched evidence field.
+
+Nasdaq Trader notices are fetched through the lightweight mobile endpoint first.
+The response must contain notice markers (or the requested alert ID), so an
+Incapsula challenge returned with HTTP 200 is rejected. Press-release links are
+then selected using normalized anchor text and recognized newswire domains; the
+canonical desktop endpoint remains a fallback if the mobile endpoint is
+unavailable.
 
 Alert ticker parsing includes exchange-aware normalization to reduce false
 positives from non-U.S. formats in press releases (for example, `TSX-V:ALT.V`

@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -18,6 +18,22 @@ from utils.openai_utils import extract_reverse_split_details
 
 
 class SplitPolicyResolver:
+    NASDAQ_TRADER_HOSTS = {
+        "nasdaqtrader.com",
+        "www.nasdaqtrader.com",
+        "m.nasdaqtrader.com",
+    }
+
+    PRESS_RELEASE_HOSTS = (
+        "accessnewswire.com",
+        "accesswire.com",
+        "businesswire.com",
+        "globenewswire.com",
+        "newsfilecorp.com",
+        "newswire.com",
+        "prnewswire.com",
+    )
+
     NASDAQ_KEYWORDS = [
         "cash in lieu",
         "no fractional shares",
@@ -54,41 +70,170 @@ class SplitPolicyResolver:
                 headers["From"] = sec_from
         return headers
 
-    @staticmethod
-    def get_press_release_link_from_nasdaq(html_text):
+    @classmethod
+    def _is_nasdaq_notice_url(cls, url: str | None) -> bool:
+        if not url:
+            return False
+        parsed = urlparse(url)
+        return (
+            (parsed.hostname or "").lower() in cls.NASDAQ_TRADER_HOSTS
+            and parsed.path.lower().rstrip("/") == "/tradernews.aspx"
+        )
+
+    @classmethod
+    def _nasdaq_mobile_url(cls, url: str) -> str:
+        """Return the lightweight mobile form of a Nasdaq Trader notice URL."""
+        if not cls._is_nasdaq_notice_url(url):
+            return url
+        parsed = urlparse(url)
+        return urlunparse(
+            ("https", "m.nasdaqtrader.com", parsed.path, "", parsed.query, "")
+        )
+
+    @classmethod
+    def _nasdaq_desktop_url(cls, url: str) -> str:
+        """Return the canonical HTTPS desktop form of a Nasdaq notice URL."""
+        if not cls._is_nasdaq_notice_url(url):
+            return url
+        parsed = urlparse(url)
+        return urlunparse(
+            ("https", "www.nasdaqtrader.com", parsed.path, "", parsed.query, "")
+        )
+
+    @classmethod
+    def _is_valid_nasdaq_notice_html(cls, html_text: str, url: str) -> bool:
+        """Reject HTTP-200 challenge pages and unrelated Nasdaq responses."""
+        if not html_text:
+            return False
+
+        soup = BeautifulSoup(html_text, "html.parser")
+        visible_text = " ".join(soup.get_text(" ", strip=True).split())
+        visible_lower = visible_text.lower()
+        if len(visible_text) < 200:
+            return False
+        if (
+            "request unsuccessful" in visible_lower[:500]
+            or "incapsula incident id" in visible_lower[:500]
+        ):
+            return False
+
+        alert_id = parse_qs(urlparse(url).query).get("id", [""])[0].strip()
+        positive_markers = (
+            "corporate actions alert",
+            "markets impacted",
+            "contact information",
+            "nasdaq trader",
+        )
+        return bool(
+            (alert_id and alert_id.lower() in visible_lower)
+            or sum(marker in visible_lower for marker in positive_markers) >= 2
+        )
+
+    @classmethod
+    def _fetch_nasdaq_notice_html(
+        cls, nasdaq_url: str
+    ) -> tuple[str | None, str | None]:
+        """Fetch a Nasdaq notice, preferring its lightweight mobile endpoint."""
+        mobile_url = cls._nasdaq_mobile_url(nasdaq_url)
+        candidates = [mobile_url]
+        desktop_url = cls._nasdaq_desktop_url(nasdaq_url)
+        if desktop_url != mobile_url:
+            candidates.append(desktop_url)
+
+        for candidate in candidates:
+            try:
+                headers = cls._request_headers_for_url(candidate)
+                with requests.get(candidate, headers=headers, timeout=10) as response:
+                    response.raise_for_status()
+                    html = response.text or ""
+                if not cls._is_valid_nasdaq_notice_html(html, nasdaq_url):
+                    logger.warning(
+                        "Discarding blocked or invalid Nasdaq notice response from %s",
+                        candidate,
+                    )
+                    continue
+                logger.info("Fetched Nasdaq notice from %s", candidate)
+                return html, candidate
+            except requests.RequestException as exc:
+                logger.warning("Nasdaq notice fetch failed for %s: %s", candidate, exc)
+
+        logger.error("Unable to fetch a valid Nasdaq notice from %s", nasdaq_url)
+        return None, None
+
+    @classmethod
+    def get_press_release_link_from_nasdaq(
+        cls,
+        html_text: str,
+        base_url: str = "https://www.nasdaqtrader.com/",
+    ):
         try:
             soup = BeautifulSoup(html_text, "html.parser")
-            link = soup.find("a", string="Press Release")
-            if link and link.get("href"):
-                press_url = link["href"]
-                if press_url.startswith("/"):
-                    press_url = "https://www.nasdaqtrader.com" + press_url
-                logger.info(f"Press Release link found: {press_url}")
+            candidates = []
+            for link in soup.find_all("a", href=True):
+                href = (link.get("href") or "").strip()
+                if not href:
+                    continue
+                label = " ".join(link.get_text(" ", strip=True).split())
+                label_lower = label.lower()
+                press_url = urljoin(base_url, href)
+                hostname = (urlparse(press_url).hostname or "").lower()
+                known_host = any(
+                    hostname == domain or hostname.endswith(f".{domain}")
+                    for domain in cls.PRESS_RELEASE_HOSTS
+                )
+                label_match = "press release" in label_lower
+                if not (label_match or known_host):
+                    continue
+
+                if label_lower == "press release":
+                    score = 100
+                elif label_match:
+                    score = 60
+                else:
+                    score = 0
+                if known_host:
+                    score += 50
+                candidates.append((score, press_url, label))
+
+            if candidates:
+                _, press_url, label = max(
+                    candidates, key=lambda candidate: candidate[0]
+                )
+                logger.info(
+                    "Press Release link found: %s (label=%s)",
+                    press_url,
+                    label or "N/A",
+                )
                 return press_url
-            else:
-                logger.warning("No Press Release link found on NASDAQ page.")
-                return None
+
+            logger.warning("No Press Release link found on NASDAQ page.")
+            return None
         except Exception as e:
             logger.error(f"Error extracting Press Release link: {e}")
             return None
 
     @classmethod
-    def get_sec_link_from_nasdaq(cls, nasdaq_url, ticker=None):
+    def get_sec_link_from_nasdaq(
+        cls,
+        nasdaq_url,
+        ticker=None,
+        html_text: str | None = None,
+        base_url: str | None = None,
+    ):
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
-            with requests.get(nasdaq_url, headers=headers, timeout=10) as response:
-                response.raise_for_status()
-                html = response.text
-            soup = BeautifulSoup(html, "html.parser")
+            if html_text is None:
+                html_text, resolved_url = cls._fetch_nasdaq_notice_html(nasdaq_url)
+                if not html_text:
+                    return None
+                base_url = resolved_url or nasdaq_url
+            soup = BeautifulSoup(html_text, "html.parser")
             candidates = []
             seen = set()
             for link in soup.find_all("a", href=True):
                 href = (link.get("href") or "").strip()
                 if not href:
                     continue
-                full_href = urljoin(nasdaq_url, href)
+                full_href = urljoin(base_url or nasdaq_url, href)
                 href_lower = full_href.lower()
                 text = " ".join(link.get_text(" ", strip=True).split())
                 text_lower = text.lower()
@@ -286,62 +431,14 @@ class SplitPolicyResolver:
 
     @staticmethod
     def _trim_to_context(text: str, ticker: str | None = None) -> str:
-        if not text:
-            return text
+        """Preserve cleaned source text for downstream passage selection.
 
-        lowered = text.lower()
-        priorities = [
-            "fractional",
-            "fractional share",
-            "fractional shares",
-            "handling of fractional shares",
-            "no fractional shares",
-            "cash in lieu",
-            "rounded up",
-            "round up",
-            "rounded to the nearest",
-            "rounded up to the next whole number",
-            "next whole number",
-            "share consolidation",
-            "stock consolidation",
-            "reverse share split",
-        ]
-        triggers = [
-            "reverse",
-            "reverse stock split",
-            "reverse split",
-            "reverse share split",
-            "share consolidation",
-            "stock consolidation",
-            "consolidation",
-        ]
-
-        start_idx = None
-
-        for phrase in priorities:
-            idx = lowered.find(phrase)
-            if idx != -1:
-                start_idx = idx if start_idx is None else min(start_idx, idx)
-
-        if start_idx is None and ticker:
-            idx = lowered.find(ticker.lower())
-            if idx != -1:
-                start_idx = idx
-
-        if start_idx is None:
-            for phrase in triggers:
-                idx = lowered.find(phrase)
-                if idx != -1:
-                    start_idx = idx if start_idx is None else min(start_idx, idx)
-
-        if start_idx is None:
-            return text
-
-        start_idx = max(0, start_idx - 120)
-        # Avoid trimming deep into the article; we still want title/lead context
-        # so the LLM sees what event is being discussed.
-        start_idx = min(start_idx, 400)
-        return text[start_idx:]
+        The previous implementation removed up to 400 arbitrary characters,
+        which could cut through ratios and evidence phrases. ``_clip_notice_text``
+        applies the actual OpenAI request budget later and retains the lead plus
+        relevant passages, so destructive pre-trimming is unnecessary.
+        """
+        return text
 
     @staticmethod
     def _needs_sec_fallback(
@@ -362,12 +459,17 @@ class SplitPolicyResolver:
     @classmethod
     def fetch_body_text(cls, url, ticker: str | None = None):
         """Retrieve cleaned main body text from a webpage."""
+        response = None
         try:
-            headers = cls._request_headers_for_url(url)
-            response = None
-            with requests.get(url, headers=headers, timeout=10) as response:
-                response.raise_for_status()
-                html = response.text or ""
+            if cls._is_nasdaq_notice_url(url):
+                html, _ = cls._fetch_nasdaq_notice_html(url)
+                if not html:
+                    return None
+            else:
+                headers = cls._request_headers_for_url(url)
+                with requests.get(url, headers=headers, timeout=10) as response:
+                    response.raise_for_status()
+                    html = response.text or ""
 
             extracted = cls._extract_main_text(html)
             text = cls._trim_to_context(extracted, ticker=ticker)
@@ -398,11 +500,10 @@ class SplitPolicyResolver:
 
     @staticmethod
     def extract_round_up_snippet(text, window=5):
-        """Return a short phrase around any round-up mention."""
+        """Return a short phrase around explicit upward-rounding language."""
         phrases = [
             "rounded up",
             "round up",
-            "rounded to the nearest",
         ]
         for phrase in phrases:
             pattern = re.compile(
@@ -480,17 +581,22 @@ class SplitPolicyResolver:
         """Inspect a NASDAQ corporate action notice for fractional share policy."""
         try:
             logger.info(f"Analyzing NASDAQ notice at {nasdaq_url}")
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-            }
-            with requests.get(nasdaq_url, headers=headers, timeout=10) as response:
-                response.raise_for_status()
-                html = response.text
+            html, resolved_url = cls._fetch_nasdaq_notice_html(nasdaq_url)
+            if not html:
+                return None
 
             normalized_text = normalize_cash_in_lieu_phrases(html).lower()
             policy = cls.detect_policy_from_text(normalized_text, cls.NASDAQ_KEYWORDS)
-            sec_url = cls.get_sec_link_from_nasdaq(nasdaq_url, ticker=ticker)
-            press_url = cls.get_press_release_link_from_nasdaq(html)
+            sec_url = cls.get_sec_link_from_nasdaq(
+                nasdaq_url,
+                ticker=ticker,
+                html_text=html,
+                base_url=resolved_url,
+            )
+            press_url = cls.get_press_release_link_from_nasdaq(
+                html,
+                base_url=resolved_url or nasdaq_url,
+            )
 
             return {
                 "policy": policy,
@@ -577,6 +683,127 @@ class SplitPolicyResolver:
         logger.warning("No specific policy keywords detected.")
         return "Policy not clearly stated."
 
+    @staticmethod
+    def _classify_programmatic_policy(result: dict) -> str | None:
+        """Return a normalized policy only when local parsing is conclusive."""
+        text = " ".join(
+            str(result.get(key) or "") for key in ("sec_policy", "policy")
+        ).lower()
+        if result.get("round_up_confirmed") or "rounded up" in text:
+            return "rounded_up"
+        if "rounded to the nearest" in text:
+            return "rounded_to_nearest_whole"
+        if "rounded down" in text:
+            return "rounded_down"
+        if "cash" in text or "paid out" in text or "aggregated" in text:
+            return "cash_in_lieu"
+        if "no fractional shares" in text or "fractional shares will not" in text:
+            return "no_fractional_shares"
+        return None
+
+    @classmethod
+    def _reconcile_llm_details(
+        cls, result: dict, details: dict, expected_ticker: str | None
+    ) -> None:
+        """Merge supported LLM facts without overwriting conflicting local facts."""
+        result["llm_details"] = details
+        conflicts = result.setdefault("reconciliation_conflicts", [])
+        evidence = details.get("evidence") or {}
+        expected = (expected_ticker or "").strip().upper()
+        actual = (details.get("ticker") or "").strip().upper()
+        evidence_errors = {
+            error.get("field"): error.get("reason")
+            for error in details.get("evidence_validation_errors", [])
+            if isinstance(error, dict)
+        }
+        rejection_reasons = []
+        if not expected:
+            rejection_reasons.append("expected ticker missing")
+        if not actual:
+            rejection_reasons.append("reported ticker missing")
+        elif expected and actual != expected:
+            rejection_reasons.append(
+                f"ticker mismatch (expected={expected}, reported={actual})"
+            )
+        if details.get("reverse_split_confirmed") is not True:
+            rejection_reasons.append("reverse split not confirmed")
+        for field in ("ticker", "reverse_split"):
+            if evidence.get(field):
+                continue
+            validation_reason = evidence_errors.get(field)
+            field_label = field.replace("_", " ")
+            if validation_reason == "not_found_in_source":
+                rejection_reasons.append(
+                    f"{field_label} evidence not found in source"
+                )
+            else:
+                rejection_reasons.append(f"{field_label} evidence missing")
+
+        identity_valid = not rejection_reasons
+        result["llm_details_accepted"] = identity_valid
+        result["llm_policy_accepted"] = False
+        if not identity_valid:
+            reason = "; ".join(dict.fromkeys(rejection_reasons))
+            result["llm_rejection_reasons"] = list(
+                dict.fromkeys(rejection_reasons)
+            )
+            conflicts.append({"field": "identity", "reason": reason})
+            logger.warning(
+                "LLM result rejected for %s (reported_ticker=%s, reasons=%s).",
+                expected or "N/A",
+                actual or "N/A",
+                reason,
+            )
+            return
+
+        result["reverse_split_confirmed"] = True
+        for field in ("effective_date", "record_date", "split_ratio"):
+            llm_value = details.get(field)
+            if not llm_value:
+                continue
+            existing = result.get(field)
+            if not existing:
+                result[field] = llm_value
+            elif existing != llm_value:
+                conflicts.append(
+                    {
+                        "field": field,
+                        "programmatic": existing,
+                        "llm": llm_value,
+                    }
+                )
+
+        llm_policy = details.get("fractional_share_policy")
+        policy_supported = bool(
+            evidence.get("fractional_share_policy")
+            and llm_policy not in {None, "unclear", "not_mentioned"}
+        )
+        if not policy_supported:
+            return
+
+        programmatic_policy = cls._classify_programmatic_policy(result)
+        if programmatic_policy and programmatic_policy != llm_policy:
+            conflicts.append(
+                {
+                    "field": "fractional_share_policy",
+                    "programmatic": programmatic_policy,
+                    "llm": llm_policy,
+                }
+            )
+            logger.warning(
+                "Policy conflict for %s (programmatic=%s, llm=%s); "
+                "automation disabled.",
+                expected,
+                programmatic_policy,
+                llm_policy,
+            )
+            return
+
+        result["llm_policy_accepted"] = True
+        result["fractional_share_policy"] = llm_policy
+        if not programmatic_policy:
+            result["round_up_confirmed"] = llm_policy == "rounded_up"
+
     @classmethod
     def full_analysis(cls, nasdaq_url, ticker_hint: str | None = None):
         """Gather policy info, effective date, and source text from NASDAQ notice."""
@@ -597,25 +824,22 @@ class SplitPolicyResolver:
                 }
                 # Even in LLM-only mode, discover better source links for context.
                 # Nasdaq notices often contain Press Release / SEC links.
-                if "nasdaqtrader.com/tradernews.aspx" in nasdaq_url.lower():
+                if cls._is_nasdaq_notice_url(nasdaq_url):
                     try:
-                        headers = {
-                            "User-Agent": (
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                "Chrome/112.0.0.0 Safari/537.36"
+                        html, resolved_url = cls._fetch_nasdaq_notice_html(nasdaq_url)
+                        if not html:
+                            raise ValueError("No valid Nasdaq notice HTML returned")
+                        nasdaq_result["press_url"] = (
+                            cls.get_press_release_link_from_nasdaq(
+                                html,
+                                base_url=resolved_url or nasdaq_url,
                             )
-                        }
-                        with requests.get(
-                            nasdaq_url, headers=headers, timeout=10
-                        ) as response:
-                            response.raise_for_status()
-                            html = response.text or ""
-                        nasdaq_result["press_url"] = cls.get_press_release_link_from_nasdaq(
-                            html
                         )
                         nasdaq_result["sec_url"] = cls.get_sec_link_from_nasdaq(
-                            nasdaq_url, ticker=ticker
+                            nasdaq_url,
+                            ticker=ticker,
+                            html_text=html,
+                            base_url=resolved_url,
                         )
                         logger.info(
                             "LLM-only mode link discovery for %s -> press_url=%s sec_url=%s",
@@ -727,27 +951,9 @@ class SplitPolicyResolver:
                         body_text, source_url=source_url, ticker=ticker
                     )
                     if llm_details:
-                        nasdaq_result["llm_details"] = llm_details
-                        if llm_details.get("effective_date"):
-                            nasdaq_result["effective_date"] = llm_details.get(
-                                "effective_date"
-                            )
-                        if llm_details.get("split_ratio"):
-                            nasdaq_result["split_ratio"] = llm_details.get(
-                                "split_ratio"
-                            )
-                        if llm_details.get("reverse_split_confirmed") is not None:
-                            nasdaq_result["reverse_split_confirmed"] = llm_details.get(
-                                "reverse_split_confirmed"
-                            )
-                        policy = llm_details.get("fractional_share_policy")
-                        if policy:
-                            nasdaq_result["fractional_share_policy"] = policy
-                            llm_round_up = policy in {
-                                "rounded_to_nearest_whole",
-                                "rounded_up",
-                            }
-                            nasdaq_result["round_up_confirmed"] = llm_round_up
+                        cls._reconcile_llm_details(
+                            nasdaq_result, llm_details, expected_ticker=ticker
+                        )
                 else:
                     logger.warning(f"Failed to fetch body text from {source_url}")
             else:
