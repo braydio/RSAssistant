@@ -1,19 +1,16 @@
 diff --git a/src/helper_api.py b/src/helper_api.py
-index 3c86c6b..f1e0a3b 100644
+index 702f306..0d21825 100644
 --- a/src/helper_api.py
 +++ b/src/helper_api.py
-@@ -1,8 +1,9 @@
- # Nelson Dane
- # Helper functions and classes
- # to share between scripts
+@@ -4,6 +4,7 @@
  
--import asyncio
-+import asyncio
+ import asyncio
  import datetime
 +import json
  import operator
  import os
-@@ -716,6 +717,8 @@ def print_all_holdings(
+ import textwrap
+@@ -729,6 +730,8 @@ def print_all_holdings(
      print(
          f"\n==============================\n{broker_obj.get_name()} Holdings\n==============================",
      )
@@ -22,8 +19,7 @@ index 3c86c6b..f1e0a3b 100644
      for key in broker_obj.get_account_numbers():
          for account in broker_obj.get_account_numbers(key):
              acc_name = f"{key} ({mask_string(account) if mask_account_number else account})"
-@@ -738,6 +740,22 @@ def print_all_holdings(
-                     quantity = holdings[stock]["quantity"]
+@@ -748,6 +751,21 @@ def print_all_holdings(
                      price = holdings[stock]["price"]
                      total = holdings[stock]["total"]
                      print_string += f"{stock}: {quantity} @ ${format(price, '0.2f')} = ${format(total, '0.2f')}\n"
@@ -44,7 +40,9 @@ index 3c86c6b..f1e0a3b 100644
 +                    )
              print_string += f"Total: ${format(broker_obj.get_account_totals(key, account), '0.2f')}\n"
              print(print_string)
-@@ -757,4 +778,25 @@ def print_all_holdings(
+             # If somehow longer than 1024, chop and add ...
+@@ -756,5 +774,34 @@ def print_all_holdings(
+                 print_string[:1020] + "..." if len(print_string) > max_length else print_string,
              )
              embed["fields"].append(field)
 +    snapshot_path = os.getenv("AUTO_RSA_HOLDINGS_FILE", "")
@@ -65,8 +63,15 @@ index 3c86c6b..f1e0a3b 100644
 +            ]
 +            merged_entries.extend(snapshot_entries)
 +
-+            with open(snapshot_path, "w", encoding="utf-8") as handle:
++            snapshot_dir = os.path.dirname(snapshot_path)
++            if snapshot_dir:
++                os.makedirs(snapshot_dir, exist_ok=True)
++            temp_snapshot_path = f"{snapshot_path}.tmp"
++            with open(temp_snapshot_path, "w", encoding="utf-8") as handle:
 +                json.dump(merged_entries, handle)
++                handle.flush()
++                os.fsync(handle.fileno())
++            os.replace(temp_snapshot_path, snapshot_path)
 +        except Exception as exc:
 +            print(f"Failed to write holdings snapshot to {snapshot_path}: {exc}")
      print_and_discord(embed, loop, embed=True)

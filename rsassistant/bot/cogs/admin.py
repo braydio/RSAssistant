@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 
 from discord.ext import commands
+from utils.config_utils import AUTO_RSA_PATCH_STATE_FILE
 
 
 class AdminCog(commands.Cog):
@@ -100,6 +101,7 @@ class AdminCog(commands.Cog):
 
         env = os.environ.copy()
         env["AUTO_RSA_HOLDINGS_FILE"] = resolved_holdings
+        env["AUTO_RSA_PATCH_STATE_FILE"] = str(AUTO_RSA_PATCH_STATE_FILE)
         if resolved_env_file:
             env["AUTO_RSA_ENV_FILE"] = resolved_env_file
 

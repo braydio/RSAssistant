@@ -13,9 +13,11 @@ services:
       - ./volumes/excel:/app/volumes/excel # Persist Excel
       - ./volumes/cache:/app/volumes/cache # Persist price cache
       - ./config:/app/config               # Mount unified config directory
+      - ./auto-rsa:/opt/auto-rsa           # Allow patch health checks/reapply
     environment:
       TZ: America/New_York
       ENVIRONMENT: production
+      AUTO_RSA_DIR: /opt/auto-rsa
     deploy:
       resources:
         limits:

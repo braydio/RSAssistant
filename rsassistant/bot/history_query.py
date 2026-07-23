@@ -8,7 +8,6 @@ back to Discord.
 import io
 
 import discord
-import matplotlib.pyplot as plt
 import pandas as pd
 
 from utils.sql_utils import fetch_account_labels, get_db_connection
@@ -50,6 +49,8 @@ async def show_sql_holdings_history(
     invoking Discord command with the resulting image.
     """
     try:
+        import matplotlib.pyplot as plt
+
         query = "SELECT * FROM HistoricalHoldings WHERE 1=1"
         params = {}
 

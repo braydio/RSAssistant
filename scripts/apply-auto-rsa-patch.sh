@@ -1,74 +1,96 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 /path/to/auto-rsa (looks for helper_api.py/helperAPI.py in src/ then root)" >&2
-  exit 1
-fi
+usage() {
+  echo "Usage: $0 [--check] [--state-file PATH] /path/to/auto-rsa" >&2
+}
 
-auto_rsa_dir="$1"
-patch_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/patches/auto-rsa-holdings.patch"
+check_only=false
+state_file=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check)
+      check_only=true
+      shift
+      ;;
+    --state-file)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      state_file="$2"
+      shift 2
+      ;;
+    -*)
+      usage
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[[ $# -eq 1 ]] || { usage; exit 2; }
+
+auto_rsa_dir="$(cd "$1" && pwd)"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+patch_file="$repo_root/patches/auto-rsa-holdings.patch"
 default_env_file="$repo_root/config/.env"
 auto_rsa_env_file="${AUTO_RSA_ENV_FILE:-$auto_rsa_dir/.env}"
+state_file="${state_file:-${AUTO_RSA_PATCH_STATE_FILE:-$repo_root/volumes/db/auto_rsa_patch_state.json}}"
 
-if [[ ! -f "$patch_file" ]]; then
-  echo "Patch file not found: $patch_file" >&2
-  exit 1
-fi
+[[ -f "$patch_file" ]] || { echo "Patch file not found: $patch_file" >&2; exit 1; }
+command -v git >/dev/null 2>&1 || { echo "git is required to apply the patch." >&2; exit 1; }
 
-if [[ ! -d "$auto_rsa_dir" ]]; then
-  echo "Auto-RSA directory not found: $auto_rsa_dir" >&2
-  exit 1
-fi
-
-if ! command -v git >/dev/null 2>&1; then
-  echo "git is required to apply the patch." >&2
-  exit 1
-fi
-
-target_src="$auto_rsa_dir/src/helper_api.py"
-target_root="$auto_rsa_dir/helper_api.py"
-target_src_alt="$auto_rsa_dir/src/helperAPI.py"
-target_root_alt="$auto_rsa_dir/helperAPI.py"
-
-if [[ -f "$target_src" ]]; then
-  echo "Applying patch to $target_src"
-  ( cd "$auto_rsa_dir" && git apply "$patch_file" )
-elif [[ -f "$target_root" ]]; then
-  echo "Applying patch to $target_root"
-  temp_patch="$(mktemp)"
-  sed \
-    -e 's|a/src/helper_api.py|a/helper_api.py|g' \
-    -e 's|b/src/helper_api.py|b/helper_api.py|g' \
-    "$patch_file" > "$temp_patch"
-  ( cd "$auto_rsa_dir" && git apply "$temp_patch" )
-  rm -f "$temp_patch"
-elif [[ -f "$target_src_alt" ]]; then
-  echo "Applying patch to $target_src_alt"
-  temp_patch="$(mktemp)"
-  sed \
-    -e 's|a/src/helper_api.py|a/src/helperAPI.py|g' \
-    -e 's|b/src/helper_api.py|b/src/helperAPI.py|g' \
-    "$patch_file" > "$temp_patch"
-  ( cd "$auto_rsa_dir" && git apply "$temp_patch" )
-  rm -f "$temp_patch"
-elif [[ -f "$target_root_alt" ]]; then
-  echo "Applying patch to $target_root_alt"
-  temp_patch="$(mktemp)"
-  sed \
-    -e 's|a/src/helper_api.py|a/helperAPI.py|g' \
-    -e 's|b/src/helper_api.py|b/helperAPI.py|g' \
-    "$patch_file" > "$temp_patch"
-  ( cd "$auto_rsa_dir" && git apply "$temp_patch" )
-  rm -f "$temp_patch"
-else
+target_relative=""
+for candidate in src/helper_api.py helper_api.py src/helperAPI.py helperAPI.py; do
+  if [[ -f "$auto_rsa_dir/$candidate" ]]; then
+    target_relative="$candidate"
+    break
+  fi
+done
+[[ -n "$target_relative" ]] || {
   echo "helper_api.py/helperAPI.py not found in $auto_rsa_dir/src or $auto_rsa_dir" >&2
   exit 1
+}
+
+effective_patch="$patch_file"
+temp_patch=""
+if [[ "$target_relative" != "src/helper_api.py" ]]; then
+  temp_patch="$(mktemp)"
+  sed \
+    -e "s|a/src/helper_api.py|a/$target_relative|g" \
+    -e "s|b/src/helper_api.py|b/$target_relative|g" \
+    "$patch_file" > "$temp_patch"
+  effective_patch="$temp_patch"
+fi
+trap '[[ -z "$temp_patch" ]] || rm -f "$temp_patch"' EXIT
+
+git_apply=(git -c "safe.directory=$auto_rsa_dir" -C "$auto_rsa_dir" apply)
+
+patch_status=""
+if "${git_apply[@]}" --reverse --check "$effective_patch" >/dev/null 2>&1; then
+  patch_status="healthy"
+elif "${git_apply[@]}" --check "$effective_patch" >/dev/null 2>&1; then
+  patch_status="missing"
+else
+  echo "Auto-rsa holdings patch is neither applied nor cleanly applicable at $auto_rsa_dir." >&2
+  echo "The upstream helper API likely changed and the patch must be regenerated." >&2
+  exit 1
+fi
+
+if $check_only; then
+  [[ "$patch_status" == "healthy" ]] || exit 3
+  echo "Auto-rsa holdings patch is healthy at $auto_rsa_dir"
+  exit 0
+fi
+
+if [[ "$patch_status" == "missing" ]]; then
+  "${git_apply[@]}" "$effective_patch"
+  echo "Reapplied auto-rsa holdings patch to $auto_rsa_dir"
+else
+  echo "Auto-rsa holdings patch is already healthy at $auto_rsa_dir"
 fi
 
 auto_rsa_holdings_file="${AUTO_RSA_HOLDINGS_FILE:-}"
-
 if [[ -z "$auto_rsa_holdings_file" ]]; then
   env_file="${ENV_FILE:-$default_env_file}"
   if [[ -f "$env_file" ]]; then
@@ -77,19 +99,16 @@ if [[ -z "$auto_rsa_holdings_file" ]]; then
 fi
 
 if [[ -n "$auto_rsa_holdings_file" ]]; then
-  if [[ -f "$auto_rsa_env_file" ]]; then
-    if grep -qE '^[[:space:]]*AUTO_RSA_HOLDINGS_FILE=' "$auto_rsa_env_file"; then
-      sed -i.bak "s|^[[:space:]]*AUTO_RSA_HOLDINGS_FILE=.*|AUTO_RSA_HOLDINGS_FILE=${auto_rsa_holdings_file}|" "$auto_rsa_env_file"
-      rm -f "${auto_rsa_env_file}.bak"
-    else
-      printf '\nAUTO_RSA_HOLDINGS_FILE=%s\n' "$auto_rsa_holdings_file" >> "$auto_rsa_env_file"
-    fi
+  if [[ -f "$auto_rsa_env_file" ]] && grep -qE '^[[:space:]]*AUTO_RSA_HOLDINGS_FILE=' "$auto_rsa_env_file"; then
+    sed -i.bak "s|^[[:space:]]*AUTO_RSA_HOLDINGS_FILE=.*|AUTO_RSA_HOLDINGS_FILE=${auto_rsa_holdings_file}|" "$auto_rsa_env_file"
+    rm -f "${auto_rsa_env_file}.bak"
   else
-    printf 'AUTO_RSA_HOLDINGS_FILE=%s\n' "$auto_rsa_holdings_file" > "$auto_rsa_env_file"
+    printf '\nAUTO_RSA_HOLDINGS_FILE=%s\n' "$auto_rsa_holdings_file" >> "$auto_rsa_env_file"
   fi
   echo "Set AUTO_RSA_HOLDINGS_FILE in $auto_rsa_env_file"
-else
-  echo "AUTO_RSA_HOLDINGS_FILE not set; add it to auto-rsa env manually."
 fi
 
-echo "Applied auto-rsa holdings patch to $auto_rsa_dir"
+mkdir -p "$(dirname "$state_file")"
+printf '{"auto_rsa_dir":"%s","target":"%s"}\n' "$auto_rsa_dir" "$target_relative" > "$state_file.tmp"
+mv "$state_file.tmp" "$state_file"
+echo "Recorded auto-rsa patch state in $state_file"

@@ -16,6 +16,7 @@ from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import (
+    AUTO_RSA_PATCH_CHECK_MINUTES,
     BOT_PREFIX,
     DISCORD_PRIMARY_CHANNEL,
     ENABLE_MARKET_REFRESH,
@@ -26,6 +27,7 @@ from utils.refresh_scheduler import MARKET_TZ, compute_next_refresh_datetime
 from utils.market_calendar import is_market_open_at, next_market_open
 from utils.watch_utils import send_reminder_message
 from utils.holdings_importer import import_holdings_if_updated
+from utils.auto_rsa_patch_manager import ensure_auto_rsa_holdings_patch
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +215,11 @@ def _start_reminder_scheduler(bot: commands.Bot) -> BackgroundScheduler:
     scheduler.add_job(
         import_holdings_if_updated,
         IntervalTrigger(minutes=5),
+    )
+    scheduler.add_job(
+        ensure_auto_rsa_holdings_patch,
+        IntervalTrigger(minutes=max(1, AUTO_RSA_PATCH_CHECK_MINUTES)),
+        next_run_time=datetime.now(),
     )
     scheduler.start()
     logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")

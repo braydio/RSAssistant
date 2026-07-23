@@ -207,6 +207,38 @@ def test_get_top_holdings_refreshes_data(tmp_path):
     assert {"AAA", "BBB"} <= tickers
 
 
+def test_save_holdings_snapshot_replaces_removed_positions(tmp_path):
+    csv_path = tmp_path / "holdings.csv"
+    csv_utils.CSV_LOGGING_ENABLED = True
+    csv_utils.update_holdings_live_batch = lambda _rows: 0
+    _write_holdings_csv(
+        csv_path,
+        csv_utils.HOLDINGS_HEADERS,
+        [
+            ["old", "Broker", "1", "A1", "OLD", 1, 50, 50, 50, "2020-01-01 00:00:00"],
+        ],
+    )
+
+    saved = csv_utils.save_holdings_to_csv(
+        [
+            {
+                "broker": "Broker",
+                "group": "1",
+                "account": "A1",
+                "ticker": "NEW",
+                "quantity": 1,
+                "price": 10,
+            }
+        ],
+        filename=str(csv_path),
+        replace_existing=True,
+    )
+
+    assert saved is True
+    rows = csv_utils.load_csv_log(csv_path)
+    assert [row["Stock"] for row in rows] == ["NEW"]
+
+
 def test_save_holdings_negative_quantity_skips_sql(tmp_path):
     csv_path = tmp_path / "holdings.csv"
     csv_utils.HOLDINGS_LOG_CSV = str(csv_path)

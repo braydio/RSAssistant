@@ -6,7 +6,7 @@ import asyncio
 import os
 import shlex
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +92,7 @@ def _build_codex_prompt(*, error_text: str, message: Any, codex_cwd: Path) -> st
         getattr(message, "author", None), "display_name", None
     ) or getattr(getattr(message, "author", None), "name", "unknown")
     message_id = getattr(message, "id", "unknown")
-    now_utc = datetime.now(UTC).isoformat()
+    now_utc = datetime.now(timezone.utc).isoformat()
 
     write_access = os.access(codex_cwd, os.W_OK)
 
@@ -126,7 +126,7 @@ class PrimaryChannelErrorWatcherCog(commands.Cog):
 
         if not self._last_run_at:
             return False
-        elapsed = (datetime.now(UTC) - self._last_run_at).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self._last_run_at).total_seconds()
         return elapsed < max(0, AUTO_RSA_ERROR_WATCHER_COOLDOWN_SECONDS)
 
     async def _invoke_codex_exec(self, prompt: str, cwd: Path) -> str:
@@ -189,7 +189,7 @@ class PrimaryChannelErrorWatcherCog(commands.Cog):
             )
             return
 
-        self._last_run_at = datetime.now(UTC)
+        self._last_run_at = datetime.now(timezone.utc)
         codex_cwd = _resolve_codex_cwd()
         prompt = _build_codex_prompt(
             error_text=error_text, message=message, codex_cwd=codex_cwd

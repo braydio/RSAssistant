@@ -88,6 +88,22 @@ def _extract_entries(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _is_supported_payload(payload: Any) -> bool:
+    if isinstance(payload, list):
+        return True
+    if not isinstance(payload, dict):
+        return False
+    return any(
+        isinstance(payload.get(key), expected_type)
+        for key, expected_type in (
+            ("holdings", list),
+            ("rows", list),
+            ("entries", list),
+            ("brokers", dict),
+        )
+    )
+
+
 _last_import_mtime: float | None = None
 
 
@@ -111,7 +127,11 @@ def import_holdings_file(path: Path | str | None = None) -> int:
         payload = json.loads(file_path.read_text())
     except Exception as exc:
         logger.warning("Failed to parse holdings file %s: %s", file_path, exc)
-        return 0
+        return -1
+
+    if not _is_supported_payload(payload):
+        logger.warning("Unsupported holdings payload shape in %s", file_path)
+        return -1
 
     entries = _extract_entries(payload)
     logger.info("Holdings payload entries extracted: %d", len(entries))
@@ -120,17 +140,23 @@ def import_holdings_file(path: Path | str | None = None) -> int:
         normalized_entry = _normalize_entry(entry)
         if normalized_entry:
             normalized.append(normalized_entry)
-
-    if not normalized:
-        logger.info("No holdings entries found in %s", file_path)
-        return 0
+    if len(normalized) != len(entries):
+        logger.warning("Invalid holdings entries found in %s; import rejected", file_path)
+        return -1
 
     for holding in normalized:
         holding["Key"] = (
             f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
         )
 
-    save_holdings_to_csv(normalized, use_refresh_target=False)
+    saved = save_holdings_to_csv(
+        normalized,
+        use_refresh_target=False,
+        replace_existing=True,
+    )
+    if not saved:
+        logger.warning("Failed to replace holdings snapshot from %s", file_path)
+        return -1
     logger.info("Imported %d holdings entries from %s", len(normalized), file_path)
     return len(normalized)
 
@@ -156,6 +182,7 @@ def import_holdings_if_updated(path: Path | str | None = None) -> int:
         logger.info("Holdings file unchanged; skipping import.")
         return 0
     imported = import_holdings_file(file_path)
-    _last_import_mtime = mtime
+    if imported >= 0:
+        _last_import_mtime = mtime
     logger.info("Holdings import finished; imported=%d", imported)
     return imported

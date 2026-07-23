@@ -516,7 +516,12 @@ def _validate_existing_holdings_csv(file_path):
     return existing_rows
 
 
-def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True):
+def save_holdings_to_csv(
+    parsed_holdings,
+    filename=None,
+    use_refresh_target=True,
+    replace_existing=False,
+):
     """Save holdings data to the holdings CSV with strict schema validation.
 
     Existing holdings files are validated before ingest. The function fails when
@@ -539,7 +544,9 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
         if use_refresh_target and _ACTIVE_HOLDINGS_REFRESH_TARGET:
             target_file = _ACTIVE_HOLDINGS_REFRESH_TARGET
 
-        existing_holdings = _validate_existing_holdings_csv(target_file)
+        existing_holdings = (
+            [] if replace_existing else _validate_existing_holdings_csv(target_file)
+        )
 
         existing_by_key = {}
         for row_index, holding in enumerate(existing_holdings, start=1):
@@ -608,25 +615,34 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
                 len(sql_batch_holdings),
             )
 
-        if new_holdings or updated_holdings:
-            with open(target_file, mode="w", newline="") as file:
+        if new_holdings or updated_holdings or replace_existing:
+            write_target = (
+                f"{target_file}.import" if replace_existing else target_file
+            )
+            with open(write_target, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
                 writer.writeheader()
                 writer.writerows(existing_by_key.values())
+            if replace_existing:
+                _validate_existing_holdings_csv(write_target)
+                os.replace(write_target, target_file)
 
             logger.info(
-                "Holdings saved to %s, with %d new entries and %d updates.",
+                "Holdings saved to %s, with %d new entries and %d updates%s.",
                 target_file,
                 len(new_holdings),
                 updated_holdings,
+                " (snapshot replacement)" if replace_existing else "",
             )
         else:
             logger.info("No new holdings to add.")
+        return True
 
     except CsvSchemaValidationError as exc:
         logger.error("Error saving holdings: %s", exc)
     except Exception as exc:
         logger.error("Error saving holdings: %s", exc)
+    return False
 
 
 def clear_holdings_log(filename):

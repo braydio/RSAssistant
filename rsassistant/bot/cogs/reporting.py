@@ -68,6 +68,7 @@ class ReportingCog(commands.Cog):
         extras={"category": "Reporting"},
     )
     async def top_holdings_command(self, ctx: commands.Context, range: int = 3) -> None:
+        import_holdings_if_updated()
         await send_top_holdings_embed(ctx, range)
 
 

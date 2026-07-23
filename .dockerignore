@@ -3,3 +3,12 @@ temp/
 dev/
 .venv/
 dev*
+.git/
+auto-rsa/
+auto-rsa.local/
+AutoRSA-GUI/
+AutoRSA-GUI.local/
+RSDashboard.local/
+volumes/
+__pycache__/
+*.pyc
