@@ -54,3 +54,11 @@
 - New util: `utils/my_feature_utils.py` with focused functions + tests in `unittests/my_feature_utils_test.py`.
 - CLI run with custom config: `ENV_FILE=config/.env python RSAssistant.py`.
 - After adding a feature, increment the version in `config/settings.yml`.
+
+
+## Autonomous Hardening Workstream
+- The bounded RSAssistant hardening packets live in `docs/task-packets/rsassistant-hardening/`.
+- `MANIFEST.md` is the workstream source of truth; execute only the next unchecked packet and do not pre-read later packets.
+- Run the sequence with `scripts/run-rsassistant-hardening.sh`. The runner uses one fresh `codex exec` invocation and one commit per packet on `codex/rsassistant-hardening`.
+- Packet scope overrides generic cleanup instincts: do not perform repo-wide audits or unrelated refactors while executing a packet.
+- If a packet is blocked, stop the sequence rather than skipping ahead or inventing a workaround.
