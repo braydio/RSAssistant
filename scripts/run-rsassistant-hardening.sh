@@ -72,7 +72,7 @@ If blocked, make no speculative workaround and return a concise blocker report."
     exit 4
   fi
 
-  if grep -Fq -- "- [ ] `$packet`" "$MANIFEST"; then
+  if grep -Fq -- "- [ ] \`$packet\`" "$MANIFEST"; then
     echo "Packet was not marked complete in MANIFEST.md. Stopping." >&2
     exit 5
   fi
