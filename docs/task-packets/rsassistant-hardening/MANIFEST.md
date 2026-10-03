@@ -1,3 +1,8 @@
+> [!WARNING]
+> **Legacy pre-canonical workstream. Do not execute this manifest directly against current `main`.**
+> The canonical packet system is `docs/task-packets/README.md`, `INDEX.md`, and `TRACKER.md`.
+> This train is preserved as design history under archived wrapper `TP-20260612-001`. Reuse requirements only by copying/rebasing them into a new canonical packet.
+
 # RSAssistant Hardening Workstream
 
 Baseline at workstream creation: `main@03d1b815af3f491a88ae8c45a46eb8dce5a19d4e`.
