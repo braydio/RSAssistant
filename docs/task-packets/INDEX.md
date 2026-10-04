@@ -6,9 +6,9 @@ See [README.md](README.md) for naming, lifecycle, execution, persistence, and au
 
 ## Active
 
-No canonical active packets yet.
-
-The next modernization packets should be authored only after rebasing the current persistence/architecture state against `main`.
+| Packet ID | Title | Status | Priority | Canonical packet |
+| --- | --- | --- | --- | --- |
+| TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | Ready | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
 
 ## Completed
 
