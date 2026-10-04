@@ -6,7 +6,9 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 
 ## Active packets
 
-No canonical active packets are currently registered.
+| Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | Ready | High | None | main | 2026-10-03 | [packet](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
 
 ## Historical / re-baseline queue
 
@@ -27,4 +29,4 @@ No canonical active packets are currently registered.
 
 ## Blockers
 
-None. The next step is deliberate decomposition, not running the legacy train.
+None. TP-20261003-001 is the current modernization controller. Author its child packets in the order defined there rather than running the legacy train.
