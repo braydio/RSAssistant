@@ -64,6 +64,17 @@ class AlertChannelMessageTest(unittest.TestCase):
         self.assertIsNone(result["ticker"])
         self.assertTrue(result["reverse_split_confirmed"])
 
+    def test_reverse_split_does_not_treat_cayman_as_ticker(self) -> None:
+        message = (
+            "Intercont (Cayman) Limited Announces Effective Time of Share "
+            "Consolidation/Reverse Share Split"
+        )
+
+        result = alert_channel_message(message)
+
+        self.assertIsNone(result["ticker"])
+        self.assertTrue(result["reverse_split_confirmed"])
+
 
 class ParseOrderMessageTest(unittest.TestCase):
     def test_robinhood_mfa_prompt_is_treated_as_notification(self) -> None:

@@ -6,6 +6,7 @@ import asyncio
 import logging
 from datetime import timedelta
 from discord.ext import commands
+from utils.discord_permissions import operator_only
 
 from plugins.ultma.config import (
     AUTO_RSA_API_KEY,
@@ -102,6 +103,7 @@ class UltMaPluginCog(commands.Cog):
         await self._send_status(ctx)
 
     @ultma.command(name="start")
+    @operator_only()
     async def start_command(self, ctx: commands.Context) -> None:
         """Start the background ULT-MA monitoring tasks."""
 
@@ -109,6 +111,7 @@ class UltMaPluginCog(commands.Cog):
         await ctx.send("ULT-MA trading tasks started.")
 
     @ultma.command(name="stop")
+    @operator_only()
     async def stop_command(self, ctx: commands.Context) -> None:
         """Stop the background ULT-MA monitoring tasks."""
 
@@ -116,6 +119,7 @@ class UltMaPluginCog(commands.Cog):
         await ctx.send("ULT-MA trading tasks stopped.")
 
     @ultma.command(name="pause")
+    @operator_only()
     async def pause_command(self, ctx: commands.Context) -> None:
         """Pause trading without cancelling the background tasks."""
 
@@ -123,6 +127,7 @@ class UltMaPluginCog(commands.Cog):
         await ctx.send("ULT-MA trading paused.")
 
     @ultma.command(name="resume")
+    @operator_only()
     async def resume_command(self, ctx: commands.Context) -> None:
         """Resume trading after a pause."""
 
@@ -130,6 +135,7 @@ class UltMaPluginCog(commands.Cog):
         await ctx.send("ULT-MA trading resumed.")
 
     @ultma.command(name="force")
+    @operator_only()
     async def force_command(self, ctx: commands.Context, direction: str) -> None:
         """Force an entry in the specified direction (long/short)."""
 

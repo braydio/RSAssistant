@@ -2,8 +2,9 @@
 
 ## Status Note
 Excel is deprecated and non-authoritative after migration. The SQL database and
-JSON/structured logs are the sources of truth, and Excel should be treated as a
-historical artifact only.
+structured operational stores are the sources of truth, and Excel should be
+treated as a historical artifact only. `Accounts` is the canonical SQL source
+for account identity and nicknames; `account_mappings` is migration-only.
 
 ## Excel Sheet Enumeration from `utils/excel_utils.py`
 
@@ -23,10 +24,10 @@ columns `A:D`.
 
 | Column | Header (inferred) | Meaning in Excel | SQL Mapping |
 | --- | --- | --- | --- |
-| A | Broker Name | Broker identifier namespace for an account. | `Accounts.broker`, `account_mappings.broker` |
-| B | Group Number | Broker grouping / broker number partition. | `Accounts.broker_number`, `account_mappings.group_number` |
-| C | Account Number | Raw account number, normalized to 4-char zero-padded text before write. | `Accounts.account_number`, `account_mappings.account_number` |
-| D | Account Nickname | Human-readable account label; generated when missing. | `Accounts.account_nickname`, `account_mappings.account_nickname` |
+| A | Broker Name | Broker identifier namespace for an account. | `Accounts.broker` |
+| B | Group Number | Broker grouping / broker number partition. | `Accounts.broker_number` |
+| C | Account Number | Raw account number, normalized to 4-char zero-padded text before write. | `Accounts.account_number` |
+| D | Account Nickname | Human-readable account label; generated when missing. | `Accounts.account_nickname` |
 
 Stored vs. derived notes:
 
@@ -68,13 +69,9 @@ Column layout used for per-account values:
 | Excel Concept | SQL Table.Column | Existing or New | Stored or Derived | Notes |
 | --- | --- | --- | --- | --- |
 | Broker Name (`Account Details!A`) | `Accounts.broker` | Existing | Stored | Canonical broker string. |
-| Broker Name (`Account Details!A`) | `account_mappings.broker` | Existing | Stored | Compatibility mapping table. |
 | Group Number (`Account Details!B`) | `Accounts.broker_number` | Existing | Stored | Numeric/text broker grouping. |
-| Group Number (`Account Details!B`) | `account_mappings.group_number` | Existing | Stored | String representation in mapping rows. |
 | Account Number (`Account Details!C`) | `Accounts.account_number` | Existing | Stored | Persisted as zero-padded text. |
-| Account Number (`Account Details!C`) | `account_mappings.account_number` | Existing | Stored | Same normalized value. |
 | Account Nickname (`Account Details!D`) | `Accounts.account_nickname` | Existing | Stored | Final resolved nickname. |
-| Account Nickname (`Account Details!D`) | `account_mappings.account_nickname` | Existing | Stored | Mirrors mapping lookup surface. |
 | Default nickname generation | n/a (logic in `generate_account_nickname`) | Existing logic | Derived then Stored | `"Account N"` calculated from existing nicknames. |
 | Account row label (`Reverse Split Log!A{row}`) | `Accounts.account_id` | Existing | Derived | Resolve account via broker + nickname/number. |
 | Ticker (`stock_row` in cost col) | `reverse_split_log.ticker` | New (proposed) | Stored | One ticker per reverse split log record. |

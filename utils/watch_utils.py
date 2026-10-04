@@ -19,7 +19,6 @@ from utils.sql_utils import (
     delete_watchlist_entry,
     fetch_sell_list_entries,
     fetch_watchlist_entries,
-    init_db,
     replace_sell_list_entries,
     replace_watchlist_entries,
     upsert_sell_list_entry,
@@ -37,12 +36,12 @@ from utils.market_calendar import MARKET_TZ, is_market_day
 class WatchListManager:
     """Manages the watch list and sell list for stock tickers."""
 
-    def __init__(self):
-        init_db()
+    def __init__(self, load_from_db: bool = True):
         self.watch_list = {}
         self.sell_list = {}
-        self.load_watch_list()
-        self.load_sell_list()
+        if load_from_db:
+            self.load_watch_list()
+            self.load_sell_list()
 
     def save_watch_list(self):
         """Persist the current watch list to SQL."""
@@ -292,7 +291,7 @@ class WatchListManager:
 
 
 # Initialize WatchList Manager
-watch_list_manager = WatchListManager()
+watch_list_manager = WatchListManager(load_from_db=False)
 
 
 # Main functions
@@ -334,7 +333,6 @@ async def send_reminder_message_embed(ctx):
     )
 
     logging.info(f"Reminder message called for {datetime.now()}")
-    update_historical_holdings()
 
     # Get the watch list from the manager
     watch_list = watch_list_manager.get_watch_list()

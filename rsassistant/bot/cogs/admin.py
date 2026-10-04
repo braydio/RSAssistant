@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 
 from discord.ext import commands
+from utils.discord_permissions import admin_only
 
 
 class AdminCog(commands.Cog):
@@ -18,6 +19,7 @@ class AdminCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="restart", aliases=["rs"], extras={"category": "Admin"})
+    @admin_only()
     async def restart(self, ctx: commands.Context) -> None:
         await ctx.send("\n(・_・ヾ)     (-.-)Zzz...\n")
         await ctx.send(
@@ -39,6 +41,7 @@ class AdminCog(commands.Cog):
         extras={"category": "Admin"},
     )
     @commands.has_permissions(manage_messages=True)
+    @admin_only()
     async def batchclear(self, ctx: commands.Context, limit: int) -> None:
         if limit > 10000:
             await ctx.send("That's too many brother man.")
@@ -59,6 +62,7 @@ class AdminCog(commands.Cog):
         help="Gracefully shuts down the bot.",
         extras={"category": "Admin"},
     )
+    @admin_only()
     async def shutdown(self, ctx: commands.Context) -> None:
         await ctx.send("no you")
         await self.bot.close()
@@ -70,6 +74,7 @@ class AdminCog(commands.Cog):
         usage="<auto_rsa_dir> [holdings_file] [auto_rsa_env_file]",
         extras={"category": "Admin"},
     )
+    @admin_only()
     async def patch_auto_rsa(
         self,
         ctx: commands.Context,

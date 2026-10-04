@@ -8,21 +8,9 @@ back to Discord.
 import io
 
 import discord
-import matplotlib.pyplot as plt
 import pandas as pd
 
-from utils.sql_utils import fetch_account_labels, get_db_connection
-
-
-def get_account_id_or_name(account_input):
-    """Return account_id if given nickname, or nickname if given account_id."""
-    account_mappings = fetch_account_labels()
-    for entry in account_mappings:
-        if account_input.isdigit() and str(entry["account_id"]) == account_input:
-            return entry["account_nickname"]
-        if entry["account_nickname"].lower() == account_input.lower():
-            return entry["account_id"]
-    return None
+from utils.sql_utils import get_db_connection, resolve_account_id
 
 
 async def show_sql_holdings_history(
@@ -49,14 +37,21 @@ async def show_sql_holdings_history(
     filters, generates a line plot of quantity over time and replies to the
     invoking Discord command with the resulting image.
     """
+    # Plotting is optional; keep the holdings cog loadable without matplotlib.
+    try:
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
+        await ctx.send("History charts require the optional matplotlib package.")
+        return
+
     try:
         query = "SELECT * FROM HistoricalHoldings WHERE 1=1"
         params = {}
 
         # Convert account nickname to account_id if necessary
         if account:
-            mapped_account = get_account_id_or_name(account)
-            if not mapped_account:
+            mapped_account = resolve_account_id(account)
+            if mapped_account is None:
                 await ctx.send(f"Account '{account}' not found.")
                 return
             query += " AND account_id = :account"

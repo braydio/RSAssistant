@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
@@ -22,7 +23,7 @@ class PrimaryChannelErrorWatcherCogTest(IsolatedAsyncioTestCase):
         self, *, content: str, channel_id: int = 123, message_id: int = 22
     ):
         channel = SimpleNamespace(id=channel_id, send=AsyncMock())
-        author = SimpleNamespace(name="auto-rsa", display_name="auto-rsa")
+        author = SimpleNamespace(id=456, name="auto-rsa", display_name="auto-rsa")
         return SimpleNamespace(
             content=content,
             embeds=[],
@@ -42,6 +43,9 @@ class PrimaryChannelErrorWatcherCogTest(IsolatedAsyncioTestCase):
         ), patch(
             "rsassistant.bot.cogs.primary_channel_error_watcher.DISCORD_PRIMARY_CHANNEL",
             123,
+        ), patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.AUTO_RSA_ERROR_WATCHER_SENDER_IDS",
+            {456},
         ), patch.object(
             cog,
             "_invoke_codex_exec",
@@ -63,6 +67,9 @@ class PrimaryChannelErrorWatcherCogTest(IsolatedAsyncioTestCase):
         ), patch(
             "rsassistant.bot.cogs.primary_channel_error_watcher.DISCORD_PRIMARY_CHANNEL",
             123,
+        ), patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.AUTO_RSA_ERROR_WATCHER_SENDER_IDS",
+            {456},
         ), patch.object(
             cog,
             "_invoke_codex_exec",
@@ -72,6 +79,46 @@ class PrimaryChannelErrorWatcherCogTest(IsolatedAsyncioTestCase):
 
         codex_mock.assert_not_called()
         message.channel.send.assert_not_called()
+
+    async def test_on_message_ignores_sender_outside_allowlist(self):
+        bot = SimpleNamespace(user=SimpleNamespace(id=999))
+        cog = PrimaryChannelErrorWatcherCog(bot)
+        message = self._build_message(content="ERROR: traceback in order executor")
+
+        with patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.AUTO_RSA_ERROR_WATCHER_ENABLED",
+            True,
+        ), patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.DISCORD_PRIMARY_CHANNEL",
+            123,
+        ), patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.AUTO_RSA_ERROR_WATCHER_SENDER_IDS",
+            {789},
+        ), patch.object(
+            cog, "_invoke_codex_exec", new=AsyncMock(return_value="diagnosis")
+        ) as codex_mock:
+            await cog.on_message(message)
+
+        codex_mock.assert_not_called()
+        message.channel.send.assert_not_called()
+
+    async def test_codex_invocation_forces_read_only_sandbox(self):
+        cog = PrimaryChannelErrorWatcherCog(SimpleNamespace(user=None))
+        completed = subprocess.CompletedProcess([], 0, stdout="diagnosis", stderr="")
+        with patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.CODEX_EXEC_COMMAND",
+            "codex exec --full-auto --sandbox workspace-write",
+        ), patch(
+            "rsassistant.bot.cogs.primary_channel_error_watcher.subprocess.run",
+            return_value=completed,
+        ) as run_mock:
+            await cog._invoke_codex_exec("untrusted message", Path("/tmp"))
+
+        command = run_mock.call_args.args[0]
+        self.assertNotIn("--full-auto", command)
+        self.assertIn("--sandbox", command)
+        self.assertIn("read-only", command)
+        self.assertIn("never", command)
 
     def test_extract_message_text_includes_embed_fields(self):
         embed = SimpleNamespace(title="Fatal Error", description="Traceback occurred")
@@ -86,7 +133,7 @@ class PrimaryChannelErrorWatcherCogTest(IsolatedAsyncioTestCase):
         self.assertTrue(_text_has_error_signal("Unhandled exception in worker"))
         self.assertFalse(_text_has_error_signal("Heartbeat completed successfully"))
 
-    def test_prompt_mentions_manual_patch_when_no_write_access(self):
+    def test_prompt_treats_discord_error_text_as_untrusted(self):
         message = self._build_message(content="error")
         prompt = _build_codex_prompt(
             error_text="permission denied",
@@ -94,8 +141,8 @@ class PrimaryChannelErrorWatcherCogTest(IsolatedAsyncioTestCase):
             codex_cwd=Path("/tmp"),
         )
 
-        self.assertIn("git-style patch", prompt)
-        self.assertIn("write_access_to_execution_cwd", prompt)
+        self.assertIn("read-only inspection", prompt)
+        self.assertIn("<untrusted_error>", prompt)
 
 
 if __name__ == "__main__":  # pragma: no cover

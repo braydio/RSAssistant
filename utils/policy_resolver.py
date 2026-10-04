@@ -578,7 +578,12 @@ class SplitPolicyResolver:
         return "Policy not clearly stated."
 
     @classmethod
-    def full_analysis(cls, nasdaq_url, ticker_hint: str | None = None):
+    def full_analysis(
+        cls,
+        nasdaq_url,
+        ticker_hint: str | None = None,
+        fallback_text: str | None = None,
+    ):
         """Gather policy info, effective date, and source text from NASDAQ notice."""
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
@@ -703,6 +708,14 @@ class SplitPolicyResolver:
                     body_text = cls.fetch_body_text(nasdaq_url, ticker=ticker)
                     if body_text:
                         source_url = nasdaq_url
+                if not body_text and fallback_text and fallback_text.strip():
+                    body_text = fallback_text.strip()
+                    source_url = nasdaq_url
+                    logger.info(
+                        "Source fetch failed; using alert text (%s chars) for LLM parsing.",
+                        len(body_text),
+                    )
+
                 if body_text:
                     cls.log_full_return(source_url, body_text)
                     nasdaq_result["body_text"] = body_text

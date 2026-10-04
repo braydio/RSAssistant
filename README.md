@@ -47,6 +47,8 @@ Required settings in `config/.env`:
 
 - `BOT_TOKEN`
 - `DISCORD_PRIMARY_CHANNEL`
+- `DISCORD_OPERATOR_IDS` / `DISCORD_OPERATOR_ROLE_IDS` for order and other state-changing commands
+- `DISCORD_ADMIN_IDS` / `DISCORD_ADMIN_ROLE_IDS` for restart and maintenance commands
 - `DISCORD_SECONDARY_CHANNEL`
 
 Optional channels:
@@ -55,7 +57,9 @@ Optional channels:
 - `DISCORD_HOLDINGS_CHANNEL` (auto-rsa holdings embeds)
 - `DISCORD_WATCHLIST_CHANNEL` (watchlist-only output)
 - `AUTO_BUY_WATCHLIST` (when `true`, `..all` queues `!rsa buy 1 <ticker> <broker> false` if a watched ticker is missing and no queued order exists)
-- `AUTO_RSA_ERROR_WATCHER_ENABLED` (when `true`, watches the primary channel for error-like messages and runs `codex exec` with runtime context)
+- `AUTO_RSA_ERROR_WATCHER_ENABLED` (when `true`, watches the primary channel for allowlisted error messages and runs read-only `codex exec`)
+- `AUTO_RSA_ERROR_WATCHER_SENDER_IDS` (comma-separated Discord user or bot IDs permitted to trigger that watcher)
+- `TRUSTED_AUTORSA_BOT_ID` (exact bot ID permitted to invoke `..updatebot` and `..revertupdate`)
 - `CODEX_EXEC_COMMAND` (override command used by the watcher; defaults to `codex exec`)
 - `AUTO_RSA_DIR` (optional working directory used when invoking `codex exec`; typically your auto-rsa repo path)
 
@@ -271,7 +275,17 @@ If a broker/account is missing from SQL account mappings, RSAssistant falls back
 ## Testing
 
 ```bash
-python -m unittest discover -s unittests -p '*_test.py'
+python -m pip install -r requirements-dev.txt
+python -m compileall -q rsassistant utils plugins unittests
+python -m pytest -q \
+  unittests/ord_command_test.py \
+  unittests/discord_permissions_test.py \
+  unittests/order_queue_manager_test.py \
+  unittests/order_queue_tasks_test.py \
+  unittests/order_send_commands_test.py \
+  unittests/primary_channel_error_watcher_cog_test.py \
+  unittests/market_calendar_test.py \
+  unittests/refresh_scheduler_test.py
 ```
 
 ## Contributing

@@ -6,9 +6,11 @@ import asyncio
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
+from datetime import datetime
 
 from rsassistant.bot.cogs.orders import OrdersCog
 from utils import order_exec
+from utils.market_calendar import MARKET_TZ
 
 
 class DummyCtx:
@@ -45,6 +47,29 @@ class OrderSendCommandsTest(IsolatedAsyncioTestCase):
         channel.send.assert_awaited_once_with("!rsa buy 2 TSLA all false")
         record_mock.assert_called_once()
         self.assertEqual(record_mock.call_args.kwargs["ticker"], "TSLA")
+
+    async def test_failed_discord_send_keeps_queued_order(self):
+        channel = SimpleNamespace(
+            send=AsyncMock(side_effect=RuntimeError("discord unavailable")), id=777
+        )
+        order_id = "stable-uuid"
+        with patch.object(order_exec, "add_to_order_queue") as add_mock, patch.object(
+            order_exec, "remove_order"
+        ) as remove_mock, patch.object(
+            order_exec, "is_market_open_at", return_value=True
+        ), patch.object(order_exec, "_await_rsa_rate_limit", new=AsyncMock()):
+            await order_exec.schedule_and_execute(
+                channel,
+                action="buy",
+                ticker="TSLA",
+                quantity=1,
+                broker="all",
+                execution_time=datetime.now(MARKET_TZ),
+                order_id=order_id,
+            )
+
+        add_mock.assert_called_once()
+        remove_mock.assert_not_called()
 
     async def test_orders_command_formats_recent_entries(self):
         """..orders should render recent send log entries in descending order."""

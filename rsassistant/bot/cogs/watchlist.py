@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from discord.ext import commands
+from utils.discord_permissions import operator_only
 from discord.abc import Messageable
 
 from rsassistant.bot.channel_resolver import resolve_watchlist_channel
@@ -27,6 +28,7 @@ class WatchlistCog(commands.Cog):
             return target_channel
         return ctx
 
+    @operator_only()
     @commands.command(
         name="watch",
         aliases=["wa"],
@@ -38,6 +40,7 @@ class WatchlistCog(commands.Cog):
         target_ctx = await self._resolve_watch_context(ctx)
         await handle_watch_command(target_ctx, text=text)
 
+    @operator_only()
     @commands.command(
         name="addratio",
         aliases=["ar"],
@@ -69,6 +72,7 @@ class WatchlistCog(commands.Cog):
         usage="<ticker>",
         extras={"category": "Watchlist"},
     )
+    @operator_only()
     async def watched_ticker(self, ctx: commands.Context, ticker: str) -> None:
         target_ctx = await self._resolve_watch_context(ctx)
         await watch_list_manager.stop_watching(target_ctx, ticker)

@@ -1,6 +1,7 @@
 """Helper for auto-buying tickers with market-hours awareness."""
 
 from datetime import datetime
+import uuid
 
 from utils.logging_setup import logger
 from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
@@ -25,7 +26,7 @@ async def autobuy_ticker(bot, ctx, ticker, quantity=1, broker="all"):
                 execution_time,
             )
 
-        order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_buy"
+        order_id = str(uuid.uuid4())
         bot.loop.create_task(
             schedule_and_execute(
                 ctx=ctx,

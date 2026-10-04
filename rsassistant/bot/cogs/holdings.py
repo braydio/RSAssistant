@@ -6,6 +6,7 @@ import asyncio
 
 import discord
 from discord.ext import commands
+from utils.discord_permissions import operator_only
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from rsassistant.bot.history_query import show_sql_holdings_history
@@ -43,6 +44,7 @@ class HoldingsCog(commands.Cog):
         success, message = clear_holdings_log(HOLDINGS_LOG_CSV)
         await ctx.send(message if success else f"Failed to clear holdings log: {message}")
 
+    @operator_only()
     @commands.command(
         name="clearholdings",
         aliases=["ch"],
@@ -122,6 +124,7 @@ class HoldingsCog(commands.Cog):
         usage="[broker] [top_n]",
         extras={"category": "Reporting"},
     )
+    @operator_only()
     async def holdings_snapshot(self, ctx: commands.Context, *args: str) -> None:
         broker = None
         top_n = 5

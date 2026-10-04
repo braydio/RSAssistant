@@ -84,7 +84,10 @@ _ALERT_TICKER_PATTERNS = [
         r"([A-Za-z][A-Za-z0-9.\-]{0,9})\s*\)",
         re.IGNORECASE,
     ),
-    re.compile(r"\(([A-Za-z][A-Za-z0-9]{0,9})\)"),
+    # Unqualified U.S. ticker symbols are at most five characters. Keeping this
+    # fallback narrow avoids treating company-name qualifiers such as
+    # ``(Cayman)`` as symbols.
+    re.compile(r"\(([A-Za-z][A-Za-z0-9]{0,4})\)"),
 ]
 
 _HOLDINGS_LINE_PATTERN = re.compile(

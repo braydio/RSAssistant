@@ -13,7 +13,6 @@ from utils.config_utils import (
     ACCOUNT_MAPPING,
     CONFIG_DIR,
     HOLDINGS_LOG_CSV,
-    get_account_nickname,
     load_account_mappings,
     load_config,
 )
@@ -34,6 +33,50 @@ def _normalize_ticker_symbol(value):
     if ticker.startswith("$"):
         ticker = ticker[1:].strip()
     return ticker.upper()
+
+
+def _resolve_mapped_account(broker_mapping, broker_number, account_number):
+    """Resolve snapshot identifiers to a configured account.
+
+    Some importers emit values such as ``"Fidelity 1"`` and a full account
+    number while the mapping stores ``"1"`` and only its last four digits.
+    Prefer exact matches, then the longest unambiguous suffix match.
+    """
+    group_value = _normalize_identity_field(broker_number)
+    account_value = _normalize_identity_field(account_number)
+
+    group_candidates = []
+    for mapped_group, accounts in broker_mapping.items():
+        if not isinstance(accounts, dict):
+            continue
+        mapped_group_value = _normalize_identity_field(mapped_group)
+        if group_value == mapped_group_value:
+            group_candidates = [(mapped_group, accounts)]
+            break
+        if group_value.lower().endswith(f" {mapped_group_value.lower()}"):
+            group_candidates.append((mapped_group, accounts))
+
+    matches = []
+    for mapped_group, accounts in group_candidates:
+        for mapped_account, nickname in accounts.items():
+            mapped_account_value = _normalize_identity_field(mapped_account)
+            if account_value == mapped_account_value:
+                return str(mapped_group), str(mapped_account), nickname
+            if account_value.endswith(mapped_account_value):
+                matches.append(
+                    (len(mapped_account_value), mapped_group, mapped_account, nickname)
+                )
+
+    if not matches:
+        return None
+    matches.sort(reverse=True, key=lambda match: match[0])
+    longest = matches[0][0]
+    longest_matches = [match for match in matches if match[0] == longest]
+    if len(longest_matches) != 1:
+        return None
+    _, mapped_group, mapped_account, nickname = longest_matches[0]
+    return str(mapped_group), str(mapped_account), nickname
+
 
 def check_holdings_timestamp(filename):
     """Reads the latest timestamp from the specified CSV file."""
@@ -96,7 +139,7 @@ async def track_ticker_summary(
     """Track holdings for ``ticker`` grouped by broker.
 
     The function loads the latest holdings snapshot, resolves each row to the
-    canonical ``"<Broker> <Account Nickname>"`` key and builds broker/account
+    canonical configured group/account identity and builds broker/account
     status dictionaries used by aggregated and detailed Discord views.
 
     Args:
@@ -146,33 +189,20 @@ async def track_ticker_summary(
                 broker_number = _normalize_identity_field(broker_number_raw)
                 account_number = _normalize_identity_field(account_number_raw)
 
-                # Resolve the canonical "<Broker> <Account Nickname>" identifier.
-                account_nickname = None
+                # Resolve importer-specific identifiers to the configured account.
+                mapped_account = None
                 if broker_number and account_number:
                     broker_mapping = mapped_accounts.get(broker_name, {})
-                    group_mapping = broker_mapping.get(broker_number, {})
-                    account_nickname = group_mapping.get(account_number)
-                    if not account_nickname:
-                        account_nickname = get_account_nickname(
-                            broker_name, broker_number, account_number
-                        )
-                        mapped_accounts.setdefault(broker_name, {}).setdefault(
-                            broker_number, {}
-                        )[account_number] = account_nickname
+                    mapped_account = _resolve_mapped_account(
+                        broker_mapping, broker_number, account_number
+                    )
 
-                if not account_nickname:
-                    key_value = row.get("Key", "")
-                    prefix = f"{broker_name} "
-                    if isinstance(key_value, str) and key_value.startswith(prefix):
-                        account_nickname = key_value[len(prefix) :]
-                    else:
-                        fallback_nickname = row.get("Account Nickname") or row.get(
-                            "Nickname"
-                        )
-                        account_nickname = fallback_nickname or account_number or ""
-
-                account_nickname = account_nickname or ""
-                account_key = f"{broker_name} {account_nickname}"
+                if mapped_account:
+                    mapped_group, mapped_account_number, _ = mapped_account
+                    account_key = (mapped_group, mapped_account_number)
+                else:
+                    # Unmapped rows must not alter the configured account totals.
+                    account_key = (broker_number, account_number)
 
                 timestamp_str = row.get("Timestamp", "")
                 try:
@@ -264,7 +294,7 @@ def compute_broker_statuses(holdings, account_mapping):
                 if isinstance(accounts, dict):
                     total_accounts += len(accounts)
                     for account_number, account_nickname in accounts.items():
-                        account_key = f"{broker_name} {account_nickname}"
+                        account_key = (str(group_number), str(account_number))
                         if (
                             holdings.get(broker_name, {})
                             .get(account_key, {})
@@ -311,11 +341,16 @@ async def get_detailed_broker_view(
     - Accounts holding the position.
     - Accounts not holding the position.
     """
-    broker_name = specific_broker.capitalize()
+    broker_name = next(
+        (
+            name
+            for name in account_mapping
+            if _normalize_identity_field(name).lower()
+            == _normalize_identity_field(specific_broker).lower()
+        ),
+        specific_broker,
+    )
     logger.debug(f"looking up {broker_name} in mapping")
-
-    if specific_broker.upper() == "BBAE":
-        broker_name = "BBAE"  # Ensures 'BBAE' is always in all caps for the lookup
 
     logger.debug(f"looking up{broker_name}")
 
@@ -329,7 +364,7 @@ async def get_detailed_broker_view(
         for group_number, accounts in broker_data.items():
             if isinstance(accounts, dict):
                 for account_number, account_nickname in accounts.items():
-                    account_key = f"{broker_name} {account_nickname}"
+                    account_key = (str(group_number), str(account_number))
                     account_entry = holdings.get(broker_name, {}).get(account_key)
 
                     if account_entry and account_entry.get("status") == "✅":

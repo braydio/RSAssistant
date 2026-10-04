@@ -1,15 +1,17 @@
-"""Market calendar helpers for trading-day and market-hours checks."""
+"""NYSE session helpers backed by the exchange-calendars dataset."""
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
+
+import exchange_calendars as xcals
+import pandas as pd
 
 from utils.config_utils import MARKET_HOLIDAYS
 
 MARKET_TZ = ZoneInfo("America/New_York")
-MARKET_OPEN = time(9, 30)
-MARKET_CLOSE = time(16, 0)
+_NYSE = xcals.get_calendar("XNYS", start="1990-01-01", end="2050-12-31")
 
 
 def _coerce_market_tz(timestamp: datetime) -> datetime:
@@ -18,32 +20,73 @@ def _coerce_market_tz(timestamp: datetime) -> datetime:
     return timestamp.astimezone(MARKET_TZ)
 
 
+def _label(day: date) -> pd.Timestamp:
+    return pd.Timestamp(day.isoformat())
+
+
+def _session_for(day: date):
+    if day in MARKET_HOLIDAYS:
+        return None
+    label = _label(day)
+    sessions = _NYSE.schedule.index
+    if label < sessions[0] or label > sessions[-1]:
+        raise ValueError(f"NYSE calendar does not cover {day.isoformat()}.")
+    # Use the schedule index directly. This also avoids exchange-calendars'
+    # older nanosecond bounds path when newer pandas uses microsecond dates.
+    if label not in sessions:
+        return None
+    return label
+
+
 def is_market_holiday(day: date) -> bool:
-    return day in MARKET_HOLIDAYS
+    return _session_for(day) is None
 
 
 def is_market_day(day: date) -> bool:
-    return day.weekday() < 5 and not is_market_holiday(day)
+    return _session_for(day) is not None
+
+
+def session_open(day: date) -> datetime | None:
+    label = _session_for(day)
+    if label is None:
+        return None
+    value = _NYSE.schedule.loc[label, "open"]
+    return value.to_pydatetime().astimezone(MARKET_TZ)
+
+
+def session_close(day: date) -> datetime | None:
+    label = _session_for(day)
+    if label is None:
+        return None
+    value = _NYSE.schedule.loc[label, "close"]
+    return value.to_pydatetime().astimezone(MARKET_TZ)
 
 
 def is_market_open_at(timestamp: datetime) -> bool:
     current = _coerce_market_tz(timestamp)
-    if not is_market_day(current.date()):
-        return False
-    return MARKET_OPEN <= current.time() <= MARKET_CLOSE
+    opened = session_open(current.date())
+    closed = session_close(current.date())
+    return opened is not None and opened <= current < closed
 
 
 def next_market_open(reference: datetime) -> datetime:
-    """Return the next market-open timestamp at or after ``reference``."""
-
+    """Return the next session open at or after ``reference``."""
     current = _coerce_market_tz(reference)
-    if is_market_day(current.date()):
-        if current.time() <= MARKET_OPEN:
-            return datetime.combine(current.date(), MARKET_OPEN, MARKET_TZ)
-        if current.time() <= MARKET_CLOSE:
-            return current
+    day = current.date()
+    while True:
+        opened = session_open(day)
+        closed = session_close(day)
+        if opened is not None:
+            if current <= opened:
+                return opened
+            if current < closed:
+                return current
+        day += timedelta(days=1)
 
-    next_day = current.date() + timedelta(days=1)
-    while not is_market_day(next_day):
-        next_day += timedelta(days=1)
-    return datetime.combine(next_day, MARKET_OPEN, MARKET_TZ)
+
+def normalize_execution_time(timestamp: datetime) -> datetime:
+    """Move an out-of-session execution to the next open, preserving valid times."""
+    current = _coerce_market_tz(timestamp)
+    if is_market_open_at(current):
+        return current
+    return next_market_open(current)

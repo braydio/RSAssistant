@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
+from utils.db import connect_database, run_migrations
+
 from utils.config_utils import (
     ACCOUNT_MAPPING,
     SELL_FILE,
@@ -30,12 +32,7 @@ def get_db_connection():
 
     logger.debug("Attempting to establish a database connection.")
     try:
-        conn = sqlite3.connect(
-            SQL_DATABASE, timeout=30
-        )  # Extend timeout to avoid lock errors
-        conn.execute(
-            "PRAGMA journal_mode=WAL;"
-        )  # Enable WAL mode for better concurrency
+        conn = connect_database(SQL_DATABASE)
         logger.debug("Database connection established successfully.")
         return conn
     except sqlite3.Error as e:
@@ -61,6 +58,7 @@ def get_or_create_account_id(
         logger.debug("SQL logging disabled; skipping account lookup.")
         return None
 
+    nickname_was_explicit = account_nickname is not None
     if account_nickname is None:
         account_nickname = get_account_nickname_or_default(
             broker, broker_number, account_number
@@ -71,28 +69,30 @@ def get_or_create_account_id(
         try:
             cursor.execute(
                 """
-                SELECT account_id
-                FROM Accounts
-                WHERE broker = ? AND broker_number = ? AND account_number = ?
-                """,
-                (broker, broker_number, account_number),
-            )
-            result = cursor.fetchone()
-
-            if result:
-                logger.debug(f"Account ID found: {result[0]}.")
-                return result[0]
-
-            cursor.execute(
-                """
                 INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
                 VALUES (?, ?, ?, ?)
+                ON CONFLICT(broker, broker_number, account_number) DO NOTHING
+                RETURNING account_id
                 """,
                 (broker, account_number, broker_number, account_nickname),
             )
-            conn.commit()
-            account_id = cursor.lastrowid
-            logger.info(f"New account created with ID: {account_id}.")
+            row = cursor.fetchone()
+            if row:
+                account_id = int(row[0])
+            else:
+                cursor.execute(
+                    """SELECT account_id FROM Accounts
+                       WHERE broker=? AND broker_number=? AND account_number=?""",
+                    (broker, broker_number, account_number),
+                )
+                account_id = int(cursor.fetchone()[0])
+                if nickname_was_explicit:
+                    cursor.execute(
+                        """UPDATE Accounts SET account_nickname=?,
+                               updated_at=DATETIME('now') WHERE account_id=?""",
+                        (account_nickname, account_id),
+                    )
+            logger.debug("Resolved account ID: %s.", account_id)
             return account_id
         except sqlite3.Error as e:
             logger.error(f"Error retrieving or creating account_id: {e}")
@@ -123,49 +123,15 @@ def upsert_account_mapping(
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO account_mappings (
-                broker,
-                broker_number,
-                account_number,
-                account_nickname,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
-            ON CONFLICT(broker, broker_number, account_number)
-            DO UPDATE SET
+            INSERT INTO Accounts (
+                broker, broker_number, account_number, account_nickname
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(broker, broker_number, account_number) DO UPDATE SET
                 account_nickname = excluded.account_nickname,
                 updated_at = DATETIME('now')
             """,
             (broker, broker_number, account_number, account_nickname),
         )
-
-        cursor.execute(
-            """
-            SELECT account_id
-            FROM Accounts
-            WHERE broker = ? AND broker_number = ? AND account_number = ?
-            """,
-            (broker, broker_number, account_number),
-        )
-        result = cursor.fetchone()
-        if result:
-            cursor.execute(
-                """
-                UPDATE Accounts
-                SET account_nickname = ?
-                WHERE account_id = ?
-                """,
-                (account_nickname, result[0]),
-            )
-        else:
-            cursor.execute(
-                """
-                INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
-                VALUES (?, ?, ?, ?)
-                """,
-                (broker, account_number, broker_number, account_nickname),
-            )
         conn.commit()
         logger.info(
             "Upserted SQL account nickname for %s/%s/%s.",
@@ -199,7 +165,7 @@ def sync_account_mappings(mappings: dict) -> dict[str, int]:
                     cursor.execute(
                         """
                         SELECT account_nickname
-                        FROM account_mappings
+                        FROM Accounts
                         WHERE broker = ? AND broker_number = ? AND account_number = ?
                         """,
                         (broker, broker_number, account_number),
@@ -209,7 +175,7 @@ def sync_account_mappings(mappings: dict) -> dict[str, int]:
                         if row[0] != nickname:
                             cursor.execute(
                                 """
-                                UPDATE account_mappings
+                                UPDATE Accounts
                                 SET account_nickname = ?, updated_at = DATETIME('now')
                                 WHERE broker = ? AND broker_number = ? AND account_number = ?
                                 """,
@@ -219,47 +185,13 @@ def sync_account_mappings(mappings: dict) -> dict[str, int]:
                     else:
                         cursor.execute(
                             """
-                            INSERT INTO account_mappings (
-                                broker,
-                                broker_number,
-                                account_number,
-                                account_nickname,
-                                created_at,
-                                updated_at
-                            )
-                            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
+                            INSERT INTO Accounts (
+                                broker, broker_number, account_number, account_nickname
+                            ) VALUES (?, ?, ?, ?)
                             """,
                             (broker, broker_number, account_number, nickname),
                         )
                         results["added"] += 1
-
-                    cursor.execute(
-                        """
-                        SELECT account_id, account_nickname
-                        FROM Accounts
-                        WHERE broker = ? AND broker_number = ? AND account_number = ?
-                        """,
-                        (broker, broker_number, account_number),
-                    )
-                    account_row = cursor.fetchone()
-                    if account_row:
-                        if account_row[1] != nickname:
-                            cursor.execute(
-                                """
-                                UPDATE Accounts
-                                SET account_nickname = ?
-                                WHERE account_id = ?
-                                """,
-                                (nickname, account_row[0]),
-                            )
-                    else:
-                        cursor.execute(
-                            """
-                            INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
-                            VALUES (?, ?, ?, ?)
-                            """,
-                            (broker, account_number, broker_number, nickname),
-                        )
 
         conn.commit()
 
@@ -284,9 +216,8 @@ def clear_account_nicknames() -> int:
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE account_mappings SET account_nickname = NULL")
-        cleared = cursor.rowcount
         cursor.execute("UPDATE Accounts SET account_nickname = NULL")
+        cleared = cursor.rowcount
         conn.commit()
         logger.info("Cleared account nicknames in SQL storage.")
         return cleared
@@ -309,7 +240,8 @@ def fetch_account_mappings() -> dict[str, dict[str, dict[str, str]]]:
             cursor.execute(
                 """
                 SELECT broker, broker_number, account_number, account_nickname
-                FROM account_mappings
+                FROM Accounts
+                WHERE account_nickname IS NOT NULL
                 ORDER BY broker, broker_number, account_number
                 """
             )
@@ -344,7 +276,7 @@ def fetch_account_nickname(
             cursor.execute(
                 """
                 SELECT account_nickname
-                FROM account_mappings
+                FROM Accounts
                 WHERE broker = ? AND broker_number = ? AND account_number = ?
                 """,
                 (broker, broker_number, account_number),
@@ -383,6 +315,17 @@ def fetch_account_labels() -> list[dict[str, str]]:
     ]
 
 
+def resolve_account_id(account_input: str) -> int | None:
+    """Resolve a numeric account ID or nickname to one integer account ID."""
+
+    for entry in fetch_account_labels():
+        if account_input.isdigit() and str(entry["account_id"]) == account_input:
+            return int(entry["account_id"])
+        if entry["account_nickname"].lower() == account_input.lower():
+            return int(entry["account_id"])
+    return None
+
+
 def has_account_mappings() -> bool:
     """Return ``True`` when SQL has at least one account mapping row."""
 
@@ -392,7 +335,9 @@ def has_account_mappings() -> bool:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT COUNT(1) FROM account_mappings")
+            cursor.execute(
+                "SELECT COUNT(1) FROM Accounts WHERE account_nickname IS NOT NULL"
+            )
             count = cursor.fetchone()[0]
         except sqlite3.Error as exc:
             logger.error("Failed checking account mappings: %s", exc)
@@ -808,104 +753,8 @@ def init_db():
 
     logger.info("Initializing database with required tables.")
     with get_db_connection() as conn:
-        cursor = conn.cursor()
         try:
-            cursor.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS Accounts (
-                    account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    broker TEXT NOT NULL,
-                    account_number TEXT NOT NULL,
-                    account_nickname TEXT,
-                    broker_number TEXT
-                );
-
-                CREATE TABLE IF NOT EXISTS HistoricalHoldings (
-                    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id INTEGER,
-                    ticker TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    quantity REAL NOT NULL CHECK (quantity >= 0),
-                    average_price REAL NOT NULL CHECK (average_price >= 0),
-                    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS OrderHistory (
-                    order_id TEXT PRIMARY KEY,
-                    account_id INTEGER,
-                    broker TEXT NOT NULL,
-                    broker_name TEXT NOT NULL,
-                    broker_number TEXT,
-                    account_number TEXT NOT NULL,
-                    ticker TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    action TEXT NOT NULL,
-                    quantity REAL NOT NULL CHECK (quantity >= 0),
-                    price REAL NOT NULL CHECK (price >= 0),
-                    total_value REAL NOT NULL,
-                    timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS HoldingsLive (
-                    holding_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id INTEGER,
-                    ticker TEXT NOT NULL,
-                    quantity REAL NOT NULL CHECK (quantity >= 0),
-                    average_price REAL NOT NULL CHECK (average_price >= 0),
-                    timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS account_mappings (
-                    broker TEXT NOT NULL,
-                    broker_number TEXT NOT NULL,
-                    account_number TEXT NOT NULL,
-                    account_nickname TEXT,
-                    created_at TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    updated_at TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    PRIMARY KEY (broker, broker_number, account_number)
-                );
-
-                CREATE TABLE IF NOT EXISTS watchlist (
-                    ticker TEXT PRIMARY KEY,
-                    split_date TEXT,
-                    split_ratio TEXT,
-                    metadata TEXT,
-                    created_at TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    updated_at TEXT NOT NULL DEFAULT (DATETIME('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS sell_list (
-                    ticker TEXT PRIMARY KEY,
-                    split_date TEXT,
-                    split_ratio TEXT,
-                    metadata TEXT,
-                    created_at TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    updated_at TEXT NOT NULL DEFAULT (DATETIME('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS ReverseSplitLog (
-                    ticker TEXT NOT NULL,
-                    split_ratio TEXT,
-                    split_date TEXT NOT NULL,
-                    ingestion_timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    source TEXT
-                );
-
-                CREATE TABLE IF NOT EXISTS ReverseSplitAccountEntries (
-                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id INTEGER NOT NULL,
-                    ticker TEXT NOT NULL,
-                    entry_type TEXT NOT NULL,
-                    price REAL NOT NULL CHECK (price >= 0),
-                    timestamp TEXT NOT NULL DEFAULT (DATETIME('now')),
-                    source TEXT,
-                    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
-                );
-                """
-            )
-            conn.commit()
+            run_migrations(conn)
             logger.info("Database tables initialized successfully.")
             migrate_legacy_json_data()
         except sqlite3.Error as e:
@@ -1183,29 +1032,24 @@ def update_holdings_live_batch(holdings: list[dict[str, Any]]) -> int:
             account_key = (broker, broker_number, account_number)
             account_id = account_id_cache.get(account_key)
             if account_id is None:
+                account_nickname = get_account_nickname_or_default(
+                    broker, broker_number, account_number
+                )
                 cursor.execute(
                     """
-                    SELECT account_id
-                    FROM Accounts
-                    WHERE broker = ? AND broker_number = ? AND account_number = ?
+                    INSERT INTO Accounts (
+                        broker, account_number, broker_number, account_nickname
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(broker, broker_number, account_number) DO NOTHING
                     """,
+                    (broker, account_number, broker_number, account_nickname),
+                )
+                cursor.execute(
+                    """SELECT account_id FROM Accounts
+                       WHERE broker=? AND broker_number=? AND account_number=?""",
                     (broker, broker_number, account_number),
                 )
-                row = cursor.fetchone()
-                if row:
-                    account_id = int(row[0])
-                else:
-                    account_nickname = get_account_nickname_or_default(
-                        broker, broker_number, account_number
-                    )
-                    cursor.execute(
-                        """
-                        INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        (broker, account_number, broker_number, account_nickname),
-                    )
-                    account_id = int(cursor.lastrowid)
+                account_id = int(cursor.fetchone()[0])
                 account_id_cache[account_key] = account_id
 
             rows_to_insert.append((account_id, ticker, quantity, price))
@@ -1224,32 +1068,41 @@ def update_holdings_live_batch(holdings: list[dict[str, Any]]) -> int:
     return inserted_rows
 
 
-def update_historical_holdings():
-    """Updates HistoricalHoldings by averaging daily data from HoldingsLive."""
+def update_historical_holdings(target_date: str | None = None) -> int:
+    """Upsert the latest observation per holding for one business date."""
     logger.info("Updating historical holdings based on live data.")
-    # Calculate yesterday's date as a string in 'YYYY-MM-DD' format.
-    yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    target_date = target_date or (datetime.now() - timedelta(days=1)).strftime(
+        "%Y-%m-%d"
+    )
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            # Insert aggregated holdings for yesterday.
             cursor.execute(
                 """
-                INSERT INTO HistoricalHoldings (account_id, ticker, date, quantity, average_price)
-                SELECT account_id,
-                       ticker,
-                       DATE(timestamp) AS date,
-                       AVG(quantity) AS avg_quantity,
-                       AVG(average_price) AS avg_price
-                FROM HoldingsLive
-                WHERE DATE(timestamp) = ?
-                GROUP BY account_id, ticker, DATE(timestamp)
+                INSERT INTO HistoricalHoldings (
+                    account_id, ticker, date, quantity, average_price
+                )
+                SELECT live.account_id, live.ticker, DATE(live.timestamp),
+                       live.quantity, live.average_price
+                FROM HoldingsLive AS live
+                WHERE DATE(live.timestamp) = ?
+                  AND live.holding_id = (
+                      SELECT MAX(latest.holding_id)
+                      FROM HoldingsLive AS latest
+                      WHERE latest.account_id IS live.account_id
+                        AND latest.ticker = live.ticker
+                        AND DATE(latest.timestamp) = DATE(live.timestamp)
+                  )
+                ON CONFLICT(account_id, ticker, date) DO UPDATE SET
+                    quantity = excluded.quantity,
+                    average_price = excluded.average_price
                 """,
-                (yesterday_date,),
+                (target_date,),
             )
             conn.commit()
             logger.info("Historical holdings updated successfully.")
+            return cursor.rowcount
         except sqlite3.Error as e:
             logger.error(f"Error updating historical holdings: {e}")
             raise

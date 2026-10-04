@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m compileall -q rsassistant utils plugins unittests
+      - run: >-
+          python -m pytest -q
+          unittests/ord_command_test.py
+          unittests/discord_permissions_test.py
+          unittests/order_queue_manager_test.py
+          unittests/order_queue_tasks_test.py
+          unittests/order_send_commands_test.py
+          unittests/primary_channel_error_watcher_cog_test.py
+          unittests/market_calendar_test.py
+          unittests/refresh_scheduler_test.py

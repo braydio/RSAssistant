@@ -7,28 +7,13 @@ from typing import Iterable, List
 
 from utils.config_utils import ENABLE_MARKET_REFRESH
 from utils.market_calendar import (
-    MARKET_CLOSE,
-    MARKET_OPEN,
     MARKET_TZ,
     is_market_day,
+    session_close,
+    session_open,
 )
 OUT_OF_HOURS_TIMES: tuple[time, ...] = (time(8, 0), time(20, 0))
 _MARKET_INTERVAL_MINUTES = 15
-
-
-def _build_market_refresh_times() -> tuple[time, ...]:
-    """Return ``time`` objects for 15-minute cadence during market hours."""
-
-    moments: List[time] = []
-    cursor = datetime.combine(date.today(), MARKET_OPEN)
-    end = datetime.combine(date.today(), MARKET_CLOSE)
-    while cursor < end:
-        moments.append(cursor.time())
-        cursor += timedelta(minutes=_MARKET_INTERVAL_MINUTES)
-    return tuple(moments)
-
-
-MARKET_REFRESH_TIMES = _build_market_refresh_times()
 
 
 def daily_schedule(
@@ -47,13 +32,17 @@ def daily_schedule(
     if market_refresh_enabled is None:
         market_refresh_enabled = ENABLE_MARKET_REFRESH
 
-    if not is_market_day(day):
-        return []
-
-    times: List[time] = list(OUT_OF_HOURS_TIMES)
-    if market_refresh_enabled:
-        times.extend(MARKET_REFRESH_TIMES)
-    return [datetime.combine(day, entry, MARKET_TZ) for entry in sorted(times)]
+    moments: List[datetime] = [
+        datetime.combine(day, entry, MARKET_TZ) for entry in OUT_OF_HOURS_TIMES
+    ]
+    opening = session_open(day) if is_market_day(day) else None
+    closing = session_close(day) if opening is not None else None
+    if market_refresh_enabled and opening is not None and closing is not None:
+        cursor = opening
+        while cursor < closing:
+            moments.append(cursor)
+            cursor += timedelta(minutes=_MARKET_INTERVAL_MINUTES)
+    return sorted(moments)
 
 
 def iter_refresh_schedule(

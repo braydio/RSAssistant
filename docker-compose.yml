@@ -32,5 +32,41 @@ services:
        timeout: 10s
        retries: 3
 
-volumes:
-  db_data:
+  auto-rsa:
+    container_name: auto-rsa
+    image: auto-rsa-holdings:local
+    build:
+      context: ./auto-rsa
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./auto-rsa/.env
+    tty: true
+    volumes:
+      - ./auto-rsa/creds:/app/creds
+      - ./volumes/db:/app/volumes/db       # Shared DB with RSAssistant
+      - ./auto-rsa/src:/app/src:ro
+    # Scope auto-updates to this container only; RSAssistant self-updates via git
+    labels:
+      com.centurylinklabs.watchtower.scope: auto-rsa
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  watchtower:
+    # Auto-update the auto-rsa image every hour (opt-in via --profile upstream-image-updates)
+    # https://containrrr.dev/watchtower/
+    image: containrrr/watchtower
+    container_name: watchtower
+    hostname: auto-rsa
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_POLL_INTERVAL=3600
+      - WATCHTOWER_SCOPE=auto-rsa
+    profiles: ["upstream-image-updates"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

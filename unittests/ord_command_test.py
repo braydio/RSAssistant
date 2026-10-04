@@ -1,61 +1,38 @@
-"""Tests covering validation for the ``..ord`` command."""
+"""Validation tests for the modular order command."""
 
+import asyncio
 import unittest
-from discord.ext import commands
+from types import SimpleNamespace
 
-import RSAssistant
+from rsassistant.bot.cogs.orders import OrdersCog, ORDER_COMMAND_USAGE
 
 
 class DummyCtx:
-    """Capture messages sent during command execution."""
-
     def __init__(self):
         self.messages = []
 
-    async def send(self, message, **kwargs):  # noqa: D401 - passthrough for testing
-        """Store outbound Discord messages for later assertions."""
-
+    async def send(self, message, **kwargs):
         self.messages.append(message)
 
 
-EXPECTED_MESSAGE = (
-    f"Invalid arguments. Expected format: `{RSAssistant.ORD_COMMAND_USAGE}`"
-)
-
-
 class ProcessOrderCommandTests(unittest.IsolatedAsyncioTestCase):
-    """Ensure ``..ord`` validation communicates expected usage."""
-
-    async def test_invalid_action_shows_usage(self):
-        ctx = DummyCtx()
-
-        await RSAssistant.process_order(ctx, "hold", ticker="tsla")
-
-        self.assertEqual([EXPECTED_MESSAGE], ctx.messages)
-
-    async def test_missing_ticker_shows_usage(self):
-        ctx = DummyCtx()
-
-        await RSAssistant.process_order(ctx, "buy", ticker=None)
-
-        self.assertEqual([EXPECTED_MESSAGE], ctx.messages)
-
-    async def test_invalid_quantity_shows_usage(self):
-        ctx = DummyCtx()
-
-        await RSAssistant.process_order(ctx, "sell", ticker="abc", quantity=0)
-
-        self.assertEqual([EXPECTED_MESSAGE], ctx.messages)
-
-    async def test_error_handler_on_bad_argument(self):
-        ctx = DummyCtx()
-
-        await RSAssistant.process_order_error(
-            ctx, commands.BadArgument("quantity")
-        )
-
-        self.assertEqual([EXPECTED_MESSAGE], ctx.messages)
+    async def test_invalid_arguments_show_usage(self):
+        cog = OrdersCog(SimpleNamespace(loop=asyncio.get_running_loop()))
+        for action, ticker, quantity in (
+            ("hold", "TSLA", 1),
+            ("buy", None, 1),
+            ("sell", "ABC", 0),
+        ):
+            with self.subTest(action=action, ticker=ticker, quantity=quantity):
+                ctx = DummyCtx()
+                await OrdersCog.process_order.callback(
+                    cog, ctx, action, ticker=ticker, quantity=quantity
+                )
+                self.assertEqual(
+                    ctx.messages,
+                    [f"Invalid arguments. Expected format: `{ORDER_COMMAND_USAGE}`"],
+                )
 
 
-if __name__ == "__main__":  # pragma: no cover - convenience for direct execution
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -77,6 +77,10 @@ logger.info(
 
 if SQL_LOGGING_ENABLED:
     init_db()
+    from utils.watch_utils import watch_list_manager
+
+    watch_list_manager.load_watch_list()
+    watch_list_manager.load_sell_list()
 else:
     logger.info("SQL logging disabled; skipping database initialization.")
 
@@ -233,6 +237,15 @@ class RSAssistantBot(commands.Bot):
             logger.debug(
                 "Command not found during invocation: %s",
                 getattr(ctx, "invoked_with", "<unknown>"),
+            )
+            return
+
+        if isinstance(error, commands.CheckFailure):
+            await ctx.send("You are not authorized to use this command.")
+            logger.warning(
+                "Unauthorized command attempt by Discord user %s for %s.",
+                getattr(ctx.author, "id", "unknown"),
+                getattr(command, "qualified_name", "unknown"),
             )
             return
 

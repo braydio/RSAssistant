@@ -1,9 +1,44 @@
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.policy_resolver import SplitPolicyResolver
+
+
+def test_full_analysis_uses_alert_text_when_source_fetch_fails():
+    fallback_text = (
+        "Impact Biomedical Inc (NYSE: IBO) Announces 1 for 12.62 Reverse "
+        "Stock Split. Fractional shares will be rounded up."
+    )
+    llm_result = {
+        "ticker": "IBO",
+        "reverse_split_confirmed": True,
+        "split_ratio": "1-12.62",
+        "effective_date": None,
+        "fractional_share_policy": "rounded_up",
+    }
+
+    with (
+        patch("utils.policy_resolver.PROGRAMMATIC_POLICY_ENABLED", False),
+        patch.object(SplitPolicyResolver, "fetch_body_text", return_value=None),
+        patch.object(SplitPolicyResolver, "_needs_sec_fallback", return_value=False),
+        patch("utils.policy_resolver.extract_reverse_split_details", return_value=llm_result) as extract_mock,
+    ):
+        result = SplitPolicyResolver.full_analysis(
+            "https://example.com/press-release",
+            ticker_hint="IBO",
+            fallback_text=fallback_text,
+        )
+
+    extract_mock.assert_called_once_with(
+        fallback_text,
+        source_url="https://example.com/press-release",
+        ticker="IBO",
+    )
+    assert result["llm_details"] == llm_result
+    assert result["fractional_share_policy"] == "rounded_up"
 
 
 def test_extract_round_up_snippet():

@@ -2,6 +2,7 @@
 
 import re
 import asyncio
+import uuid
 import errno
 from datetime import datetime, timedelta, date
 from collections import defaultdict
@@ -9,7 +10,11 @@ from pathlib import Path
 from typing import Sequence
 
 from utils.logging_setup import logger
-from utils.config_utils import BOT_PREFIX, load_account_mappings
+from utils.config_utils import (
+    BOT_PREFIX,
+    TRUSTED_AUTORSA_BOT_ID,
+    load_account_mappings,
+)
 from utils.parsing_utils import (
     alert_channel_message,
     parse_embed_message,
@@ -64,6 +69,7 @@ _missing_summary = defaultdict(set)
 _refresh_active = False
 _pending_alerts_by_broker = defaultdict(dict)  # broker -> ticker -> quantity
 _pending_sell_commands = []  # queued auto-sell commands during refresh
+_pending_reverse_split_round_ups = False  # tracked reverse-split round-ups seen during refresh
 _refresh_summary_task = None
 _refresh_channel = None
 REFRESH_WINDOW_DURATION = timedelta(minutes=30)
@@ -79,6 +85,10 @@ _refresh_discovery_task = None
 AREB_TICKER = "AREB"
 AREB_QUANTITY_THRESHOLD = 50
 _AREB_ALERT_SUFFIX = "_AREB_THRESHOLD"
+
+ONE_SHARE_CACHE_TTL = timedelta(hours=4)
+_one_share_positions: dict[str, dict[str, float]] = {}
+_one_share_updated: dict[str, datetime] = {}
 
 
 def _fd_usage_hint() -> str:
@@ -330,7 +340,7 @@ def _reset_refresh_state(cancel_timer: bool = True):
     """Clear buffered holdings refresh state and any pending timers."""
 
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
-    global _refresh_summary_task, _refresh_channel
+    global _refresh_summary_task, _refresh_channel, _pending_reverse_split_round_ups
 
     if cancel_timer and _refresh_summary_task and not _refresh_summary_task.done():
         _refresh_summary_task.cancel()
@@ -338,6 +348,7 @@ def _reset_refresh_state(cancel_timer: bool = True):
     _refresh_active = False
     _pending_alerts_by_broker = defaultdict(dict)
     _pending_sell_commands = []
+    _pending_reverse_split_round_ups = False
     _refresh_summary_task = None
     _refresh_channel = None
 
@@ -475,7 +486,7 @@ def record_holdings_brokers(bot, brokers: set[str]) -> None:
 async def _emit_refresh_summary(bot) -> None:
     """Send a consolidated holdings summary after the refresh window ends."""
 
-    global _pending_alerts_by_broker, _pending_sell_commands
+    global _pending_alerts_by_broker, _pending_sell_commands, _pending_reverse_split_round_ups
 
     if not _pending_alerts_by_broker:
         logger.info("No buffered alerts captured during holdings refresh window.")
@@ -499,6 +510,8 @@ async def _emit_refresh_summary(bot) -> None:
         lines.append(f"- {broker}: {tickers}")
 
     header = f"{mention}Holdings >= ${threshold:.2f} detected across {len(_pending_alerts_by_broker)} broker(s) during refresh:\n"
+    if _pending_reverse_split_round_ups:
+        header += "Run `..xsplits` to queue auto-sell of the 1-share positions.\n"
     max_len = 2000
     body = "\n".join(lines)
     first_msg = (header + body)[:max_len]
@@ -563,6 +576,67 @@ def is_broker_ignored(broker: str) -> bool:
     if not broker:
         return False
     return broker.strip().upper() in IGNORE_BROKERS_SET
+
+
+def is_tracked_reverse_split(ticker: str) -> bool:
+    """Return ``True`` when ``ticker`` is a known reverse-split candidate.
+
+    Used to keep the one-share round-up detector from flagging ordinary
+    single-share holdings; only tickers already on the reverse-split
+    watchlist (pre-split ``watch``/``sell`` entries or the split-status
+    tracker) can be round-up positions worth closing out.
+    """
+
+    ticker_key = str(ticker or "").strip().upper()
+    if not ticker_key:
+        return False
+    if ticker_key in watch_list_manager.get_watch_list():
+        return True
+    if ticker_key in watch_list_manager.get_sell_list():
+        return True
+    if ticker_key in split_watch_utils.get_full_watchlist():
+        return True
+    return False
+
+
+def record_one_share_position(broker: str, ticker: str, price: float) -> None:
+    """Record a >=$1 one-share reverse-split round-up in the ..xsplits cache."""
+
+    broker_key = str(broker or "").strip()
+    ticker_key = str(ticker or "").strip().upper()
+    if not broker_key or not ticker_key:
+        return
+    _one_share_positions.setdefault(broker_key, {})[ticker_key] = float(price)
+    _one_share_updated[broker_key] = datetime.now()
+
+
+def get_one_share_positions() -> dict[str, dict[str, float]]:
+    """Return a copy of the cached one-share positions grouped by broker."""
+
+    return {broker: dict(tickers) for broker, tickers in _one_share_positions.items()}
+
+
+def one_share_cache_fresh(brokers, ttl: timedelta = ONE_SHARE_CACHE_TTL) -> bool:
+    """Return ``True`` when every ``brokers`` entry has a cache hit within ``ttl``."""
+
+    now = datetime.now()
+    return all(
+        broker in _one_share_updated and now - _one_share_updated[broker] <= ttl
+        for broker in brokers
+    )
+
+
+def clear_one_share_position(broker: str, ticker: str) -> None:
+    """Remove a cached one-share position, e.g. after it has been queued for sale."""
+
+    broker_key = str(broker or "").strip()
+    ticker_key = str(ticker or "").strip().upper()
+    bucket = _one_share_positions.get(broker_key)
+    if not bucket or ticker_key not in bucket:
+        return
+    del bucket[ticker_key]
+    if not bucket:
+        del _one_share_positions[broker_key]
 
 
 def enable_audit():
@@ -773,6 +847,7 @@ async def handle_primary_channel(bot, message):
     """
 
     global _refresh_active, _pending_alerts_by_broker, _pending_sell_commands
+    global _pending_reverse_split_round_ups
     lowered_content = message.content.lower().strip()
 
     response_channel = resolve_message_destination(bot, message.channel)
@@ -818,6 +893,7 @@ async def handle_primary_channel(bot, message):
             alert_entries = []
             sell_commands = []
             areb_alerts = []
+            reverse_split_round_ups_found = False
 
             for h in parsed_holdings:
                 try:
@@ -845,6 +921,13 @@ async def handle_primary_channel(bot, message):
 
                     if ticker in IGNORE_TICKERS_SET or is_broker_ignored(broker):
                         continue
+                    if (
+                        price >= threshold
+                        and quantity == 1
+                        and is_tracked_reverse_split(ticker)
+                    ):
+                        record_one_share_position(broker, ticker, price)
+                        reverse_split_round_ups_found = True
                     if price < threshold or quantity <= 0:
                         continue
                     if not try_record_action_today(broker, account_name, ticker):
@@ -897,6 +980,8 @@ async def handle_primary_channel(bot, message):
                         float(broker_alerts.get(ticker, 0) or 0),
                     )
                 _pending_sell_commands.extend(sell_commands)
+                if reverse_split_round_ups_found:
+                    _pending_reverse_split_round_ups = True
             elif alert_entries:
                 # Group tickers by account for readability
                 grouped = {}
@@ -917,6 +1002,8 @@ async def handle_primary_channel(bot, message):
                     tag_enabled=_should_tag_entries(alert_entries)
                 )
                 header = f"{mention}Detected holdings >= ${threshold:.2f} across {len(grouped)} account(s):\n"
+                if reverse_split_round_ups_found:
+                    header += "Run `..xsplits` to queue auto-sell of the 1-share positions.\n"
 
                 # Discord 2000 char limit; send in chunks if needed. Mention only once.
                 max_len = 2000
@@ -941,15 +1028,28 @@ async def handle_primary_channel(bot, message):
             else:
                 logger.error(f"Error parsing embed message: {e}")
     elif message.author.bot:
+        if (
+            not TRUSTED_AUTORSA_BOT_ID
+            or getattr(message.author, "id", None) != TRUSTED_AUTORSA_BOT_ID
+        ):
+            logger.warning(
+                "Ignoring message from untrusted bot ID %s.",
+                getattr(message.author, "id", "unknown"),
+            )
+            return
         logger.info("Parsing regular order message.")
         lowered = lowered_content
-        if lowered == "..updatebot":
-            await response_channel.send("Pulling latest code and restarting...")
-            update_and_restart()
-            return
-        if lowered == "..revertupdate":
-            await response_channel.send("Reverting last update and restarting...")
-            revert_and_restart()
+        if (
+            lowered in {"..updatebot", "..revertupdate"}
+            and TRUSTED_AUTORSA_BOT_ID
+            and getattr(message.author, "id", None) == TRUSTED_AUTORSA_BOT_ID
+        ):
+            if lowered == "..updatebot":
+                await response_channel.send("Pulling latest code and restarting...")
+                update_and_restart()
+            else:
+                await response_channel.send("Reverting last update and restarting...")
+                revert_and_restart()
             return
 
         entries = parse_bulk_watchlist_message(message.content)
@@ -986,7 +1086,11 @@ async def handle_secondary_channel(bot, message):
 
     try:
         logger.info(f"Policy resolution for {url}")
-        policy_info = OnMessagePolicyResolver.full_analysis(url, ticker_hint=ticker)
+        policy_info = OnMessagePolicyResolver.full_analysis(
+            url,
+            ticker_hint=ticker,
+            fallback_text=message.content,
+        )
         if not policy_info:
             logger.warning(f"No policy info for {ticker}")
             return
@@ -1100,7 +1204,7 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
     if standard_quantity in (None, ""):
         standard_quantity = quantity
 
-    standard_order_id = f"{ticker.upper()}_{exec_time.strftime('%Y%m%d_%H%M')}_buy"
+    standard_order_id = str(uuid.uuid4())
     bot.loop.create_task(
         schedule_and_execute(
             ctx=target_channel,
@@ -1130,9 +1234,7 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         override_quantity = item.get("quantity")
         if override_quantity in (None, ""):
             override_quantity = quantity
-        override_order_id = (
-            f"{ticker.upper()}_{exec_time.strftime('%Y%m%d_%H%M')}_buy_{broker_name.lower()}"
-        )
+        override_order_id = str(uuid.uuid4())
         bot.loop.create_task(
             schedule_and_execute(
                 ctx=target_channel,
@@ -1157,9 +1259,9 @@ def build_policy_summary(ticker, policy_info, fallback_url):
     summary = f"**Reverse Split Alert** for `{ticker}`\n"
     summary += f"[NASDAQ Notice]({policy_info.get('nasdaq_url', fallback_url)})\n"
 
-    if "press_url" in policy_info:
+    if policy_info.get("press_url"):
         summary += f"[Press Release]({policy_info['press_url']})\n"
-    if "sec_url" in policy_info:
+    if policy_info.get("sec_url"):
         summary += f"[SEC Filing]({policy_info['sec_url']})\n"
 
     llm_details = policy_info.get("llm_details") or {}
@@ -1249,11 +1351,15 @@ class OnMessagePolicyResolver:
     resolver = PolicyResolver()
 
     @classmethod
-    def full_analysis(cls, nasdaq_url, ticker_hint=None):
+    def full_analysis(cls, nasdaq_url, ticker_hint=None, fallback_text=None):
         """Perform complete policy analysis for a NASDAQ notice URL."""
         try:
             logger.info(f"Starting full_analysis for: {nasdaq_url}")
-            return cls.resolver.full_analysis(nasdaq_url, ticker_hint=ticker_hint)
+            return cls.resolver.full_analysis(
+                nasdaq_url,
+                ticker_hint=ticker_hint,
+                fallback_text=fallback_text,
+            )
         except Exception as e:
             logger.error(f"Critical failure during full_analysis: {e}")
             return None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from discord.ext import commands
+from utils.discord_permissions import operator_only
 
 from utils.sql_utils import (
     clear_account_nicknames,
@@ -33,6 +34,7 @@ class AccountsCog(commands.Cog):
         else:
             await all_account_nicknames(ctx, broker)
 
+    @operator_only()
     @commands.command(
         name="addmap",
         aliases=["am"],
@@ -59,6 +61,7 @@ class AccountsCog(commands.Cog):
             f"Added mapping: {brokerage} - Broker No: {broker_no}, Account: {account}, Nickname: {nickname}"
         )
 
+    @operator_only()
     @commands.command(
         name="loadmap",
         aliases=["lm"],
@@ -76,6 +79,7 @@ class AccountsCog(commands.Cog):
             f" account_mappings={results['account_mappings']} watchlist={results['watchlist']} sell_list={results['sell_list']}."
         )
 
+    @operator_only()
     @commands.command(
         name="loadlog",
         aliases=["ll"],
@@ -91,6 +95,7 @@ class AccountsCog(commands.Cog):
             f" account_mappings={results['account_mappings']} watchlist={results['watchlist']} sell_list={results['sell_list']}."
         )
 
+    @operator_only()
     @commands.command(
         name="clearmap",
         aliases=["cm"],

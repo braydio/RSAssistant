@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 
 from discord.ext import commands
+from utils.discord_permissions import operator_only
 
 from utils import split_watch_utils
 from utils.config_utils import CSV_LOGGING_ENABLED, ORDERS_LOG_CSV
@@ -17,6 +18,7 @@ class SplitMonitorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    @operator_only()
     @commands.command(
         name="splitwatch",
         aliases=["sw"],
@@ -75,6 +77,7 @@ class SplitMonitorCog(commands.Cog):
             )
         await ctx.send("\n".join(lines))
 
+    @operator_only()
     @commands.command(
         name="splitorders",
         aliases=["so"],
@@ -171,6 +174,7 @@ class SplitMonitorCog(commands.Cog):
             if chunk:
                 await ctx.send(chunk)
 
+    @operator_only()
     @commands.command(
         name="splitcleanup",
         aliases=["sc"],

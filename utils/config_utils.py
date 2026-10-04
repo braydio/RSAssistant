@@ -176,6 +176,22 @@ DISCORD_SECONDARY_CHANNEL = _get_env_int("DISCORD_SECONDARY_CHANNEL", 0)
 DISCORD_TERTIARY_CHANNEL = _get_env_int("DISCORD_TERTIARY_CHANNEL", 0)
 DISCORD_HOLDINGS_CHANNEL = _get_env_int("DISCORD_HOLDINGS_CHANNEL", 0)
 DISCORD_WATCHLIST_CHANNEL = _get_env_int("DISCORD_WATCHLIST_CHANNEL", 0)
+def _get_env_id_set(name: str) -> set[int]:
+    values = set()
+    for part in os.getenv(name, "").split(","):
+        try:
+            if part.strip():
+                values.add(int(part.strip()))
+        except ValueError:
+            logger.warning("Ignoring invalid Discord ID in %s.", name)
+    return values
+
+
+DISCORD_OPERATOR_IDS = _get_env_id_set("DISCORD_OPERATOR_IDS")
+DISCORD_ADMIN_IDS = _get_env_id_set("DISCORD_ADMIN_IDS")
+DISCORD_OPERATOR_ROLE_IDS = _get_env_id_set("DISCORD_OPERATOR_ROLE_IDS")
+DISCORD_ADMIN_ROLE_IDS = _get_env_id_set("DISCORD_ADMIN_ROLE_IDS")
+TRUSTED_AUTORSA_BOT_ID = _get_env_int("TRUSTED_AUTORSA_BOT_ID", 0)
 AUTO_RSA_DIR = os.getenv("AUTO_RSA_DIR", "").strip()
 # Auto-RSA holdings import (file-based)
 AUTO_RSA_HOLDINGS_ENABLED = _get_env_bool("AUTO_RSA_HOLDINGS_ENABLED", True)
@@ -207,6 +223,9 @@ AUTO_RSA_ERROR_WATCHER_MAX_OUTPUT_CHARS = _get_env_int(
     "AUTO_RSA_ERROR_WATCHER_MAX_OUTPUT_CHARS", 3500
 )
 CODEX_EXEC_COMMAND = os.getenv("CODEX_EXEC_COMMAND", "codex exec").strip()
+AUTO_RSA_ERROR_WATCHER_SENDER_IDS = _get_env_id_set(
+    "AUTO_RSA_ERROR_WATCHER_SENDER_IDS"
+)
 
 # --- Feature toggles and thresholds ---
 # Automatically trigger holdings refresh when the watchlist reminder is sent

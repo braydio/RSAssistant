@@ -50,6 +50,7 @@ class OrderQueueTasksTest(IsolatedAsyncioTestCase):
             tasks, "schedule_and_execute", new=AsyncMock()
         ) as schedule_mock:
             await tasks.reschedule_past_due_orders(bot=bot)
+            await asyncio.sleep(0)
 
         update_mock.assert_called_once_with(
             "TEST_20250101_0930_buy", "2025-01-02 09:30:00"

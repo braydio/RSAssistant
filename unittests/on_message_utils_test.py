@@ -4,6 +4,7 @@ from rsassistant.bot.handlers.on_message import (
     _format_account_label,
     _resolve_round_up_snippet,
     _resolve_round_up_confirmation,
+    build_policy_summary,
     format_mentions,
 )
 
@@ -78,3 +79,22 @@ def test_resolve_round_up_confirmation_falls_back_to_programmatic():
 
     policy_info = {"round_up_confirmed": True}
     assert _resolve_round_up_confirmation(policy_info) is True
+
+
+def test_build_policy_summary_omits_empty_source_links():
+    """Missing optional URLs should not render as Discord links to None."""
+
+    summary = build_policy_summary(
+        "TEST",
+        {
+            "nasdaq_url": "https://example.com/notice",
+            "press_url": None,
+            "sec_url": None,
+            "llm_details": {"fractional_share_policy": "rounded_up"},
+        },
+        "https://example.com/fallback",
+    )
+
+    assert "[SEC Filing](None)" not in summary
+    assert "[Press Release](None)" not in summary
+    assert "Fractional Share Policy (LLM):** rounded_up" in summary

@@ -214,3 +214,70 @@ def test_track_ticker_summary_normalizes_ticker_and_broker_name(tmp_path, monkey
 
     assert statuses == {"TestBroker": ("✅", 1, 1)}
     assert timestamp == "2024-01-01 10:00:00"
+
+
+def test_track_ticker_summary_matches_importer_ids_to_configured_accounts(
+    tmp_path, monkeypatch
+):
+    holdings_file = tmp_path / "holdings.csv"
+    fieldnames = [
+        "Timestamp",
+        "Broker Name",
+        "Broker Number",
+        "Account Number",
+        "Stock",
+        "Quantity",
+        "Price",
+        "Account Total",
+        "Key",
+    ]
+    rows = [
+        {
+            "Timestamp": "2024-01-01 10:00:00",
+            "Broker Name": "FIDELITY",
+            "Broker Number": "Fidelity 1",
+            "Account Number": "Z20986699",
+            "Stock": "VOO",
+            "Quantity": "1.037",
+            "Price": "700",
+            "Account Total": "750",
+            "Key": "Fidelity_1_Z20986699_VOO",
+        },
+        {
+            "Timestamp": "2024-01-01 10:00:00",
+            "Broker Name": "FIDELITY",
+            "Broker Number": "Fidelity 1",
+            "Account Number": "250421580",
+            "Stock": "VOO",
+            "Quantity": "0.326",
+            "Price": "700",
+            "Account Total": "800",
+            "Key": "Fidelity_1_250421580_VOO",
+        },
+    ]
+    with holdings_file.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    mapping = {
+        "Fidelity": {
+            "1": {
+                "6699": "Cash Account",
+                "1580": "IRA",
+                "80": "Legacy short ID",
+            }
+        }
+    }
+    monkeypatch.setattr(utility_utils, "load_account_mappings", lambda: mapping)
+
+    statuses, _ = asyncio.run(
+        utility_utils.track_ticker_summary(
+            ctx=None,
+            ticker="VOO",
+            collect=True,
+            holding_logs_file=holdings_file,
+        )
+    )
+
+    assert statuses == {"Fidelity": ("🟡", 2, 3)}

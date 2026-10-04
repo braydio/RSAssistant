@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+import uuid
 from datetime import datetime
 
 from utils.watch_utils import watch_list_manager
@@ -116,7 +117,7 @@ async def _schedule_closed_market_order(target_channel, command: str, bot=None) 
         scheduled_label,
     )
 
-    order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_{action}"
+    order_id = str(uuid.uuid4())
     loop = asyncio.get_running_loop()
     loop.create_task(
         schedule_and_execute(
@@ -171,7 +172,7 @@ async def processQueue():
 
 
 async def send_sell_command(target, command: str, loop=None, bot=None):
-    """Send an order command to the configured primary channel when possible."""
+    """Send a command and report whether Discord accepted it."""
 
     try:
         logger.info(f"Preparing to send command: {command}")
@@ -183,13 +184,13 @@ async def send_sell_command(target, command: str, loop=None, bot=None):
         target_channel = primary_channel or target
         if target_channel is None:
             logger.error("No channel available to send order command.")
-            return
+            return False
         resolved_bot = bot or getattr(target_channel, "bot", None)
         if command.strip().lower().startswith("!rsa"):
             if await _schedule_closed_market_order(
                 target_channel, command, resolved_bot
             ):
-                return
+                return True
             await _await_rsa_rate_limit()
         await target_channel.send(command)
         channel = getattr(target_channel, "channel", target_channel)
@@ -197,17 +198,24 @@ async def send_sell_command(target, command: str, loop=None, bot=None):
         parsed_order = _parse_rsa_order_command(command)
         if parsed_order is not None:
             action, quantity, ticker, broker = parsed_order
-            record_sent_rsa_order(
-                command=command,
-                channel_id=channel_id,
-                ticker=ticker,
-                action=action,
-                quantity=quantity,
-                broker=broker,
-            )
+            try:
+                record_sent_rsa_order(
+                    command=command,
+                    channel_id=channel_id,
+                    ticker=ticker,
+                    action=action,
+                    quantity=quantity,
+                    broker=broker,
+                )
+            except Exception:
+                # Discord accepted the order command; do not retry and create a
+                # duplicate trade just because the local audit write failed.
+                logger.exception("Failed to persist sent-order audit record.")
         logger.info(f"Sent command: {command} to channel {channel_id}")
+        return True
     except Exception as e:
         logger.error(f"Error sending sell command: {e}")
+        return False
 
 
 async def process_sell_list():
@@ -248,7 +256,7 @@ async def schedule_and_execute(
 
     try:
         if order_id is None:
-            order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_{action.lower()}"
+            order_id = str(uuid.uuid4())
 
         if add_to_queue:
             add_to_order_queue(
@@ -259,6 +267,7 @@ async def schedule_and_execute(
                     "quantity": quantity,
                     "broker": broker,
                     "time": execution_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "status": "PENDING",
                 },
             )
 
@@ -289,9 +298,12 @@ async def schedule_and_execute(
 
         command = f"!rsa {action} {quantity} {ticker.upper()} {broker} false"
         resolved_bot = bot or getattr(ctx, "bot", None)
-        await send_sell_command(
+        sent = await send_sell_command(
             ctx, command, loop=asyncio.get_event_loop(), bot=resolved_bot
         )
+        if not sent:
+            logger.warning("Order %s remains queued because Discord send failed.", order_id)
+            return
 
         if action.lower() == "sell":
             watch_list_manager.remove_from_sell_list(ticker)

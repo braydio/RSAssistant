@@ -56,16 +56,6 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
             cursor.execute(
                 """
                 SELECT account_nickname
-                FROM account_mappings
-                WHERE broker = ? AND broker_number = ? AND account_number = ?
-                """,
-                ("BrokerA", "1", "1234"),
-            )
-            nickname = cursor.fetchone()[0]
-
-            cursor.execute(
-                """
-                SELECT account_nickname
                 FROM Accounts
                 WHERE broker = ? AND broker_number = ? AND account_number = ?
                 """,
@@ -73,8 +63,122 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
             )
             account_nickname = cursor.fetchone()[0]
 
-        self.assertEqual(nickname, "Beta")
         self.assertEqual(account_nickname, "Beta")
+
+    def test_account_identity_is_unique_and_clear_removes_mapping_state(self):
+        first_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1234")
+        second_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1234")
+        self.assertEqual(first_id, second_id)
+
+        sql_utils.upsert_account_mapping("BrokerA", "1", "1234", "Primary")
+        self.assertTrue(sql_utils.has_account_mappings())
+        self.assertEqual(sql_utils.clear_account_nicknames(), 1)
+        self.assertFalse(sql_utils.has_account_mappings())
+        self.assertEqual(sql_utils.fetch_account_mappings(), {})
+
+    def test_resolve_account_id_always_returns_integer_id(self):
+        account_id = sql_utils.get_or_create_account_id(
+            "BrokerA", "1", "1234", "Primary"
+        )
+        self.assertEqual(sql_utils.resolve_account_id(str(account_id)), account_id)
+        self.assertEqual(sql_utils.resolve_account_id("primary"), account_id)
+        self.assertIsNone(sql_utils.resolve_account_id("missing"))
+
+    def test_connections_enforce_foreign_keys_and_busy_timeout(self):
+        with sql_utils.get_db_connection() as conn:
+            self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+            self.assertEqual(conn.execute("PRAGMA busy_timeout").fetchone()[0], 5000)
+            with self.assertRaises(sqlite3.IntegrityError):
+                conn.execute(
+                    """INSERT INTO HoldingsLive
+                       (account_id, ticker, quantity, average_price)
+                       VALUES (999999, 'NONE', 1, 1)"""
+                )
+
+    def test_historical_holdings_uses_latest_daily_observation_idempotently(self):
+        account_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1234")
+        with sql_utils.get_db_connection() as conn:
+            conn.executemany(
+                """INSERT INTO HoldingsLive
+                   (account_id, ticker, quantity, average_price, timestamp)
+                   VALUES (?, 'TEST', ?, ?, ?)""",
+                [
+                    (account_id, 10, 2.0, "2026-08-15 10:00:00"),
+                    (account_id, 20, 3.0, "2026-08-15 16:00:00"),
+                ],
+            )
+
+        sql_utils.update_historical_holdings("2026-08-15")
+        sql_utils.update_historical_holdings("2026-08-15")
+
+        with sql_utils.get_db_connection() as conn:
+            rows = conn.execute(
+                """SELECT quantity, average_price FROM HistoricalHoldings
+                   WHERE account_id=? AND ticker='TEST' AND date='2026-08-15'""",
+                (account_id,),
+            ).fetchall()
+        self.assertEqual(rows, [(20.0, 3.0)])
+
+    def test_init_db_sets_schema_version_and_required_indexes(self):
+        with sql_utils.get_db_connection() as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+            indexes = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index'"
+                )
+            }
+        self.assertIn("uq_accounts_identity", indexes)
+        self.assertIn("uq_historical_holdings_daily", indexes)
+        self.assertIn("idx_order_history_ticker_date", indexes)
+
+    def test_migration_collapses_legacy_account_and_history_duplicates(self):
+        legacy_path = Path(self.temp_dir.name) / "legacy-schema.db"
+        with sqlite3.connect(legacy_path) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE Accounts (
+                    account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    broker TEXT NOT NULL,
+                    account_number TEXT NOT NULL,
+                    account_nickname TEXT,
+                    broker_number TEXT
+                );
+                CREATE TABLE HistoricalHoldings (
+                    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER,
+                    ticker TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    quantity REAL NOT NULL,
+                    average_price REAL NOT NULL
+                );
+                INSERT INTO Accounts
+                    (broker, account_number, account_nickname, broker_number)
+                VALUES ('BrokerA', '1234', NULL, '1'),
+                       ('BrokerA', '1234', 'Primary', '1');
+                INSERT INTO HistoricalHoldings
+                    (account_id, ticker, date, quantity, average_price)
+                VALUES (1, 'TEST', '2026-08-15', 10, 2),
+                       (2, 'TEST', '2026-08-15', 20, 3);
+                """
+            )
+
+        current_path = sql_utils.SQL_DATABASE
+        try:
+            sql_utils.SQL_DATABASE = legacy_path
+            sql_utils.init_db()
+            with sql_utils.get_db_connection() as conn:
+                accounts = conn.execute(
+                    "SELECT account_id, account_nickname FROM Accounts"
+                ).fetchall()
+                history = conn.execute(
+                    """SELECT account_id, quantity FROM HistoricalHoldings
+                       WHERE ticker='TEST' AND date='2026-08-15'"""
+                ).fetchall()
+            self.assertEqual(accounts, [(1, "Primary")])
+            self.assertEqual(history, [(1, 20.0)])
+        finally:
+            sql_utils.SQL_DATABASE = current_path
 
     def test_watchlist_and_sell_list_helpers(self):
         sql_utils.upsert_watchlist_entry("TEST", "01/02", "1-10", {"source": "unit"})

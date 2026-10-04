@@ -1,40 +1,51 @@
-"""Tests for order queue persistence helpers."""
+"""Tests for transactional SQLite order queue persistence."""
 
-import json
-import os
-import tempfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import TestCase
+from unittest.mock import patch
 
-from utils import order_queue_manager
+from utils import order_queue_manager as queue
 
 
-def test_update_order_time_updates_existing_entry():
-    temp_dir = tempfile.TemporaryDirectory()
-    queue_path = os.path.join(temp_dir.name, "order_queue.json")
-    original_queue_file = order_queue_manager.QUEUE_FILE
-    try:
-        order_queue_manager.QUEUE_FILE = queue_path
-        with open(queue_path, "w") as handle:
-            json.dump(
-                {
-                    "TEST_20250101_0930_buy": {
-                        "action": "buy",
-                        "ticker": "TEST",
-                        "quantity": 1,
-                        "broker": "all",
-                        "time": "2025-01-01 09:30:00",
-                    }
-                },
-                handle,
-            )
+class OrderQueueManagerTest(TestCase):
+    def setUp(self):
+        self.temp_dir = TemporaryDirectory()
+        self.database = Path(self.temp_dir.name) / "orders.db"
+        self.legacy = Path(self.temp_dir.name) / "order_queue.json"
+        self.patchers = [
+            patch.object(queue, "DATABASE_PATH", self.database),
+            patch.object(queue, "QUEUE_FILE", self.legacy),
+        ]
+        for patcher in self.patchers:
+            patcher.start()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.addCleanup(lambda: [patcher.stop() for patcher in self.patchers])
 
-        updated = order_queue_manager.update_order_time(
-            "TEST_20250101_0930_buy", "2025-01-02 09:30:00"
+    def test_add_list_update_and_remove(self):
+        item = {
+            "action": "buy",
+            "ticker": "TEST",
+            "quantity": 1,
+            "broker": "all",
+            "time": "2025-01-01 09:30:00",
+        }
+        queue.add_to_order_queue("uuid-1", item)
+        self.assertEqual(queue.get_order_queue(), {"uuid-1": item})
+
+        self.assertTrue(queue.update_order_time("uuid-1", "2025-01-02 09:30:00"))
+        self.assertEqual(
+            queue.get_order_queue()["uuid-1"]["time"], "2025-01-02 09:30:00"
         )
-        assert updated is True
+        self.assertTrue(queue.remove_order("uuid-1"))
+        self.assertFalse(queue.remove_order("uuid-1"))
 
-        with open(queue_path, "r") as handle:
-            data = json.load(handle)
-        assert data["TEST_20250101_0930_buy"]["time"] == "2025-01-02 09:30:00"
-    finally:
-        order_queue_manager.QUEUE_FILE = original_queue_file
-        temp_dir.cleanup()
+    def test_imports_legacy_json_once(self):
+        self.legacy.write_text(
+            '{"old-order": {"action": "sell", "ticker": "XYZ", "quantity": 1, '
+            '"broker": "all", "time": "2025-01-01 09:30:00"}}',
+            encoding="utf-8",
+        )
+        self.assertIn("old-order", queue.get_order_queue())
+        self.assertFalse(self.legacy.exists())
+        self.assertTrue(self.legacy.with_suffix(".json.migrated").exists())

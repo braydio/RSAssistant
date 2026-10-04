@@ -3,14 +3,32 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import uuid
 
 from discord.ext import commands
 
 from utils.csv_utils import sell_all_position
-from utils.order_exec import schedule_and_execute
+from utils.discord_permissions import operator_only
+from utils.order_exec import schedule_and_execute, send_sell_command
 from rsassistant.bot.tasks import reschedule_past_due_orders
 from utils.order_queue_manager import list_order_queue_items, remove_order
 from utils.order_send_log_manager import latest_sent_rsa_order, list_sent_rsa_orders
+from rsassistant.bot.channel_resolver import resolve_reply_channel
+from rsassistant.bot.handlers.on_message import (
+    REFRESH_WINDOW_DURATION,
+    clear_one_share_position,
+    get_one_share_positions,
+    one_share_cache_fresh,
+    start_holdings_completion_tracking,
+    start_refresh_window,
+)
+from utils.config_utils import DISCORD_PRIMARY_CHANNEL
+from utils.market_calendar import (
+    MARKET_TZ,
+    is_market_open_at,
+    next_market_open,
+    normalize_execution_time,
+)
 
 ORDER_COMMAND_USAGE = "..order <buy/sell> <ticker> [broker] [quantity] [time]"
 
@@ -50,6 +68,7 @@ class OrdersCog(commands.Cog):
         usage="<buy/sell> <ticker> [broker] [quantity] [time]",
         extras={"category": "Orders"},
     )
+    @operator_only()
     async def process_order(
         self,
         ctx: commands.Context,
@@ -83,21 +102,7 @@ class OrdersCog(commands.Cog):
             await ctx.send(invalid_usage_message)
             return
 
-        now = datetime.now()
-        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-        def next_open(base: datetime) -> datetime:
-            cursor = base
-            if cursor >= market_close:
-                cursor = (cursor + timedelta(days=1)).replace(
-                    hour=9, minute=30, second=0, microsecond=0
-                )
-            elif cursor < market_open:
-                cursor = cursor.replace(hour=9, minute=30, second=0, microsecond=0)
-            while cursor.weekday() >= 5:
-                cursor += timedelta(days=1)
-            return cursor
+        now = datetime.now(MARKET_TZ)
 
         try:
             if time:
@@ -106,24 +111,12 @@ class OrdersCog(commands.Cog):
                         date_part, time_part = time.split(" ")
                         month, day = map(int, date_part.split("/"))
                         hour, minute = map(int, time_part.split(":"))
-                        execution_time = now.replace(
-                            month=month,
-                            day=day,
-                            hour=hour,
-                            minute=minute,
-                            second=0,
-                            microsecond=0,
-                        )
+                        execution_time = now.replace(month=month, day=day, hour=hour,
+                                                     minute=minute, second=0, microsecond=0)
                     else:
                         month, day = map(int, time.split("/"))
-                        execution_time = now.replace(
-                            month=month,
-                            day=day,
-                            hour=9,
-                            minute=30,
-                            second=0,
-                            microsecond=0,
-                        )
+                        execution_time = now.replace(month=month, day=day, hour=9,
+                                                     minute=30, second=0, microsecond=0)
                 else:
                     hour, minute = map(int, time.split(":"))
                     execution_time = now.replace(
@@ -132,12 +125,12 @@ class OrdersCog(commands.Cog):
 
                 if execution_time < now:
                     execution_time += timedelta(days=1)
-                execution_time = next_open(execution_time)
+                execution_time = normalize_execution_time(execution_time)
             else:
-                if market_open <= now <= market_close and now.weekday() < 5:
+                if is_market_open_at(now):
                     execution_time = now
                 else:
-                    execution_time = next_open(now)
+                    execution_time = next_market_open(now)
         except ValueError:
             await ctx.send("Invalid time format. Use HH:MM, mm/dd, or HH:MM on mm/dd.")
             return
@@ -151,7 +144,7 @@ class OrdersCog(commands.Cog):
                 f"Scheduling {action.upper()} {ticker.upper()} for {execution_time.strftime('%A %m/%d %H:%M')}"
             )
 
-        order_id = f"{ticker.upper()}_{execution_time.strftime('%Y%m%d_%H%M')}_{action.lower()}"
+        order_id = str(uuid.uuid4())
         self.bot.loop.create_task(
             schedule_and_execute(
                 ctx,
@@ -172,6 +165,7 @@ class OrdersCog(commands.Cog):
         usage="<broker> [test_mode]",
         extras={"category": "Orders"},
     )
+    @operator_only()
     async def liquidate(
         self, ctx: commands.Context, broker: str, test_mode: str = "false"
     ) -> None:
@@ -189,6 +183,7 @@ class OrdersCog(commands.Cog):
         usage="[number]",
         extras={"category": "Orders"},
     )
+    @operator_only()
     async def remove_queued_order(
         self, ctx: commands.Context, number: str | None = None
     ) -> None:
@@ -340,11 +335,55 @@ class OrdersCog(commands.Cog):
         )
 
     @commands.command(
+        name="xsplits",
+        aliases=["xsplit"],
+        help="Queue auto-sell of cached 1-share reverse-split round-up positions.",
+        usage="",
+        extras={"category": "Orders"},
+    )
+    @operator_only()
+    async def sell_reverse_split_round_ups(self, ctx: commands.Context) -> None:
+        """Sell off cached 1-share reverse-split round-up positions."""
+
+        positions = get_one_share_positions()
+        if not positions:
+            await ctx.send(
+                "No reverse-split round-up positions are cached. Run `!rsa holdings` first."
+            )
+            return
+
+        if not one_share_cache_fresh(positions.keys()):
+            await ctx.send(
+                "Cached round-up positions are stale (older than 4 hours). "
+                "Run `!rsa holdings` to refresh before retrying `..xsplits`."
+            )
+            return
+
+        queued = []
+        failed = []
+        for broker, tickers in positions.items():
+            for ticker, price in tickers.items():
+                command = f"!rsa sell 1 {ticker} {broker} false"
+                if not await send_sell_command(ctx, command, bot=self.bot):
+                    failed.append(f"{ticker} via {broker}")
+                    continue
+                clear_one_share_position(broker, ticker)
+                queued.append(f"{ticker} via {broker} (was ${price:.2f})")
+
+        message = f"Sent {len(queued)} sell order(s) for round-up positions."
+        if queued:
+            message += "\n" + "\n".join(f"- {line}" for line in queued)
+        if failed:
+            message += "\nFailed to send (positions retained): " + ", ".join(failed)
+        await ctx.send(message)
+
+    @commands.command(
         name="queue_run",
         aliases=["queue-run", "qr"],
         help="Force reschedule and execution of any past-due queued orders.",
         extras={"category": "Orders"},
     )
+    @operator_only()
     async def run_past_due_queue(self, ctx: commands.Context) -> None:
         await reschedule_past_due_orders(self.bot)
         await ctx.send(
