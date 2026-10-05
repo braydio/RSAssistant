@@ -14,7 +14,9 @@ See [README.md](README.md) for naming, lifecycle, execution, persistence, and au
 | TP-20261003-004 | Order Runtime Persistence Completion | Draft | High | [active/TP-20261003-004-order-runtime-sqlite.md](active/TP-20261003-004-order-runtime-sqlite.md) |
 | TP-20261003-005 | Split Monitor Persistence to SQLite | Draft | High | [active/TP-20261003-005-split-monitor-sqlite.md](active/TP-20261003-005-split-monitor-sqlite.md) |
 | TP-20261003-006 | Holdings SQL Contract v2 | Draft | High | [active/TP-20261003-006-holdings-sql-contract-v2.md](active/TP-20261003-006-holdings-sql-contract-v2.md) |
+| TP-20261004-001 | Performance History Capture | Draft | High | [active/TP-20261004-001-performance-history-capture.md](active/TP-20261004-001-performance-history-capture.md) |
 | TP-20261003-007 | Holdings Authority Inversion | Draft | High | [active/TP-20261003-007-holdings-authority-inversion.md](active/TP-20261003-007-holdings-authority-inversion.md) |
+| TP-20261004-002 | Performance Visibility and Growth History | Draft | High | [active/TP-20261004-002-performance-visibility.md](active/TP-20261004-002-performance-visibility.md) |
 | TP-20261003-008 | OrderHistory Authority and CSV Demotion | Draft | Normal | [active/TP-20261003-008-order-history-authority.md](active/TP-20261003-008-order-history-authority.md) |
 | TP-20261003-009 | Excel Runtime Retirement | Draft | Normal | [active/TP-20261003-009-excel-retirement.md](active/TP-20261003-009-excel-retirement.md) |
 | TP-20261003-010 | Decompose sql_utils.py by Domain | Draft | Normal | [active/TP-20261003-010-sql-utils-decomposition.md](active/TP-20261003-010-sql-utils-decomposition.md) |
