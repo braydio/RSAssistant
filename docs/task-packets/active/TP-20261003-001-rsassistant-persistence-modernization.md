@@ -17,7 +17,12 @@ Finish the incomplete RSAssistant migration away from Excel/JSON/CSV as operatio
 
 This packet is the authoritative decomposition for the next modernization train. Do not run the legacy `docs/task-packets/rsassistant-hardening/00-09` sequence directly.
 
-The expected implementation count is **11 child packets**, executed in order unless a child packet explicitly relaxes a dependency.
+The expected implementation count is **11 child packets**. They are now pre-authored as TP-20261003-002 through TP-20261003-012.
+
+TP-20261003-002 is Ready. TP-20261003-003 through TP-20261003-012 are intentionally Draft until the immediately preceding dependency is implemented and reviewed.
+
+Dependency review/refresh conversation:
+https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
 ---
 
@@ -546,16 +551,16 @@ Packets 3, 4, and 5 may be implemented independently after Packet 2 if branch/wo
 
 This controller packet does not authorize a child agent to improvise all 11 changes in one run.
 
-Before implementing a child:
+All children are now authored. Before implementing each Draft child:
 
-1. create its canonical packet under `docs/task-packets/active/`;
-2. assign the next immutable `TP-YYYYMMDD-NNN` ID;
-3. copy only the relevant requirements from this controller plus verified current-main details;
-4. add exact code recommendations after opening the named files;
-5. register it in `INDEX.md` and `TRACKER.md`;
+1. finish and review its dependency;
+2. re-open current main;
+3. use the packet's dependency-refresh checkpoint and the review conversation above;
+4. update assumptions/code recommendations if the dependency changed the seam;
+5. change the child from Draft to Ready in both packet and tracker;
 6. implement only that child packet.
 
-The first child to author should be **CI baseline**, followed by **SQLite runtime foundation**.
+Do not skip the refresh checkpoint merely because the pre-authored packet still appears plausible.
 
 ---
 

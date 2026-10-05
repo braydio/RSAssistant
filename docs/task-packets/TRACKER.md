@@ -9,6 +9,10 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | None | main | 2026-10-03 | [packet](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
+| TP-20261003-009 | Excel Runtime Retirement | Draft | Normal | TP-20261004-008 | main | 2026-10-03 | [packet](active/TP-20261003-009-excel-retirement.md) |
+| TP-20261003-010 | Decompose sql_utils.py by Domain | Draft | Normal | TP-20261003-009 | main | 2026-10-03 | [packet](active/TP-20261003-010-sql-utils-decomposition.md) |
+| TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | TP-20261003-010 | main | 2026-10-03 | [packet](active/TP-20261003-011-on-message-decomposition.md) |
+| TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Completed packets
 
@@ -40,6 +44,14 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 - `rsassistant/persistence/db.py` now owns runtime SQLite connections and initialization.
 - The old hardening packets 06/07 describe useful target schemas but were not implemented.
 
+## Dependency-review protocol
+
+Packets TP-20261003-003 through TP-20261003-012 were authored ahead of their prerequisites. After a dependency lands, review its implementation and refresh the next packet against current main before changing that packet from Draft to Ready.
+
+https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
+
+TP-20261004-008 is complete locally. TP-20261003-009 is next, pending its required dependency review and refresh.
+
 ## Blockers
 
-None. TP-20261003-001 is the current modernization controller. Author its child packets in the order defined there rather than running the legacy train.
+None. TP-20261003-009 is next after the dependency-refresh checkpoint.

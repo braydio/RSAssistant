@@ -2,13 +2,17 @@
 
 Canonical packet discovery index for `braydio/RSAssistant`.
 
-See [README.md](README.md) for naming, lifecycle, execution, persistence, and authoring rules. See [TRACKER.md](TRACKER.md) for live execution state.
+See [README.md](README.md) for naming, lifecycle, persistence, and authoring rules. See [TRACKER.md](TRACKER.md) for live execution state.
 
 ## Active
 
 | Packet ID | Title | Status | Priority | Canonical packet |
 | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
+| TP-20261003-009 | Excel Runtime Retirement | Draft | Normal | [active/TP-20261003-009-excel-retirement.md](active/TP-20261003-009-excel-retirement.md) |
+| TP-20261003-010 | Decompose sql_utils.py by Domain | Draft | Normal | [active/TP-20261003-010-sql-utils-decomposition.md](active/TP-20261003-010-sql-utils-decomposition.md) |
+| TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | [active/TP-20261003-011-on-message-decomposition.md](active/TP-20261003-011-on-message-decomposition.md) |
+| TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | [active/TP-20261003-012-parsing-runtime-cleanup.md](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Completed
 
