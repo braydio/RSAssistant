@@ -19,7 +19,11 @@ class OrderSendLogManagerTest(TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_log = Path(temp_dir) / "order_send_log.json"
-            with patch.object(order_send_log_manager, "ORDER_SEND_LOG_FILE", temp_log):
+            database = Path(temp_dir) / "orders.db"
+            with (
+                patch.object(order_send_log_manager, "DATABASE_PATH", database),
+                patch.object(order_send_log_manager, "ORDER_SEND_LOG_FILE", temp_log),
+            ):
                 order_send_log_manager.record_sent_rsa_order(
                     command="!rsa buy 2 TSLA all false",
                     channel_id=123,
@@ -52,3 +56,42 @@ class OrderSendLogManagerTest(TestCase):
                 latest = order_send_log_manager.latest_sent_rsa_order(ticker="TSLA")
                 self.assertIsNotNone(latest)
                 self.assertEqual(latest["action"], "sell")
+
+                self.assertFalse(temp_log.exists())
+
+    def test_imports_legacy_json_once_and_archives_after_commit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_log = Path(temp_dir) / "order_send_log.json"
+            database = Path(temp_dir) / "orders.db"
+            temp_log.write_text(
+                '[{"sent_at":"2026-01-01T10:00:00+00:00",'
+                '"command":"!rsa buy 1 ABC all false","channel_id":"12",'
+                '"ticker":"abc","action":"BUY","quantity":1,"broker":"all"}]',
+                encoding="utf-8",
+            )
+            with (
+                patch.object(order_send_log_manager, "DATABASE_PATH", database),
+                patch.object(order_send_log_manager, "ORDER_SEND_LOG_FILE", temp_log),
+            ):
+                entries = order_send_log_manager.list_sent_rsa_orders(limit=10)
+                self.assertEqual(len(entries), 1)
+                self.assertEqual(entries[0]["ticker"], "ABC")
+                self.assertFalse(temp_log.exists())
+                self.assertTrue(temp_log.with_suffix(".json.migrated").exists())
+                self.assertEqual(
+                    len(order_send_log_manager.list_sent_rsa_orders(limit=10)), 1
+                )
+
+    def test_malformed_legacy_json_is_left_in_place(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_log = Path(temp_dir) / "order_send_log.json"
+            database = Path(temp_dir) / "orders.db"
+            temp_log.write_text("{bad json", encoding="utf-8")
+            with (
+                patch.object(order_send_log_manager, "DATABASE_PATH", database),
+                patch.object(order_send_log_manager, "ORDER_SEND_LOG_FILE", temp_log),
+            ):
+                with self.assertRaises(RuntimeError):
+                    order_send_log_manager.list_sent_rsa_orders()
+            self.assertTrue(temp_log.exists())
+            self.assertFalse(temp_log.with_suffix(".json.migrated").exists())

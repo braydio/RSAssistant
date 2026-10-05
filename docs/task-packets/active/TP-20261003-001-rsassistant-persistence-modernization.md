@@ -1,9 +1,9 @@
 # TP-20261003-001: RSAssistant Persistence Modernization and Decomposition
 
 **Packet ID:** TP-20261003-001  
-**Status:** Ready  
+**Status:** In Progress
 **Created:** 2026-10-03  
-**Last updated:** 2026-10-03  
+**Last updated:** 2026-10-03
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
 **Canonical path:** `docs/task-packets/active/TP-20261003-001-rsassistant-persistence-modernization.md`  
@@ -41,14 +41,12 @@ Confirmed files and behavior:
   - module-level `data` plus `volumes/db/split_watchlist.json` is still authoritative.
 - `utils/csv_utils.py`
   - holdings ingestion writes SQL through `update_holdings_live_batch()`;
-  - holdings operational reads still use `HOLDINGS_LOG_CSV`;
-  - `sell_all_position()` reads CSV directly;
-  - `get_top_holdings()` reads CSV directly;
-  - order CSV is still a compatibility/runtime path.
+  - holdings operational reads use SQLite; CSV is optional compatibility output;
+  - order history is authoritative in SQLite; the CSV is optional compatibility output and one-time import input.
 - `utils/holdings_snapshot.py`
-  - reads `HOLDINGS_LOG_CSV`.
+  - reads `holdings_current` through the persistence repository.
 - `utils/audit_watchlist_utils.py`
-  - reads `HOLDINGS_LOG_CSV`.
+  - reads `holdings_current` through the persistence repository.
 - `utils/holdings_importer.py`
   - JSON snapshot input ultimately routes through `save_holdings_to_csv()`.
 - `utils/excel_utils.py`
@@ -571,9 +569,9 @@ The modernization train is complete only when:
 - [ ] sent-order audit runtime state is not JSON-authoritative;
 - [ ] split monitor runtime state is not module-global/JSON-authoritative;
 - [ ] SQL represents negative holdings and atomic current snapshots correctly;
-- [ ] holdings operational readers use SQL;
-- [ ] CSV holdings output can be disabled without breaking operational holdings behavior;
-- [ ] OrderHistory is authoritative for order-history reads;
+- [x] holdings operational readers use SQL;
+- [x] CSV holdings output can be disabled without breaking operational holdings behavior;
+- [x] OrderHistory is authoritative for order-history reads;
 - [ ] Excel runtime code/dependency/config/volume is removed;
 - [ ] `utils/sql_utils.py` is decomposed behind stable domain repository modules;
 - [ ] Discord orchestration is thinner and domain services do not require Discord contexts unnecessarily;

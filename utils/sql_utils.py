@@ -6,7 +6,15 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
-from utils.db import connect_database, run_migrations
+from rsassistant.persistence.db import connect_runtime_db
+from rsassistant.persistence.holdings import (
+    activate_staged_holdings as _activate_staged_holdings,
+    discard_staged_holdings as _discard_staged_holdings,
+    get_current_holdings as _get_current_holdings,
+    replace_current_holdings as _replace_current_holdings,
+    stage_current_holdings as _stage_current_holdings,
+)
+from rsassistant.persistence.schema import run_migrations
 
 from utils.config_utils import (
     ACCOUNT_MAPPING,
@@ -15,6 +23,7 @@ from utils.config_utils import (
     get_account_nickname_or_default,
     SQL_LOGGING_ENABLED,
     WATCH_FILE,
+    CSV_LOGGING_ENABLED,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,15 +33,12 @@ SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/
 
 # Database connection helper
 def get_db_connection():
-    """Return a database connection when SQL logging is enabled."""
+    """Return a connection to the operational SQLite database."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.debug("SQL logging disabled; database connection not created.")
-        raise RuntimeError("SQL logging disabled")
 
     logger.debug("Attempting to establish a database connection.")
     try:
-        conn = connect_database(SQL_DATABASE)
+        conn = connect_runtime_db(SQL_DATABASE)
         logger.debug("Database connection established successfully.")
         return conn
     except sqlite3.Error as e:
@@ -54,9 +60,6 @@ def get_or_create_account_id(
         f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}."
     )
 
-    if not SQL_LOGGING_ENABLED:
-        logger.debug("SQL logging disabled; skipping account lookup.")
-        return None
 
     nickname_was_explicit = account_nickname is not None
     if account_nickname is None:
@@ -115,9 +118,6 @@ def upsert_account_mapping(
         disabled.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account mapping not stored.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -153,9 +153,6 @@ def sync_account_mappings(mappings: dict) -> dict[str, int]:
     """
 
     results = {"added": 0, "updated": 0}
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account mapping sync skipped.")
-        return results
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -210,9 +207,6 @@ def clear_account_nicknames() -> int:
         Number of rows updated.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account nickname clear skipped.")
-        return 0
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -230,9 +224,6 @@ def fetch_account_mappings() -> dict[str, dict[str, dict[str, str]]]:
         Nested mapping ``{broker: {broker_number: {account_number: nickname}}}``.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; returning empty account mappings.")
-        return {}
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -266,9 +257,6 @@ def fetch_account_nickname(
 ) -> str | None:
     """Return the nickname for an account from SQL."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account nickname lookup skipped.")
-        return None
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -291,9 +279,6 @@ def fetch_account_nickname(
 def fetch_account_labels() -> list[dict[str, str]]:
     """Return account IDs and nicknames from the Accounts table."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account label lookup skipped.")
-        return []
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -329,8 +314,6 @@ def resolve_account_id(account_input: str) -> int | None:
 def has_account_mappings() -> bool:
     """Return ``True`` when SQL has at least one account mapping row."""
 
-    if not SQL_LOGGING_ENABLED:
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -362,9 +345,6 @@ def _serialize_metadata(metadata: dict | None) -> str:
 def fetch_watchlist_entries() -> dict[str, dict[str, str]]:
     """Return watchlist entries keyed by ticker."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist lookup skipped.")
-        return {}
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -401,9 +381,6 @@ def upsert_watchlist_entry(
 ) -> bool:
     """Insert or update a watchlist entry."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist upsert skipped.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -434,9 +411,6 @@ def upsert_watchlist_entry(
 def delete_watchlist_entry(ticker: str) -> bool:
     """Remove a watchlist entry by ticker."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist delete skipped.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -448,9 +422,6 @@ def delete_watchlist_entry(ticker: str) -> bool:
 def fetch_sell_list_entries() -> dict[str, dict[str, str]]:
     """Return sell list entries keyed by ticker."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list lookup skipped.")
-        return {}
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -487,9 +458,6 @@ def upsert_sell_list_entry(
 ) -> bool:
     """Insert or update a sell list entry."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list upsert skipped.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -520,9 +488,6 @@ def upsert_sell_list_entry(
 def delete_sell_list_entry(ticker: str) -> bool:
     """Remove a sell list entry by ticker."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list delete skipped.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -555,9 +520,6 @@ def replace_watchlist_entries(entries: dict[str, dict[str, str]]) -> int:
         Number of rows written.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist replace skipped.")
-        return 0
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -608,9 +570,6 @@ def replace_sell_list_entries(entries: dict[str, dict[str, str]]) -> int:
         Number of rows written.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list replace skipped.")
-        return 0
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -669,9 +628,6 @@ def migrate_legacy_json_data(remove_legacy_files: bool = False) -> dict[str, int
     """
 
     results = {"account_mappings": 0, "watchlist": 0, "sell_list": 0}
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping legacy JSON migration.")
-        return results
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -745,11 +701,8 @@ def migrate_legacy_json_data(remove_legacy_files: bool = False) -> dict[str, int
 
 
 def init_db():
-    """Initialize database tables if SQL logging is enabled."""
+    """Initialize the runtime schema and import legacy JSON state."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping database initialization.")
-        return
 
     logger.info("Initializing database with required tables.")
     with get_db_connection() as conn:
@@ -783,9 +736,6 @@ def insert_reverse_split_log_entry(
         is disabled.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; reverse split log insert skipped.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -829,9 +779,6 @@ def fetch_reverse_split_history(ticker: str) -> list[dict[str, str | None]]:
         timestamp first.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; reverse split history lookup skipped.")
-        return []
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -881,9 +828,6 @@ def insert_reverse_split_account_entry(
         disabled.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; reverse split account insert skipped.")
-        return False
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -923,11 +867,6 @@ def fetch_reverse_split_account_entries(
 ) -> list[dict[str, Any]]:
     """Return account-level reverse split entries for an account+ticker pair."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.warning(
-            "SQL logging disabled; reverse split account entry lookup skipped."
-        )
-        return []
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -960,9 +899,6 @@ def update_holdings_live(
 ):
     """Insert a holding into ``HoldingsLive`` when logging is enabled."""
 
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping holdings update.")
-        return
 
     logger.info(
         f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}."
@@ -999,9 +935,6 @@ def update_holdings_live_batch(holdings: list[dict[str, Any]]) -> int:
         Number of rows inserted into ``HoldingsLive``.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping holdings batch update.")
-        return 0
 
     if not holdings:
         return 0
@@ -1066,6 +999,37 @@ def update_holdings_live_batch(holdings: list[dict[str, Any]]) -> int:
             logger.info("Holdings batch update inserted %d rows.", inserted_rows)
 
     return inserted_rows
+
+
+def replace_current_holdings_snapshot(
+    holdings: list[dict[str, Any]], *, source: str = "holdings_snapshot"
+) -> int:
+    """Compatibility delegate for atomic current holdings replacement."""
+    return _replace_current_holdings(holdings, source=source, database=SQL_DATABASE)
+
+
+def stage_current_holdings_snapshot(
+    refresh_id: str, holdings: list[dict[str, Any]], *, source: str = "holdings_refresh"
+) -> int:
+    """Compatibility delegate for one staged holdings refresh generation."""
+    return _stage_current_holdings(
+        refresh_id, holdings, source=source, database=SQL_DATABASE
+    )
+
+
+def activate_current_holdings_snapshot(refresh_id: str) -> bool:
+    """Publish a staged current holdings refresh atomically."""
+    return _activate_staged_holdings(refresh_id, database=SQL_DATABASE)
+
+
+def discard_current_holdings_snapshot(refresh_id: str) -> None:
+    """Discard a staged refresh that was aborted."""
+    _discard_staged_holdings(refresh_id, database=SQL_DATABASE)
+
+
+def get_current_holdings_snapshot() -> list[dict[str, Any]]:
+    """Return current holdings with account identity and snapshot metadata."""
+    return _get_current_holdings(database=SQL_DATABASE)
 
 
 def update_historical_holdings(target_date: str | None = None) -> int:
@@ -1223,6 +1187,17 @@ def insert_order_history(order_data):
             f"Order inserted successfully for ticker: {mapped_order['ticker']} "
             f"(Order ID: {mapped_order['order_id']})."
         )
+        if CSV_LOGGING_ENABLED:
+            try:
+                from rsassistant.persistence.orders import export_order_history_csv
+                from utils.config_utils import ORDERS_LOG_CSV
+
+                export_order_history_csv(ORDERS_LOG_CSV)
+            except Exception as export_error:
+                logger.warning(
+                    "Order committed to SQL but compatibility CSV export failed: %s",
+                    export_error,
+                )
     except sqlite3.Error as e:
         logger.error(f"Error inserting order into OrderHistory: {e}")
         raise
@@ -1286,9 +1261,6 @@ def bot_query_database(table_name, filters=None, order_by=None, limit=10):
     Returns a descriptive error when SQL logging is disabled.
     """
 
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; query aborted.")
-        return {"error": "SQL logging disabled"}
 
     logger.info(
         f"Querying table {table_name} with filters: {filters}, order_by: {order_by}, limit: {limit}."

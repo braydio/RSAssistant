@@ -31,7 +31,6 @@ from utils.config_utils import (
     OPENAI_API_KEY,
     OPENAI_MODEL,
     OPENAI_POLICY_ENABLED,
-    SQL_LOGGING_ENABLED,
     VOLUMES_DIR,
 )
 from utils.logging_setup import setup_logging
@@ -75,14 +74,11 @@ logger.info(
     PRICE_CACHE_TTL_SECONDS,
 )
 
-if SQL_LOGGING_ENABLED:
-    init_db()
-    from utils.watch_utils import watch_list_manager
+init_db()
+from utils.watch_utils import watch_list_manager
 
-    watch_list_manager.load_watch_list()
-    watch_list_manager.load_sell_list()
-else:
-    logger.info("SQL logging disabled; skipping database initialization.")
+watch_list_manager.load_watch_list()
+watch_list_manager.load_sell_list()
 
 logger.info("Holdings Log CSV file: %s", HOLDINGS_LOG_CSV)
 logger.info("Orders Log CSV file: %s", ORDERS_LOG_CSV)

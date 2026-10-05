@@ -8,8 +8,8 @@ from typing import Iterable
 
 import discord
 
-from utils.config_utils import HOLDINGS_LOG_CSV, get_account_nickname_or_default
-from utils.csv_utils import load_csv_log
+from utils.config_utils import get_account_nickname_or_default
+from rsassistant.persistence.holdings import get_current_holdings
 
 
 def _parse_float(value: str | None, default: float = 0.0) -> float:
@@ -52,7 +52,14 @@ def _truncate_lines(lines: Iterable[str], max_chars: int) -> str:
 def build_holdings_snapshot_embeds(
     broker_filter: str | None = None, top_n: int = 5
 ) -> tuple[list[discord.Embed], str | None]:
-    rows = load_csv_log(HOLDINGS_LOG_CSV)
+    rows = [
+        {"Broker Name": r["broker"], "Broker Number": r["broker_number"],
+         "Account Number": r["account_number"], "Stock": r["ticker"],
+         "Quantity": r["quantity"], "Price": r["price"],
+         "Position Value": r["position_value"], "Account Total": r["account_total"],
+         "Timestamp": r["observed_at"]}
+        for r in get_current_holdings()
+    ]
     if not rows:
         return [], "No holdings snapshot found. Run `!rsa holdings` or import a holdings file."
 

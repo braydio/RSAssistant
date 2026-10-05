@@ -8,11 +8,19 @@ See [README.md](README.md) for naming, lifecycle, execution, persistence, and au
 
 | Packet ID | Title | Status | Priority | Canonical packet |
 | --- | --- | --- | --- | --- |
-| TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | Ready | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
+| TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
 
 ## Completed
 
-None in the canonical system yet.
+| Packet ID | Title | Status | Canonical packet |
+| --- | --- | --- | --- |
+| TP-20261003-002 | Establish a Full CI Baseline | Complete | [completed/TP-20261003-002-ci-baseline.md](completed/TP-20261003-002-ci-baseline.md) |
+| TP-20261003-003 | Establish the SQLite Runtime Foundation | Complete | [completed/TP-20261003-003-sqlite-runtime-foundation.md](completed/TP-20261003-003-sqlite-runtime-foundation.md) |
+| TP-20261003-004 | Move Order Runtime State to SQLite | Complete | [completed/TP-20261003-004-order-runtime-sqlite.md](completed/TP-20261003-004-order-runtime-sqlite.md) |
+| TP-20261003-005 | Move Split Monitor State to SQLite | Complete | [completed/TP-20261003-005-split-monitor-sqlite.md](completed/TP-20261003-005-split-monitor-sqlite.md) |
+| TP-20261003-006 | Establish the Current Holdings SQL Contract | Complete | [completed/TP-20261003-006-holdings-sql-contract.md](completed/TP-20261003-006-holdings-sql-contract.md) |
+| TP-20261003-007 | Make SQLite the Operational Holdings Read Source | Complete | [completed/TP-20261003-007-holdings-authority-inversion.md](completed/TP-20261003-007-holdings-authority-inversion.md) |
+| TP-20261004-008 | Make OrderHistory Authoritative and Demote Order CSV | Complete | [completed/TP-20261004-008-orderhistory-authority.md](completed/TP-20261004-008-orderhistory-authority.md) |
 
 ## Archived / Historical
 

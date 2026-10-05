@@ -626,17 +626,10 @@ logger.info(f"Pricing fallback Ticker Enabled: {ENABLE_TICKER_CLI}")
 def load_account_mappings() -> dict:
     """Return account mappings stored in SQL.
 
-    Falls back to legacy JSON mappings only when SQL logging is disabled.
     Legacy JSON migration into SQL is handled by ``utils.sql_utils`` during
-    database initialization and by the one-time migration script.
+    database initialization and by the one-time migration script. The legacy
+    SQL_LOGGING_ENABLED environment toggle does not disable runtime storage.
     """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning(
-            "SQL logging disabled; loading legacy account mappings from %s.",
-            ACCOUNT_MAPPING,
-        )
-        return _load_legacy_account_mappings()
 
     from utils import sql_utils
 
@@ -685,10 +678,6 @@ def load_autobuy_config() -> dict:
 
 def save_account_mappings(mappings: dict) -> None:
     """Persist account nickname mappings to SQL storage."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account mapping save skipped.")
-        return
 
     from utils import sql_utils
 
@@ -742,17 +731,9 @@ def get_account_nickname(broker_name, broker_number, account_number):
     nickname = DEFAULT_ACCOUNT_NICKNAME.format(
         broker=broker_name, group=broker_number, account=account_number
     )
-    if SQL_LOGGING_ENABLED:
-        from utils import sql_utils
+    from utils import sql_utils
 
-        sql_utils.upsert_account_mapping(broker_name, broker_str, account_str, nickname)
-    else:
-        logger.warning(
-            "SQL logging disabled; default nickname not persisted for %s/%s/%s.",
-            broker_name,
-            broker_number,
-            account_number,
-        )
+    sql_utils.upsert_account_mapping(broker_name, broker_str, account_str, nickname)
     return nickname
 
 
@@ -832,7 +813,7 @@ def load_config():
         "persistence": {
             "csv": CSV_LOGGING_ENABLED,
             "excel": EXCEL_LOGGING_ENABLED,
-            "sql": SQL_LOGGING_ENABLED,
+            "sql": True,
         },
         "feature_flags": {
             "history_query_enabled": HISTORY_QUERY_ENABLED,
