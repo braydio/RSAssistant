@@ -8,13 +8,13 @@
 **Target branch:** main  
 **Canonical path:** `docs/task-packets/active/TP-20261003-007-holdings-authority-inversion.md`  
 **Workstream size:** One implementation packet  
-**Depends on:** TP-20261003-006  
+**Depends on:** TP-20261004-001  
 **Priority:** High  
 **Controller:** TP-20261003-001  
 
 ## Required dependency-refresh checkpoint
 
-This packet was authored **before TP-20261003-006 landed**. Do not implement it blindly after the dependency merges.
+This packet was authored before the holdings SQL contract and performance-history capture landed. Do not implement it blindly after the dependency merges.
 
 Before coding:
 
@@ -28,7 +28,7 @@ https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
 Suggested handoff wording:
 
-> TP-20261003-006 has landed. The next packet was pre-authored and needs a dependency refresh against current main before implementation. Review/update it here: https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
+> TP-20261004-001 has landed. The next packet was pre-authored and needs a dependency refresh against current main before implementation. Review/update it here: https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
 Do not silently reinterpret stale instructions.
 
