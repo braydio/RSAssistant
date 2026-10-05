@@ -14,8 +14,10 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | TP-20261003-004 | Order Runtime Persistence Completion | Draft | High | TP-20261003-003 | main | 2026-10-03 | [packet](active/TP-20261003-004-order-runtime-sqlite.md) |
 | TP-20261003-005 | Split Monitor Persistence to SQLite | Draft | High | TP-20261003-004 | main | 2026-10-03 | [packet](active/TP-20261003-005-split-monitor-sqlite.md) |
 | TP-20261003-006 | Holdings SQL Contract v2 | Draft | High | TP-20261003-005 | main | 2026-10-03 | [packet](active/TP-20261003-006-holdings-sql-contract-v2.md) |
-| TP-20261003-007 | Holdings Authority Inversion | Draft | High | TP-20261003-006 | main | 2026-10-03 | [packet](active/TP-20261003-007-holdings-authority-inversion.md) |
-| TP-20261003-008 | OrderHistory Authority and CSV Demotion | Draft | Normal | TP-20261003-007 | main | 2026-10-03 | [packet](active/TP-20261003-008-order-history-authority.md) |
+| TP-20261004-001 | Performance History Capture | Draft | High | TP-20261003-006 | main | 2026-10-04 | [packet](active/TP-20261004-001-performance-history-capture.md) |
+| TP-20261003-007 | Holdings Authority Inversion | Draft | High | TP-20261004-001 | main | 2026-10-04 | [packet](active/TP-20261003-007-holdings-authority-inversion.md) |
+| TP-20261004-002 | Performance Visibility and Growth History | Draft | High | TP-20261003-007, TP-20261004-001 | main | 2026-10-04 | [packet](active/TP-20261004-002-performance-visibility.md) |
+| TP-20261003-008 | OrderHistory Authority and CSV Demotion | Draft | Normal | TP-20261004-002 | main | 2026-10-04 | [packet](active/TP-20261003-008-order-history-authority.md) |
 | TP-20261003-009 | Excel Runtime Retirement | Draft | Normal | TP-20261003-008 | main | 2026-10-03 | [packet](active/TP-20261003-009-excel-retirement.md) |
 | TP-20261003-010 | Decompose sql_utils.py by Domain | Draft | Normal | TP-20261003-009 | main | 2026-10-03 | [packet](active/TP-20261003-010-sql-utils-decomposition.md) |
 | TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | TP-20261003-010 | main | 2026-10-03 | [packet](active/TP-20261003-011-on-message-decomposition.md) |
@@ -40,7 +42,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 
 ## Dependency-review protocol
 
-Packets TP-20261003-003 through TP-20261003-012 were intentionally authored ahead of their prerequisites. Each contains the required review checkpoint:
+Dependent modernization packets, including TP-20261004-001 and TP-20261004-002, were intentionally authored ahead of their prerequisites. Each contains the required review checkpoint:
 
 https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
