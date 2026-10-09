@@ -20,7 +20,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | TP-20261003-008 | OrderHistory Authority and CSV Demotion | Draft | Normal | TP-20261004-002 | main | 2026-10-04 | [packet](active/TP-20261003-008-order-history-authority.md) |
 | TP-20261003-009 | Excel Runtime Retirement | Draft | Normal | TP-20261003-008 | main | 2026-10-03 | [packet](active/TP-20261003-009-excel-retirement.md) |
 | TP-20261003-010 | Decompose sql_utils.py by Domain | Draft | Normal | TP-20261003-009 | main | 2026-10-03 | [packet](active/TP-20261003-010-sql-utils-decomposition.md) |
-| TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | TP-20261003-010 | main | 2026-10-03 | [packet](active/TP-20261003-011-on-message-decomposition.md) |
+| TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | TP-20261003-010 | main | 2026-10-08 | [packet](active/TP-20261003-011-on-message-decomposition.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Historical / re-baseline queue
@@ -50,4 +50,5 @@ After a dependency lands, review its implementation and refresh the next packet 
 
 ## Blockers
 
-None for TP-20261003-002. Later packets are intentionally Draft until their dependency is reviewed.
+- **TP-20261003-011:** structure-refresh completed 2026-10-08, but the remotely visible GitHub `main` did not contain the reported landed TP-20261003-010 implementation during refresh. Keep TP-011 Draft until the execution checkout/current main visibly contains TP-010 and its persistence import seams are reconciled. Authoring/refresh chat: https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
+- Other dependent packets remain Draft until their dependency is reviewed.
