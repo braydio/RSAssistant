@@ -187,10 +187,21 @@ and is not referenced by RSAssistant.
 
 ### Version control options for local clones
 
-- Recommended: keep `auto-rsa/` and `AutoRSA-GUI/` as separate repos (outside this repo).
-- If you keep them inside this repo for convenience, either:
-  - Add them as git submodules, or
-  - Add them to `.gitignore` so credentials and binaries are not tracked.
+- Recommended: keep `auto-rsa/` and `AutoRSA-GUI/` as separate repos (outside this repo),
+  gitignored here (see `.gitignore`).
+- For `auto-rsa/`, maintain your customizations as a real fork rather than hand-editing
+  the working tree:
+  ```bash
+  cd auto-rsa
+  git remote rename origin upstream
+  git remote add origin git@github.com:<you>/auto-rsa.git
+  git fetch upstream && git rebase upstream/main   # pull upstream changes
+  git push origin main
+  ```
+  This replaces the old pattern of accumulating uncommitted edits that `patches/auto-rsa-holdings.patch`
+  could drift out of sync with. The patch/`..patchautorsa` workflow above is still the
+  right tool for bootstrapping the holdings-shim onto a *fresh*, unmodified auto-rsa clone
+  (yours or someone else's) — it's unrelated to fork maintenance.
 
 ## Holdings snapshots
 
