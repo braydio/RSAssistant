@@ -31,13 +31,13 @@ from utils.config_utils import (
     OPENAI_API_KEY,
     OPENAI_MODEL,
     OPENAI_POLICY_ENABLED,
-    SQL_LOGGING_ENABLED,
     VOLUMES_DIR,
 )
 from utils.logging_setup import setup_logging
 from rsassistant.bot.handlers.on_message import handle_on_message, set_channels
 from utils.order_queue_manager import get_order_queue
-from utils.sql_utils import has_account_mappings, init_db
+from rsassistant.persistence.accounts import has_account_mappings
+from rsassistant.persistence.runtime import initialize_runtime
 from utils.market_calendar import MARKET_TZ, is_market_day
 from utils.price_fetcher import CACHE_FILE as PRICE_CACHE_FILE
 from utils.price_fetcher import TTL_SECONDS as PRICE_CACHE_TTL_SECONDS
@@ -75,14 +75,11 @@ logger.info(
     PRICE_CACHE_TTL_SECONDS,
 )
 
-if SQL_LOGGING_ENABLED:
-    init_db()
-    from utils.watch_utils import watch_list_manager
+initialize_runtime()
+from utils.watch_utils import watch_list_manager
 
-    watch_list_manager.load_watch_list()
-    watch_list_manager.load_sell_list()
-else:
-    logger.info("SQL logging disabled; skipping database initialization.")
+watch_list_manager.load_watch_list()
+watch_list_manager.load_sell_list()
 
 logger.info("Holdings Log CSV file: %s", HOLDINGS_LOG_CSV)
 logger.info("Orders Log CSV file: %s", ORDERS_LOG_CSV)
@@ -122,7 +119,7 @@ def _build_account_setup_message() -> str:
     return (
         "**(╯°□°）╯**\n\n"
         "Account mappings not found in SQL. Use `..addmap` to define mappings or\n"
-        "run `..loadmap` to import legacy JSON/Excel-era mapping data into SQL.\n"
+        "run `..loadmap` to import legacy JSON mapping data into SQL.\n"
         "Runtime logs are written to CSV files under `volumes/logs/`."
     )
 

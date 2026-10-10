@@ -7,6 +7,7 @@ from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
 import utils.watch_utils as watch_utils
+from rsassistant.persistence import holdings, watchlists
 from utils import sql_utils
 from utils.watch_utils import WatchListManager, parse_bulk_watchlist_message
 
@@ -33,7 +34,11 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         self.original_watch_file = sql_utils.WATCH_FILE
         self.original_sell_file = sql_utils.SELL_FILE
         self.original_account_mapping = sql_utils.ACCOUNT_MAPPING
+        self.original_watch_db = watchlists.DATABASE_PATH
+        self.original_holdings_db = holdings.DATABASE_PATH
         sql_utils.SQL_DATABASE = f"{self.temp_dir.name}/test.db"
+        watchlists.DATABASE_PATH = sql_utils.SQL_DATABASE
+        holdings.DATABASE_PATH = sql_utils.SQL_DATABASE
         sql_utils.SQL_LOGGING_ENABLED = True
         sql_utils.WATCH_FILE = Path(self.temp_dir.name) / "watch_list.json"
         sql_utils.SELL_FILE = Path(self.temp_dir.name) / "sell_list.json"
@@ -50,6 +55,8 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
         sql_utils.WATCH_FILE = self.original_watch_file
         sql_utils.SELL_FILE = self.original_sell_file
         sql_utils.ACCOUNT_MAPPING = self.original_account_mapping
+        watchlists.DATABASE_PATH = self.original_watch_db
+        holdings.DATABASE_PATH = self.original_holdings_db
         self.temp_dir.cleanup()
 
     async def test_list_watched_tickers_without_prices(self):
@@ -170,13 +177,13 @@ NCEW 1-8 (purchase by 11/13)
             "Invalid date format. Please use mm/dd, mm/dd/yy, or mm/dd/yyyy.",
         )
 
-    async def test_watch_ticker_logs_excel_deprecation_warning(self):
-        """Watch additions should log a warning about Excel deprecation."""
+    async def test_watch_ticker_saves_without_excel_warning(self):
+        """Watch additions persist to SQL without an obsolete Excel warning."""
 
         with patch("utils.watch_utils.logging.warning") as warning_mock:
             await self.manager.watch_ticker(self.ctx, "TEST", "11/11", "1-5")
 
-        warning_mock.assert_called_once()
+        warning_mock.assert_not_called()
         self.assertIn("TEST", self.manager.watch_list)
 
     def test_move_expired_to_sell_uses_exact_day_for_month_day_dates(self):

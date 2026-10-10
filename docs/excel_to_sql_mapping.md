@@ -1,9 +1,11 @@
-# Excel to SQL Mapping Reference
+# Completed Excel to SQL Migration Reference
 
-## Status Note
-Excel is deprecated and non-authoritative after migration. The SQL database and
-structured operational stores are the sources of truth, and Excel should be
-treated as a historical artifact only. `Accounts` is the canonical SQL source
+## Migration Status
+The Excel to SQL migration is complete. RSAssistant has no runtime Excel module,
+configuration, dependency, mount, or directory creation. This document records
+legacy workbook concepts and their SQL destinations for audit and historical
+reference only; it does not describe an active migration procedure or runtime
+Excel dependency. `Accounts` is the canonical SQL source
 for account identity and nicknames; `account_mappings` is migration-only.
 
 ## Excel Sheet Enumeration from `utils/excel_utils.py`
@@ -82,7 +84,7 @@ Column layout used for per-account values:
 | Cell capture moment | `reverse_split_account_entries.timestamp` | New (proposed) | Stored | Capture/ingestion timestamp. |
 | Import metadata | `reverse_split_log.ingestion_timestamp`, `reverse_split_log.source`, `reverse_split_account_entries.source` | New (proposed) | Stored | Audit lineage for migration and post-migration writes. |
 
-## Proposed SQL Tables for Excel-Only Concepts
+## Historical SQL Mapping Notes
 
 ### `reverse_split_log`
 
@@ -113,10 +115,8 @@ Tracks per-account cost/proceeds values from `Reverse Split Log` account rows.
 | timestamp | TEXT NOT NULL | Capture/ingestion time. |
 | source | TEXT NOT NULL | e.g., `excel_migration`, `manual`. |
 
-## Migration Guidance
+## Historical Notes
 
-- After migration, Excel should not be updated by the system.
-- New reverse split metadata and account entries should be written to SQL,
-  optionally mirrored to JSON/CSV logs for reporting compatibility.
-- Excel is explicitly non-authoritative after migration; it is retained only for
-  historical audit and reconciliation.
+- Reverse split metadata and account entries are stored in SQL.
+- Existing workbooks are user-owned historical files. RSAssistant does not access them.
+- The mappings above explain source concepts and are retained for audit context.

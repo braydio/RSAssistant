@@ -53,7 +53,9 @@ from rsassistant.bot.channel_resolver import (
     resolve_watchlist_channel,
 )
 
-from utils.policy_resolver import SplitPolicyResolver as PolicyResolver
+from rsassistant.services import alert_processing
+from rsassistant.services import order_orchestration
+from rsassistant.services.policy_orchestration import policy_analysis_service
 
 DISCORD_PRIMARY_CHANNEL = None
 DISCORD_SECONDARY_CHANNEL = None
@@ -119,36 +121,15 @@ def _mention_prefix(force: bool = False, tag_enabled: bool = True) -> str:
 
 def _should_tag_alert(ticker: str, quantity: float) -> bool:
     """Return ``True`` when alerts for ``ticker`` should include mentions."""
-
-    if not TAGGED_ALERT_REQUIREMENTS:
-        return True
-
-    normalized = ticker.upper()
-    if normalized not in TAGGED_ALERT_REQUIREMENTS:
-        return False
-    requirement = TAGGED_ALERT_REQUIREMENTS.get(normalized)
-    if requirement is None:
-        return True
-    return quantity >= requirement
+    return alert_processing.should_tag_alert(
+        ticker, quantity, TAGGED_ALERT_REQUIREMENTS
+    )
 
 
 def _should_tag_entries(entries) -> bool:
     """Return ``True`` if any alert entry satisfies mention requirements."""
 
-    if not entries:
-        return False
-    if not TAGGED_ALERT_REQUIREMENTS:
-        return True
-
-    for entry in entries:
-        ticker = str(entry.get("ticker", "")).upper()
-        try:
-            quantity = float(entry.get("quantity", 0) or 0)
-        except (TypeError, ValueError):
-            quantity = 0.0
-        if ticker and _should_tag_alert(ticker, quantity):
-            return True
-    return False
+    return alert_processing.should_tag_entries(entries, TAGGED_ALERT_REQUIREMENTS)
 
 
 def _format_account_label(broker: str, account_name: str) -> str:
@@ -162,73 +143,28 @@ def _format_account_label(broker: str, account_name: str) -> str:
         str: Combined account label with a single broker prefix.
     """
 
-    broker_prefix = (broker or "").strip()
-    normalized_account = (account_name or "").strip()
-
-    if not broker_prefix:
-        return normalized_account
-
-    if normalized_account.lower().startswith(broker_prefix.lower()):
-        return normalized_account
-
-    if not normalized_account:
-        return broker_prefix
-
-    return f"{broker_prefix} {normalized_account}".strip()
+    return alert_processing.format_account_label(broker, account_name)
 
 
 def _resolve_round_up_snippet(policy_info, max_length: int):
     """Return a trimmed snippet describing the round-up policy if present."""
 
-    if not policy_info or max_length <= 0:
-        return None
-
-    snippet = policy_info.get("snippet")
-    if snippet:
-        return snippet.strip()[:max_length]
-
-    body_text = policy_info.get("body_text")
-    if not body_text:
-        return None
-
-    extracted = PolicyResolver.extract_round_up_snippet(body_text)
-    if not extracted:
-        return None
-
-    return extracted.strip()[:max_length]
+    return alert_processing.resolve_round_up_snippet(policy_info, max_length)
 
 
 def _format_watch_date(split_date: str) -> str:
     """Normalize split_date to M/D for watch command compatibility."""
-    if not split_date:
-        return split_date
-    try:
-        parsed = datetime.fromisoformat(split_date).date()
-        return f"{parsed.month}/{parsed.day}"
-    except ValueError:
-        return split_date
+    return alert_processing.format_watch_date(split_date)
 
 
 def _resolve_round_up_confirmation(policy_info: dict) -> bool:
     """Resolve round-up confirmation, preferring LLM when available."""
-    llm_details = policy_info.get("llm_details") or {}
-    llm_policy = llm_details.get("fractional_share_policy")
-    if llm_policy:
-        return llm_policy in {"rounded_to_nearest_whole", "rounded_up"}
-    return bool(policy_info.get("round_up_confirmed"))
+    return alert_processing.resolve_round_up_confirmation(policy_info)
 
 
 def _resolve_fractional_handling_text(policy_info: dict) -> str:
     """Return the resolved fractional share handling text."""
-    llm_details = policy_info.get("llm_details") or {}
-    llm_policy = llm_details.get("fractional_share_policy")
-    if llm_policy:
-        return llm_policy
-    return (
-        policy_info.get("sec_policy")
-        or policy_info.get("policy")
-        or "Policy not clearly stated."
-    )
+    return alert_processing.resolve_fractional_handling_text(policy_info)
 
 
 async def _process_round_up_flow(
@@ -294,8 +230,7 @@ async def _process_round_up_flow(
 
 def _normalize_broker_name(broker: str) -> str:
     """Return a normalized broker name for comparisons."""
-
-    return (broker or "").strip().upper()
+    return alert_processing.normalize_broker_name(broker)
 
 
 def _load_configured_brokers_from_mappings() -> set[str]:
@@ -659,17 +594,9 @@ def get_audit_summary():
 
 def compute_account_missing_tickers(parsed_holdings):
     """Return missing watchlist tickers per account from parsed holdings."""
-    watchlist = {t.upper() for t in watch_list_manager.get_watch_list().keys()}
-    account_holdings = defaultdict(set)
-    for h in parsed_holdings:
-        key = f"{h['broker']} {h['account_name']} ({h['account']})"
-        account_holdings[key].add(h["ticker"].upper())
-    results = {}
-    for account, held in account_holdings.items():
-        missing = watchlist - held
-        if missing:
-            results[account] = sorted(missing)
-    return results
+    return alert_processing.compute_account_missing_tickers(
+        parsed_holdings, watch_list_manager.get_watch_list().keys()
+    )
 
 
 def _extract_order_queue_pairs() -> set[tuple[str, str]]:
@@ -714,32 +641,27 @@ async def queue_missing_watchlist_autobuys(
         bot, DISCORD_PRIMARY_CHANNEL
     ) or resolve_message_destination(bot, channel)
     queued_pairs = _extract_order_queue_pairs()
+    planned, skipped = order_orchestration.build_watchlist_autobuy_commands(
+        missing_by_account,
+        queued_pairs,
+        (broker for broker in IGNORE_BROKERS_SET if broker),
+    )
     queued_count = 0
+    for ticker, broker in skipped:
+        logger.info(
+            "Skipping watchlist autobuy for %s/%s; order already queued.",
+            ticker,
+            broker,
+        )
 
-    for account_label, tickers in missing_by_account.items():
-        broker = _normalize_broker_name(account_label.split(" ", 1)[0])
-        if not broker or is_broker_ignored(broker):
-            continue
-
-        for ticker in sorted({str(t).strip().upper() for t in tickers if t}):
-            pair = (ticker, broker)
-            if pair in queued_pairs:
-                logger.info(
-                    "Skipping watchlist autobuy for %s/%s; order already queued.",
-                    ticker,
-                    broker,
-                )
-                continue
-
-            command = f"!rsa buy 1 {ticker} {broker} false"
-            await send_sell_command(target_channel, command, bot=bot)
-            queued_pairs.add(pair)
-            queued_count += 1
-            logger.info(
-                "Queued watchlist autobuy command for missing position %s/%s.",
-                ticker,
-                broker,
-            )
+    for ticker, broker, command in planned:
+        await send_sell_command(target_channel, command, bot=bot)
+        queued_count += 1
+        logger.info(
+            "Queued watchlist autobuy command for missing position %s/%s.",
+            ticker,
+            broker,
+        )
 
     return queued_count
 
@@ -889,70 +811,25 @@ async def handle_primary_channel(bot, message):
             except Exception:
                 threshold = 1.0
 
-            # Aggregate alerts for a single summary message at the end
-            alert_entries = []
-            sell_commands = []
-            areb_alerts = []
-            reverse_split_round_ups_found = False
-
-            for h in parsed_holdings:
-                try:
-                    ticker = str(h.get("ticker", "")).upper()
-                    if not ticker or ticker == "CASH AND SWEEP FUNDS":
-                        continue
-
-                    broker = str(h.get("broker", "")).strip()
-                    account_name = str(h.get("account_name", h.get("account", "")))
-                    price = float(h.get("price", 0) or 0)
-                    quantity = float(h.get("quantity", 0) or 0)
-
-                    if ticker == AREB_TICKER and quantity > AREB_QUANTITY_THRESHOLD:
-                        if not is_broker_ignored(broker):
-                            alert_key = f"{ticker}{_AREB_ALERT_SUFFIX}"
-                            if try_record_action_today(broker, account_name, alert_key):
-                                areb_alerts.append(
-                                    {
-                                        "broker": broker,
-                                        "account_name": account_name,
-                                        "quantity": quantity,
-                                        "price": price,
-                                    }
-                                )
-
-                    if ticker in IGNORE_TICKERS_SET or is_broker_ignored(broker):
-                        continue
-                    if (
-                        price >= threshold
-                        and quantity == 1
-                        and is_tracked_reverse_split(ticker)
-                    ):
-                        record_one_share_position(broker, ticker, price)
-                        reverse_split_round_ups_found = True
-                    if price < threshold or quantity <= 0:
-                        continue
-                    if not try_record_action_today(broker, account_name, ticker):
-                        continue
-
-                    # Accumulate for summary
-                    alert_entries.append(
-                        {
-                            "broker": broker,
-                            "account_name": account_name,
-                            "ticker": ticker,
-                            "price": price,
-                            "quantity": quantity,
-                        }
-                    )
-
-                    # Queue optional auto-sell commands to send after summary
-                    if AUTO_SELL_LIVE:
-                        sell_cmd = f"!rsa sell {quantity} {ticker} {broker} false"
-                        sell_commands.append(sell_cmd)
-
-                except Exception as exc:
-                    logger.error(
-                        f"Monitor/auto-sell step failed for holding {h}: {exc}"
-                    )
+            alert_data = alert_processing.collect_holdings_alert_data(
+                parsed_holdings,
+                threshold=threshold,
+                ignored_tickers=IGNORE_TICKERS_SET,
+                is_broker_ignored=is_broker_ignored,
+                is_tracked_reverse_split=is_tracked_reverse_split,
+                record_action_today=try_record_action_today,
+                areb_ticker=AREB_TICKER,
+                areb_quantity_threshold=AREB_QUANTITY_THRESHOLD,
+                auto_sell=AUTO_SELL_LIVE,
+            )
+            alert_entries = alert_data["alert_entries"]
+            sell_commands = alert_data["sell_commands"]
+            areb_alerts = alert_data["areb_alerts"]
+            reverse_split_round_ups_found = alert_data[
+                "reverse_split_round_ups_found"
+            ]
+            for broker, ticker, price in alert_data["one_share_positions"]:
+                record_one_share_position(broker, ticker, price)
 
             if areb_alerts:
                 mention = _mention_prefix(force=True)
@@ -1086,7 +963,8 @@ async def handle_secondary_channel(bot, message):
 
     try:
         logger.info(f"Policy resolution for {url}")
-        policy_info = OnMessagePolicyResolver.full_analysis(
+        policy_info = await asyncio.to_thread(
+            OnMessagePolicyResolver.full_analysis,
             url,
             ticker_hint=ticker,
             fallback_text=message.content,
@@ -1177,115 +1055,48 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
         exec_time = next_market_open(now)
         logger.info("Market closed – scheduling next market open")
 
-    # Prepare scheduling details and enqueue
+    # Prepare order configuration; the service returns plain order specs.
     from utils.config_utils import load_autobuy_config
 
     config = load_autobuy_config()
-    standard_order = config.get("standard_order") or {}
-    overrides = [
-        item
-        for item in (config.get("overrides") or [])
-        if isinstance(item, dict)
-    ]
-
-    excluded_brokers = []
-    for item in overrides:
-        broker_name = (item.get("broker") or "").strip()
-        if broker_name:
-            excluded_brokers.append(broker_name)
-
-    broker_parts = ["all"]
-    if excluded_brokers:
-        broker_parts.append("not")
-        broker_parts.extend(excluded_brokers)
-
-    standard_broker = " ".join(broker_parts)
-    standard_quantity = standard_order.get("quantity")
-    if standard_quantity in (None, ""):
-        standard_quantity = quantity
-
-    standard_order_id = str(uuid.uuid4())
-    bot.loop.create_task(
-        schedule_and_execute(
-            ctx=target_channel,
-            action="buy",
-            ticker=ticker,
-            quantity=standard_quantity,
-            broker=standard_broker,
-            execution_time=exec_time,
-            bot=bot,
-            order_id=standard_order_id,
-        )
+    orders_to_schedule = order_orchestration.build_autobuy_orders(
+        ticker, quantity, config
     )
-
-    confirmation = (
-        f"Scheduled autobuy: {ticker.upper()} x{standard_quantity} at "
-        f"{exec_time.strftime('%Y-%m-%d %H:%M')} ({standard_order_id})"
-    )
-    if excluded_brokers:
-        confirmation += f" [excluded: {', '.join(excluded_brokers)}]"
-    await target_channel.send(confirmation)
-    logger.info(confirmation)
-
-    for item in overrides:
-        broker_name = (item.get("broker") or "").strip()
-        if not broker_name:
-            continue
-        override_quantity = item.get("quantity")
-        if override_quantity in (None, ""):
-            override_quantity = quantity
-        override_order_id = str(uuid.uuid4())
+    for order in orders_to_schedule:
+        order_id = str(uuid.uuid4())
         bot.loop.create_task(
             schedule_and_execute(
                 ctx=target_channel,
                 action="buy",
-                ticker=ticker,
-                quantity=override_quantity,
-                broker=broker_name,
+                ticker=order["ticker"],
+                quantity=order["quantity"],
+                broker=order["broker"],
                 execution_time=exec_time,
                 bot=bot,
-                order_id=override_order_id,
+                order_id=order_id,
             )
         )
-        override_confirmation = (
-            f"Scheduled autobuy override: {ticker.upper()} x{override_quantity} "
-            f"{broker_name} at {exec_time.strftime('%Y-%m-%d %H:%M')} ({override_order_id})"
-        )
-        await target_channel.send(override_confirmation)
-        logger.info(override_confirmation)
+        if order["kind"] == "standard":
+            confirmation = (
+                f"Scheduled autobuy: {order['ticker'].upper()} x{order['quantity']} at "
+                f"{exec_time.strftime('%Y-%m-%d %H:%M')} ({order_id})"
+            )
+        else:
+            confirmation = (
+                f"Scheduled autobuy override: {order['ticker'].upper()} x{order['quantity']} "
+                f"{order['broker']} at {exec_time.strftime('%Y-%m-%d %H:%M')} "
+                f"({order_id})"
+            )
+        if order["excluded_brokers"]:
+            confirmation += (
+                f" [excluded: {', '.join(order['excluded_brokers'])}]"
+            )
+        await target_channel.send(confirmation)
+        logger.info(confirmation)
 
 
 def build_policy_summary(ticker, policy_info, fallback_url):
-    summary = f"**Reverse Split Alert** for `{ticker}`\n"
-    summary += f"[NASDAQ Notice]({policy_info.get('nasdaq_url', fallback_url)})\n"
-
-    if policy_info.get("press_url"):
-        summary += f"[Press Release]({policy_info['press_url']})\n"
-    if policy_info.get("sec_url"):
-        summary += f"[SEC Filing]({policy_info['sec_url']})\n"
-
-    llm_details = policy_info.get("llm_details") or {}
-    effective_date = llm_details.get("effective_date") or policy_info.get(
-        "effective_date"
-    )
-    if effective_date:
-        summary += f"**Effective Date:** {effective_date}\n"
-
-    split_ratio = llm_details.get("split_ratio") or policy_info.get("split_ratio")
-    if split_ratio:
-        summary += f"**Split Ratio:** {split_ratio}\n"
-
-    llm_policy = llm_details.get("fractional_share_policy") or policy_info.get(
-        "fractional_share_policy"
-    )
-    if llm_policy:
-        summary += f"**Fractional Share Policy (LLM):** {llm_policy}"
-
-    snippet = policy_info.get("snippet")
-    if snippet:
-        summary += f"\n> {snippet}"
-
-    return summary
+    return alert_processing.build_policy_summary(ticker, policy_info, fallback_url)
 
 
 async def post_policy_summary(bot, ticker, summary):
@@ -1347,22 +1158,16 @@ def _resolve_alert_channel(bot, ticker):
 
 class OnMessagePolicyResolver:
     """Wrapper around :class:`utils.policy_resolver.SplitPolicyResolver`."""
-
-    resolver = PolicyResolver()
+    resolver = policy_analysis_service.resolver
 
     @classmethod
     def full_analysis(cls, nasdaq_url, ticker_hint=None, fallback_text=None):
         """Perform complete policy analysis for a NASDAQ notice URL."""
-        try:
-            logger.info(f"Starting full_analysis for: {nasdaq_url}")
-            return cls.resolver.full_analysis(
-                nasdaq_url,
-                ticker_hint=ticker_hint,
-                fallback_text=fallback_text,
-            )
-        except Exception as e:
-            logger.error(f"Critical failure during full_analysis: {e}")
-            return None
+        return policy_analysis_service.full_analysis(
+            nasdaq_url,
+            ticker_hint=ticker_hint,
+            fallback_text=fallback_text,
+        )
 
 
 # -------------------------

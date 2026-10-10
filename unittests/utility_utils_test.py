@@ -5,6 +5,34 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import utility_utils
+from rsassistant.persistence import orders as order_repository
+
+
+def _sql_row(row):
+    return {
+        "broker": row["Broker Name"].strip(),
+        "broker_number": row["Broker Number"].strip(),
+        "account_number": row["Account Number"].strip(),
+        "ticker": row["Stock"].strip().lstrip("$").upper(),
+        "quantity": float(row["Quantity"]), "price": float(row["Price"]),
+        "position_value": float(row["Quantity"]) * float(row["Price"]),
+        "account_total": float(row["Account Total"]),
+        "observed_at": row["Timestamp"],
+    }
+
+
+def test_get_order_details_uses_sql_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(order_repository, "DATABASE_PATH", tmp_path / "orders.db")
+    monkeypatch.setattr(order_repository, "ORDERS_LOG_CSV", tmp_path / "missing.csv")
+    order_repository.insert_order_history({
+        "order_id": "detail-1", "Broker Name": "Fidelity", "Broker Number": "1",
+        "Account Number": "12345678", "Order Type": "Sell", "Stock": "ABC",
+        "Quantity": 3, "Price": 4, "Date": "2026-10-01",
+        "Timestamp": "2026-10-01 10:00:00",
+    })
+    assert utility_utils.get_order_details("Fidelity", "5678", "abc") == (
+        "Sell 3.0 ABC 2026-10-01"
+    )
 
 
 def test_aggregate_owner_totals(monkeypatch):
@@ -50,6 +78,7 @@ def test_track_ticker_summary_marks_broker_with_position(tmp_path, monkeypatch):
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerow(holdings_row)
+    monkeypatch.setattr(utility_utils, "get_current_holdings", lambda: [_sql_row(holdings_row)])
 
     mapping = {"TestBroker": {"1": {"1234": "Alpha"}}}
 
@@ -129,6 +158,7 @@ def test_track_ticker_summary_does_not_overwrite_positive_match(
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+    monkeypatch.setattr(utility_utils, "get_current_holdings", lambda: [_sql_row(r) for r in rows])
 
     mapping = {"TestBroker": {"1": {"1234": "Alpha"}}}
 
@@ -193,6 +223,7 @@ def test_track_ticker_summary_normalizes_ticker_and_broker_name(tmp_path, monkey
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerow(holdings_row)
+    monkeypatch.setattr(utility_utils, "get_current_holdings", lambda: [_sql_row(holdings_row)])
 
     mapping = {"TestBroker": {"1": {"1234": "Alpha"}}}
 
@@ -259,6 +290,7 @@ def test_track_ticker_summary_matches_importer_ids_to_configured_accounts(
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+    monkeypatch.setattr(utility_utils, "get_current_holdings", lambda: [_sql_row(r) for r in rows])
 
     mapping = {
         "Fidelity": {

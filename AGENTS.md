@@ -168,7 +168,7 @@ For new work, avoid multiple authoritative stores for the same domain.
 - `config/`: single source for settings and `.env` templates.
 - `docs/`: operator and architecture documentation.
 - `unittests/`: unit tests grouped by feature (pattern `*_test.py`).
-- `volumes/`: docker-mounted db/excel/logs data (never commit).
+- `volumes/`: Docker-mounted db/logs data (never commit).
 - Docker: `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`.
 
 ## Build, Test, and Dev Commands

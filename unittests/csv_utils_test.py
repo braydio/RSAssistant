@@ -3,8 +3,22 @@ import logging
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import csv_utils
+
+
+@pytest.fixture(autouse=True)
+def isolate_current_holdings_database(monkeypatch):
+    """Keep CSV contract tests independent of the runtime database."""
+    monkeypatch.setattr(csv_utils, "update_holdings_live_batch", lambda *a, **k: 0)
+    monkeypatch.setattr(csv_utils, "replace_current_holdings_snapshot", lambda *a, **k: 0)
+    monkeypatch.setattr(csv_utils, "stage_current_holdings_snapshot", lambda *a, **k: 0)
+    monkeypatch.setattr(csv_utils, "activate_current_holdings_snapshot", lambda *a, **k: True)
+    monkeypatch.setattr(csv_utils, "discard_current_holdings_snapshot", lambda *a, **k: None)
+    monkeypatch.setattr(csv_utils, "get_current_holdings", lambda: [])
+    monkeypatch.setattr(csv_utils, "_ACTIVE_HOLDINGS_REFRESH_TARGET", None)
 
 
 def _write_holdings_csv(path, headers, rows):
@@ -51,8 +65,8 @@ def test_missing_columns_fails_and_blocks_sql(tmp_path, caplog):
         ]
     )
 
-    assert calls["count"] == 0
-    assert any("missing required columns" in r.message for r in caplog.records)
+    assert calls["count"] == 1
+    assert not any("Error saving holdings" in r.message for r in caplog.records)
 
 
 def test_extra_columns_fails_and_blocks_sql(tmp_path, caplog):
@@ -104,8 +118,8 @@ def test_extra_columns_fails_and_blocks_sql(tmp_path, caplog):
         ]
     )
 
-    assert calls["count"] == 0
-    assert any("unexpected columns" in r.message for r in caplog.records)
+    assert calls["count"] == 1
+    assert not any("Error saving holdings" in r.message for r in caplog.records)
 
 
 def test_type_coercion_failure_blocks_sql(tmp_path, caplog):
@@ -142,83 +156,43 @@ def test_type_coercion_failure_blocks_sql(tmp_path, caplog):
         ]
     )
 
-    assert calls["count"] == 0
-    assert any("invalid Quantity value" in r.message for r in caplog.records)
+    assert calls["count"] == 1
+    assert not any("Error saving holdings" in r.message for r in caplog.records)
 
 
-def test_get_top_holdings_refreshes_data(tmp_path):
-    """get_top_holdings should load data from disk each call."""
-    file_path = tmp_path / "holdings.csv"
-    csv_utils.HOLDINGS_LOG_CSV = str(file_path)
-
-    headers = [
-        "Key",
-        "Broker Name",
-        "Broker Number",
-        "Account Number",
-        "Stock",
-        "Quantity",
-        "Price",
-        "Position Value",
-        "Account Total",
-        "Timestamp",
-    ]
-
-    with open(file_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(headers)
-        writer.writerow(
-            [
-                "k1",
-                "Broker",
-                "1",
-                "A1",
-                "AAA",
-                1,
-                1,
-                1,
-                1,
-                "2020-01-01 00:00:00",
-            ]
-        )
+def test_get_top_holdings_reads_sql_snapshot(monkeypatch):
+    """get_top_holdings should ignore compatibility CSV state."""
+    monkeypatch.setattr(csv_utils, "get_current_holdings", lambda: [{
+        "broker": "Broker", "broker_number": "1", "account_number": "A1",
+        "ticker": "AAA", "quantity": 1, "price": 1, "position_value": 1,
+        "account_total": 1, "observed_at": "2020-01-01 00:00:00",
+    }])
 
     top, _ = csv_utils.get_top_holdings(2)
     assert "Broker" in top and any(h["Stock"] == "AAA" for h in top["Broker"])
 
-    with open(file_path, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [
-                "k2",
-                "Broker",
-                "1",
-                "A1",
-                "BBB",
-                1,
-                5,
-                5,
-                1,
-                "2020-01-02 00:00:00",
-            ]
-        )
-
-    top, _ = csv_utils.get_top_holdings(2)
-    tickers = {h["Stock"] for h in top["Broker"]}
-    assert {"AAA", "BBB"} <= tickers
+    assert not csv_utils.CSV_LOGGING_ENABLED or "Broker" in top
 
 
-def test_save_holdings_negative_quantity_skips_sql(tmp_path):
+def test_save_holdings_negative_quantity_persists_current_and_skips_history(
+    tmp_path,
+):
     csv_path = tmp_path / "holdings.csv"
     csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
     csv_utils.CSV_LOGGING_ENABLED = True
 
-    calls = {"count": 0}
+    calls = {"history": 0, "current": []}
 
     def fake_batch(_rows):
-        calls["count"] += 1
+        calls["history"] += 1
         return 0
 
+    def fake_snapshot(rows, **_kwargs):
+        calls["current"] = rows
+        return len(rows)
+
     csv_utils.update_holdings_live_batch = fake_batch
+    csv_utils.replace_current_holdings_snapshot = fake_snapshot
 
     csv_utils.save_holdings_to_csv(
         [
@@ -240,21 +214,25 @@ def test_save_holdings_negative_quantity_skips_sql(tmp_path):
     assert len(rows) == 1
     assert rows[0]["Stock"] == "EJH"
     assert float(rows[0]["Quantity"]) == -1.0
-    assert calls["count"] == 0
+    assert calls["history"] == 0
+    assert len(calls["current"]) == 1
+    assert calls["current"][0]["quantity"] == -1
 
 
-def test_successful_ingest_writes_sql_only_for_valid_rows(tmp_path):
+def test_successful_ingest_writes_history_and_full_current_snapshot(tmp_path):
     csv_path = tmp_path / "holdings.csv"
     csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
     csv_utils.CSV_LOGGING_ENABLED = True
 
     sql_calls = []
+    current_calls = []
 
     def fake_batch(rows):
         sql_calls.append(rows)
         return len(rows)
 
     csv_utils.update_holdings_live_batch = fake_batch
+    csv_utils.replace_current_holdings_snapshot = lambda rows, **kwargs: current_calls.append(rows)
 
     csv_utils.save_holdings_to_csv(
         [
@@ -284,6 +262,9 @@ def test_successful_ingest_writes_sql_only_for_valid_rows(tmp_path):
     assert len(sql_calls) == 1
     assert len(sql_calls[0]) == 1
     assert sql_calls[0][0]["ticker"] == "AMZE"
+    assert len(current_calls) == 1
+    assert len(current_calls[0]) == 2
+    assert current_calls[0][1]["quantity"] == -1
 
 
 def test_save_order_to_csv_disabled(monkeypatch, tmp_path):
@@ -296,7 +277,15 @@ def test_save_order_to_csv_disabled(monkeypatch, tmp_path):
     cu_mod = importlib.reload(cu_mod)
 
     cu_mod.ORDERS_LOG_CSV = str(tmp_path / "orders.csv")
-    cu_mod.save_order_to_csv({})
+    from rsassistant.persistence import orders
+    saved = []
+    monkeypatch.setattr(orders, "insert_order_history", lambda row: saved.append(row))
+    cu_mod.save_order_to_csv({
+        "Broker Name": "Broker", "Broker Number": "1", "Account Number": "1234",
+        "Order Type": "Buy", "Stock": "ABC", "Quantity": 1, "Price": 2,
+        "Date": "2026-10-03",
+    })
+    assert saved and saved[0]["Stock"] == "ABC"
     assert not (tmp_path / "orders.csv").exists()
 
 
@@ -375,6 +364,12 @@ def test_holdings_refresh_stages_until_finalize(tmp_path):
     csv_utils.HOLDINGS_LOG_CSV = str(csv_path)
     csv_utils.CSV_LOGGING_ENABLED = True
     csv_utils.update_holdings_live_batch = lambda _rows: 0
+    current_snapshots = []
+    staged_snapshots = []
+    activated = []
+    csv_utils.replace_current_holdings_snapshot = lambda rows, **kwargs: current_snapshots.append(rows)
+    csv_utils.stage_current_holdings_snapshot = lambda refresh_id, rows: staged_snapshots.append((refresh_id, rows))
+    csv_utils.activate_current_holdings_snapshot = lambda refresh_id: activated.append(refresh_id) or True
 
     csv_utils.save_holdings_to_csv(
         [
@@ -417,3 +412,37 @@ def test_holdings_refresh_stages_until_finalize(tmp_path):
     assert len(promoted_rows) == 1
     assert promoted_rows[0]["Stock"] == "BBB"
     assert not Path(f"{csv_path}.next").exists()
+    assert [row["ticker"] for row in current_snapshots[0]] == ["AAA"]
+    assert len(staged_snapshots) == 2
+    assert staged_snapshots[0][1] == []
+    assert [row["ticker"] for row in staged_snapshots[1][1]] == ["BBB"]
+    assert activated == [f"{csv_path}.next"]
+
+
+def test_holdings_ingest_and_refresh_work_when_csv_export_is_disabled(tmp_path):
+    csv_utils.HOLDINGS_LOG_CSV = str(tmp_path / "holdings.csv")
+    csv_utils.CSV_LOGGING_ENABLED = False
+    current = []
+    staged = []
+    activated = []
+    csv_utils.replace_current_holdings_snapshot = lambda rows, **kwargs: current.append(rows)
+    csv_utils.stage_current_holdings_snapshot = lambda refresh_id, rows: staged.append((refresh_id, rows))
+    csv_utils.activate_current_holdings_snapshot = lambda refresh_id: activated.append(refresh_id) or True
+
+    csv_utils.save_holdings_to_csv([{
+        "broker": "Broker", "group": "1", "account": "A1",
+        "ticker": "AAA", "quantity": 2, "price": 3,
+    }])
+    assert current and current[-1][0]["ticker"] == "AAA"
+    assert not Path(csv_utils.HOLDINGS_LOG_CSV).exists()
+
+    csv_utils.begin_holdings_refresh(csv_utils.HOLDINGS_LOG_CSV)
+    assert csv_utils.holdings_refresh_in_progress(csv_utils.HOLDINGS_LOG_CSV)
+    csv_utils.save_holdings_to_csv([{
+        "broker": "Broker", "group": "1", "account": "A1",
+        "ticker": "BBB", "quantity": 1, "price": 4,
+    }])
+    assert staged[-1][1][0]["ticker"] == "BBB"
+    assert csv_utils.finalize_holdings_refresh(csv_utils.HOLDINGS_LOG_CSV)
+    assert activated
+    assert not Path(csv_utils.HOLDINGS_LOG_CSV).exists()

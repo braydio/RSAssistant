@@ -21,7 +21,7 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     load_account_mappings,
 )
-from utils.sql_utils import insert_order_history
+from rsassistant.persistence.orders import insert_order_event as insert_order_history
 from utils.utility_utils import debug_order_data
 from utils.price_fetcher import get_last_stock_price
 

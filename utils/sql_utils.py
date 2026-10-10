@@ -1,1346 +1,196 @@
-import json
+"""Compatibility facade for SQL persistence APIs.
+
+Domain implementations live under :mod:`rsassistant.persistence`. New code
+should import repositories directly; this module preserves older import paths
+and patchable database/config constants for existing callers and tests.
+"""
+
+from __future__ import annotations
+
 import logging
-import os
-import sqlite3
-import uuid
-from datetime import datetime, timedelta
-from typing import Any
+from functools import wraps
 
-from utils.db import connect_database, run_migrations
-
+from rsassistant.persistence import accounts, admin, holdings, orders, reverse_splits, watchlists
+from rsassistant.persistence.db import connect_runtime_db
+from rsassistant.persistence.schema import run_migrations
 from utils.config_utils import (
     ACCOUNT_MAPPING,
+    CSV_LOGGING_ENABLED,
     SELL_FILE,
     SQL_DATABASE,
-    get_account_nickname_or_default,
     SQL_LOGGING_ENABLED,
     WATCH_FILE,
 )
 
 logger = logging.getLogger(__name__)
 
-SQL_DATABASE = SQL_DATABASE  # config.get("paths", {}).get("database", "volumes/db/reverse_splits.db")
 
-
-# Database connection helper
 def get_db_connection():
-    """Return a database connection when SQL logging is enabled."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.debug("SQL logging disabled; database connection not created.")
-        raise RuntimeError("SQL logging disabled")
-
-    logger.debug("Attempting to establish a database connection.")
-    try:
-        conn = connect_database(SQL_DATABASE)
-        logger.debug("Database connection established successfully.")
-        return conn
-    except sqlite3.Error as e:
-        logger.error(f"Error establishing database connection: {e}")
-        raise
+    """Return a connection to the configured runtime database."""
+    return connect_runtime_db(SQL_DATABASE)
 
 
-def get_or_create_account_id(
-    broker, broker_number, account_number, account_nickname=None
+def _database_compat(function, *, paths=False):
+    """Adapt legacy calls to repositories while honoring patched DB settings."""
+    @wraps(function)
+    def call(*args, **kwargs):
+        kwargs.setdefault("database", SQL_DATABASE)
+        if paths:
+            kwargs.setdefault("account_mapping_path", ACCOUNT_MAPPING)
+            kwargs.setdefault("watch_file_path", WATCH_FILE)
+            kwargs.setdefault("sell_file_path", SELL_FILE)
+        return function(*args, **kwargs)
+
+    return call
+
+
+for _name in (
+    "get_or_create_account_id",
+    "upsert_account_mapping",
+    "sync_account_mappings",
+    "clear_account_nicknames",
+    "fetch_account_mappings",
+    "fetch_account_nickname",
+    "fetch_account_labels",
+    "resolve_account_id",
+    "has_account_mappings",
 ):
-    """
-    Retrieve or create an account entry.
-
-    Returns ``None`` when SQL logging is disabled. If ``account_nickname``
-    is ``None`` the nickname is resolved using
-    :func:`utils.config_utils.get_account_nickname_or_default`.
-    """
-    logger.info(
-        f"Fetching or creating account ID for broker: {broker}, broker_number: {broker_number}, account_number: {account_number}."
-    )
-
-    if not SQL_LOGGING_ENABLED:
-        logger.debug("SQL logging disabled; skipping account lookup.")
-        return None
-
-    nickname_was_explicit = account_nickname is not None
-    if account_nickname is None:
-        account_nickname = get_account_nickname_or_default(
-            broker, broker_number, account_number
-        )
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                INSERT INTO Accounts (broker, account_number, broker_number, account_nickname)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(broker, broker_number, account_number) DO NOTHING
-                RETURNING account_id
-                """,
-                (broker, account_number, broker_number, account_nickname),
-            )
-            row = cursor.fetchone()
-            if row:
-                account_id = int(row[0])
-            else:
-                cursor.execute(
-                    """SELECT account_id FROM Accounts
-                       WHERE broker=? AND broker_number=? AND account_number=?""",
-                    (broker, broker_number, account_number),
-                )
-                account_id = int(cursor.fetchone()[0])
-                if nickname_was_explicit:
-                    cursor.execute(
-                        """UPDATE Accounts SET account_nickname=?,
-                               updated_at=DATETIME('now') WHERE account_id=?""",
-                        (account_nickname, account_id),
-                    )
-            logger.debug("Resolved account ID: %s.", account_id)
-            return account_id
-        except sqlite3.Error as e:
-            logger.error(f"Error retrieving or creating account_id: {e}")
-            raise
-
-
-def upsert_account_mapping(
-    broker: str, broker_number: str, account_number: str, account_nickname: str
-) -> bool:
-    """Insert or update account nickname mappings in SQL storage.
-
-    Args:
-        broker: Broker name for the account.
-        broker_number: Broker group identifier.
-        account_number: Account identifier.
-        account_nickname: Friendly nickname to store.
-
-    Returns:
-        ``True`` when SQL storage was updated, ``False`` when SQL logging is
-        disabled.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account mapping not stored.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO Accounts (
-                broker, broker_number, account_number, account_nickname
-            ) VALUES (?, ?, ?, ?)
-            ON CONFLICT(broker, broker_number, account_number) DO UPDATE SET
-                account_nickname = excluded.account_nickname,
-                updated_at = DATETIME('now')
-            """,
-            (broker, broker_number, account_number, account_nickname),
-        )
-        conn.commit()
-        logger.info(
-            "Upserted SQL account nickname for %s/%s/%s.",
-            broker,
-            broker_number,
-            account_number,
-        )
-        return True
-
-
-def sync_account_mappings(mappings: dict) -> dict[str, int]:
-    """Synchronize a JSON mapping dictionary into SQL storage.
-
-    Args:
-        mappings: Nested broker/group/account mapping structure.
-
-    Returns:
-        Dictionary with ``added`` and ``updated`` counts.
-    """
-
-    results = {"added": 0, "updated": 0}
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account mapping sync skipped.")
-        return results
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        for broker, broker_groups in mappings.items():
-            for broker_number, accounts in broker_groups.items():
-                for account_number, nickname in accounts.items():
-                    cursor.execute(
-                        """
-                        SELECT account_nickname
-                        FROM Accounts
-                        WHERE broker = ? AND broker_number = ? AND account_number = ?
-                        """,
-                        (broker, broker_number, account_number),
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        if row[0] != nickname:
-                            cursor.execute(
-                                """
-                                UPDATE Accounts
-                                SET account_nickname = ?, updated_at = DATETIME('now')
-                                WHERE broker = ? AND broker_number = ? AND account_number = ?
-                                """,
-                                (nickname, broker, broker_number, account_number),
-                            )
-                            results["updated"] += 1
-                    else:
-                        cursor.execute(
-                            """
-                            INSERT INTO Accounts (
-                                broker, broker_number, account_number, account_nickname
-                            ) VALUES (?, ?, ?, ?)
-                            """,
-                            (broker, broker_number, account_number, nickname),
-                        )
-                        results["added"] += 1
-
-        conn.commit()
-
-    logger.info(
-        "Synced account mappings to SQL. Added=%s Updated=%s",
-        results["added"],
-        results["updated"],
-    )
-    return results
-
-
-def clear_account_nicknames() -> int:
-    """Clear stored account nicknames from SQL storage.
-
-    Returns:
-        Number of rows updated.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account nickname clear skipped.")
-        return 0
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE Accounts SET account_nickname = NULL")
-        cleared = cursor.rowcount
-        conn.commit()
-        logger.info("Cleared account nicknames in SQL storage.")
-        return cleared
-
-
-def fetch_account_mappings() -> dict[str, dict[str, dict[str, str]]]:
-    """Return account mappings stored in SQL.
-
-    Returns:
-        Nested mapping ``{broker: {broker_number: {account_number: nickname}}}``.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; returning empty account mappings.")
-        return {}
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT broker, broker_number, account_number, account_nickname
-                FROM Accounts
-                WHERE account_nickname IS NOT NULL
-                ORDER BY broker, broker_number, account_number
-                """
-            )
-            rows = cursor.fetchall()
-        except sqlite3.Error as exc:
-            logger.error("Failed reading account mappings: %s", exc)
-            return {}
-
-    mappings: dict[str, dict[str, dict[str, str]]] = {}
-    for broker, broker_number, account_number, nickname in rows:
-        if nickname is None:
-            continue
-        mappings.setdefault(broker, {}).setdefault(str(broker_number), {})[
-            str(account_number)
-        ] = nickname
-
-    return mappings
-
-
-def fetch_account_nickname(
-    broker: str, broker_number: str, account_number: str
-) -> str | None:
-    """Return the nickname for an account from SQL."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account nickname lookup skipped.")
-        return None
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT account_nickname
-                FROM Accounts
-                WHERE broker = ? AND broker_number = ? AND account_number = ?
-                """,
-                (broker, broker_number, account_number),
-            )
-            row = cursor.fetchone()
-        except sqlite3.Error as exc:
-            logger.error("Failed reading account nickname: %s", exc)
-            return None
-    return row[0] if row else None
-
-
-def fetch_account_labels() -> list[dict[str, str]]:
-    """Return account IDs and nicknames from the Accounts table."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; account label lookup skipped.")
-        return []
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT account_id, account_nickname
-                FROM Accounts
-                WHERE account_nickname IS NOT NULL
-                """
-            )
-            rows = cursor.fetchall()
-        except sqlite3.Error as exc:
-            logger.error("Failed reading account labels: %s", exc)
-            return []
-
-    return [
-        {"account_id": row[0], "account_nickname": row[1]} for row in rows if row[1]
-    ]
-
-
-def resolve_account_id(account_input: str) -> int | None:
-    """Resolve a numeric account ID or nickname to one integer account ID."""
-
-    for entry in fetch_account_labels():
-        if account_input.isdigit() and str(entry["account_id"]) == account_input:
-            return int(entry["account_id"])
-        if entry["account_nickname"].lower() == account_input.lower():
-            return int(entry["account_id"])
-    return None
-
-
-def has_account_mappings() -> bool:
-    """Return ``True`` when SQL has at least one account mapping row."""
-
-    if not SQL_LOGGING_ENABLED:
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "SELECT COUNT(1) FROM Accounts WHERE account_nickname IS NOT NULL"
-            )
-            count = cursor.fetchone()[0]
-        except sqlite3.Error as exc:
-            logger.error("Failed checking account mappings: %s", exc)
-            return False
-    return count > 0
-
-
-def _parse_metadata(metadata: str | None) -> dict:
-    if not metadata:
-        return {}
-    try:
-        return json.loads(metadata)
-    except json.JSONDecodeError:
-        logger.warning("Failed to parse metadata JSON; returning empty dict.")
-        return {}
-
-
-def _serialize_metadata(metadata: dict | None) -> str:
-    return json.dumps(metadata or {}, ensure_ascii=False)
-
-
-def fetch_watchlist_entries() -> dict[str, dict[str, str]]:
-    """Return watchlist entries keyed by ticker."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist lookup skipped.")
-        return {}
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT ticker, split_date, split_ratio, metadata
-                FROM watchlist
-                ORDER BY ticker
-                """
-            )
-            rows = cursor.fetchall()
-        except sqlite3.Error as exc:
-            logger.error("Failed reading watchlist: %s", exc)
-            return {}
-
-    watchlist: dict[str, dict[str, str]] = {}
-    for ticker, split_date, split_ratio, metadata in rows:
-        entry = {
-            "split_date": split_date,
-            "split_ratio": split_ratio or "N/A",
-        }
-        entry.update(_parse_metadata(metadata))
-        watchlist[ticker.upper()] = entry
-
-    return watchlist
-
-
-def upsert_watchlist_entry(
-    ticker: str,
-    split_date: str,
-    split_ratio: str,
-    metadata: dict | None = None,
-) -> bool:
-    """Insert or update a watchlist entry."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist upsert skipped.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO watchlist (
-                ticker,
-                split_date,
-                split_ratio,
-                metadata,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
-            ON CONFLICT(ticker)
-            DO UPDATE SET
-                split_date = excluded.split_date,
-                split_ratio = excluded.split_ratio,
-                metadata = excluded.metadata,
-                updated_at = DATETIME('now')
-            """,
-            (ticker.upper(), split_date, split_ratio, _serialize_metadata(metadata)),
-        )
-        conn.commit()
-    return True
-
-
-def delete_watchlist_entry(ticker: str) -> bool:
-    """Remove a watchlist entry by ticker."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist delete skipped.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker.upper(),))
-        conn.commit()
-        return cursor.rowcount > 0
-
-
-def fetch_sell_list_entries() -> dict[str, dict[str, str]]:
-    """Return sell list entries keyed by ticker."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list lookup skipped.")
-        return {}
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT ticker, split_date, split_ratio, metadata
-                FROM sell_list
-                ORDER BY ticker
-                """
-            )
-            rows = cursor.fetchall()
-        except sqlite3.Error as exc:
-            logger.error("Failed reading sell list: %s", exc)
-            return {}
-
-    sell_list: dict[str, dict[str, str]] = {}
-    for ticker, split_date, split_ratio, metadata in rows:
-        entry = _parse_metadata(metadata)
-        if split_date:
-            entry.setdefault("split_date", split_date)
-        if split_ratio:
-            entry.setdefault("split_ratio", split_ratio)
-        sell_list[ticker.upper()] = entry
-
-    return sell_list
-
-
-def upsert_sell_list_entry(
-    ticker: str,
-    split_date: str | None = None,
-    split_ratio: str | None = None,
-    metadata: dict | None = None,
-) -> bool:
-    """Insert or update a sell list entry."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list upsert skipped.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO sell_list (
-                ticker,
-                split_date,
-                split_ratio,
-                metadata,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
-            ON CONFLICT(ticker)
-            DO UPDATE SET
-                split_date = excluded.split_date,
-                split_ratio = excluded.split_ratio,
-                metadata = excluded.metadata,
-                updated_at = DATETIME('now')
-            """,
-            (ticker.upper(), split_date, split_ratio, _serialize_metadata(metadata)),
-        )
-        conn.commit()
-    return True
-
-
-def delete_sell_list_entry(ticker: str) -> bool:
-    """Remove a sell list entry by ticker."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list delete skipped.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM sell_list WHERE ticker = ?", (ticker.upper(),))
-        conn.commit()
-        return cursor.rowcount > 0
-
-
-def fetch_watchlist_entry(ticker: str) -> dict[str, str] | None:
-    """Return a single watchlist entry by ticker.
-
-    Args:
-        ticker: Symbol to fetch.
-
-    Returns:
-        Watchlist payload when present, otherwise ``None``.
-    """
-
-    return fetch_watchlist_entries().get(ticker.upper())
-
-
-def replace_watchlist_entries(entries: dict[str, dict[str, str]]) -> int:
-    """Replace the entire watchlist table with ``entries``.
-
-    Args:
-        entries: Mapping keyed by ticker containing ``split_date`` and optional
-            ``split_ratio`` plus metadata fields.
-
-    Returns:
-        Number of rows written.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; watchlist replace skipped.")
-        return 0
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM watchlist")
-        for ticker, data in entries.items():
-            payload = data if isinstance(data, dict) else {}
-            metadata = {
-                key: value
-                for key, value in payload.items()
-                if key not in {"split_date", "split_ratio"}
-            }
-            cursor.execute(
-                """
-                INSERT INTO watchlist (
-                    ticker,
-                    split_date,
-                    split_ratio,
-                    metadata,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
-                """,
-                (
-                    ticker.upper(),
-                    payload.get("split_date"),
-                    payload.get("split_ratio", "N/A"),
-                    _serialize_metadata(metadata or None),
-                ),
-            )
-        conn.commit()
-        return len(entries)
-
-
-def fetch_sell_list_entry(ticker: str) -> dict[str, str] | None:
-    """Return a single sell list entry by ticker."""
-
-    return fetch_sell_list_entries().get(ticker.upper())
-
-
-def replace_sell_list_entries(entries: dict[str, dict[str, str]]) -> int:
-    """Replace the entire sell list table with ``entries``.
-
-    Args:
-        entries: Mapping keyed by ticker that may include split metadata and
-            scheduling fields.
-
-    Returns:
-        Number of rows written.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; sell list replace skipped.")
-        return 0
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM sell_list")
-        for ticker, data in entries.items():
-            payload = data if isinstance(data, dict) else {}
-            cursor.execute(
-                """
-                INSERT INTO sell_list (
-                    ticker,
-                    split_date,
-                    split_ratio,
-                    metadata,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, DATETIME('now'), DATETIME('now'))
-                """,
-                (
-                    ticker.upper(),
-                    payload.get("split_date"),
-                    payload.get("split_ratio"),
-                    _serialize_metadata(payload),
-                ),
-            )
-        conn.commit()
-        return len(entries)
-
-
-def _load_legacy_json(path: os.PathLike) -> dict:
-    try:
-        if not os.path.exists(path):
-            return {}
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        if not isinstance(data, dict):
-            logger.warning("Legacy JSON %s is not a dict; skipping.", path)
-            return {}
-        return data
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Failed reading legacy JSON %s: %s", path, exc)
-        return {}
-
-
-def migrate_legacy_json_data(remove_legacy_files: bool = False) -> dict[str, int]:
-    """Migrate legacy JSON mappings/watchlists into SQL tables.
-
-    The migration is idempotent for populated SQL tables and only imports a
-    legacy dataset when the corresponding table is empty.
-
-    Args:
-        remove_legacy_files: When ``True``, rename successfully imported legacy
-            JSON files to ``*.migrated`` so they are no longer consumed.
-
-    Returns:
-        Mapping of migrated row counts for each dataset.
-    """
-
-    results = {"account_mappings": 0, "watchlist": 0, "sell_list": 0}
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping legacy JSON migration.")
-        return results
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute("SELECT COUNT(1) FROM account_mappings")
-            has_account_rows = cursor.fetchone()[0] > 0
-            cursor.execute("SELECT COUNT(1) FROM watchlist")
-            has_watch_rows = cursor.fetchone()[0] > 0
-            cursor.execute("SELECT COUNT(1) FROM sell_list")
-            has_sell_rows = cursor.fetchone()[0] > 0
-        except sqlite3.Error as exc:
-            logger.error("Failed checking legacy migration state: %s", exc)
-            return results
-
-    if not has_account_rows:
-        legacy_mappings = _load_legacy_json(ACCOUNT_MAPPING)
-        if legacy_mappings:
-            sync_results = sync_account_mappings(legacy_mappings)
-            results["account_mappings"] = (
-                sync_results["added"] + sync_results["updated"]
-            )
-
-    if not has_watch_rows:
-        legacy_watch = _load_legacy_json(WATCH_FILE)
-        for ticker, data in legacy_watch.items():
-            if isinstance(data, dict):
-                split_date = data.get("split_date")
-                split_ratio = data.get("split_ratio", "N/A")
-            else:
-                split_date = None
-                split_ratio = "N/A"
-            if split_date:
-                upsert_watchlist_entry(
-                    ticker=ticker,
-                    split_date=split_date,
-                    split_ratio=split_ratio,
-                    metadata=None,
-                )
-                results["watchlist"] += 1
-
-    if not has_sell_rows:
-        legacy_sell = _load_legacy_json(SELL_FILE)
-        for ticker, data in legacy_sell.items():
-            metadata = data if isinstance(data, dict) else {}
-            upsert_sell_list_entry(
-                ticker=ticker,
-                split_date=metadata.get("split_date"),
-                split_ratio=metadata.get("split_ratio"),
-                metadata=metadata,
-            )
-            results["sell_list"] += 1
-
-    if any(results.values()):
-        logger.info(
-            "Legacy JSON migration complete. account_mappings=%s watchlist=%s sell_list=%s",
-            results["account_mappings"],
-            results["watchlist"],
-            results["sell_list"],
-        )
-        if remove_legacy_files:
-            for path in (ACCOUNT_MAPPING, WATCH_FILE, SELL_FILE):
-                try:
-                    if os.path.exists(path):
-                        os.replace(path, f"{path}.migrated")
-                        logger.info("Archived legacy JSON file %s.migrated", path)
-                except OSError as exc:
-                    logger.warning(
-                        "Failed to archive legacy JSON file %s: %s", path, exc
-                    )
-    return results
+    globals()[_name] = _database_compat(getattr(accounts, _name))
+
+for _name in (
+    "fetch_watchlist_entries",
+    "upsert_watchlist_entry",
+    "delete_watchlist_entry",
+    "fetch_sell_list_entries",
+    "upsert_sell_list_entry",
+    "delete_sell_list_entry",
+    "fetch_watchlist_entry",
+    "replace_watchlist_entries",
+    "fetch_sell_list_entry",
+    "replace_sell_list_entries",
+):
+    globals()[_name] = _database_compat(getattr(watchlists, _name))
+
+migrate_legacy_json_data = _database_compat(
+    watchlists.migrate_legacy_json_data, paths=True
+)
+
+for _name in (
+    "insert_reverse_split_log_entry",
+    "fetch_reverse_split_history",
+    "insert_reverse_split_account_entry",
+    "fetch_reverse_split_account_entries",
+):
+    globals()[_name] = _database_compat(getattr(reverse_splits, _name))
+
+for _name in (
+    "update_holdings_live",
+    "update_holdings_live_batch",
+    "update_historical_holdings",
+):
+    globals()[_name] = _database_compat(getattr(holdings, _name))
 
 
 def init_db():
-    """Initialize database tables if SQL logging is enabled."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping database initialization.")
-        return
-
-    logger.info("Initializing database with required tables.")
-    with get_db_connection() as conn:
-        try:
-            run_migrations(conn)
-            logger.info("Database tables initialized successfully.")
-            migrate_legacy_json_data()
-        except sqlite3.Error as e:
-            logger.error(f"Error initializing database tables: {e}")
-            raise
+    """Initialize schemas and import configured legacy JSON data."""
+    with get_db_connection() as connection:
+        run_migrations(connection)
+    migrate_legacy_json_data()
 
 
-def insert_reverse_split_log_entry(
-    ticker: str,
-    split_ratio: str | None,
-    split_date: str,
-    source: str,
-    ingestion_timestamp: str | None = None,
-) -> bool:
-    """Insert a reverse split history entry.
-
-    Args:
-        ticker: Symbol associated with the reverse split.
-        split_ratio: Reverse split ratio when available.
-        split_date: Effective split date string.
-        source: Origin identifier for the record.
-        ingestion_timestamp: Optional ingestion timestamp override.
-
-    Returns:
-        ``True`` when the row is inserted, otherwise ``False`` if SQL logging
-        is disabled.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; reverse split log insert skipped.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        if ingestion_timestamp:
-            cursor.execute(
-                """
-                INSERT INTO ReverseSplitLog (
-                    ticker,
-                    split_ratio,
-                    split_date,
-                    ingestion_timestamp,
-                    source
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (ticker.upper(), split_ratio, split_date, ingestion_timestamp, source),
-            )
-        else:
-            cursor.execute(
-                """
-                INSERT INTO ReverseSplitLog (
-                    ticker,
-                    split_ratio,
-                    split_date,
-                    source
-                ) VALUES (?, ?, ?, ?)
-                """,
-                (ticker.upper(), split_ratio, split_date, source),
-            )
-        conn.commit()
-    return True
+def replace_current_holdings_snapshot(holdings_rows, *, source="holdings_snapshot"):
+    return holdings.replace_current_holdings(
+        holdings_rows, source=source, database=SQL_DATABASE
+    )
 
 
-def fetch_reverse_split_history(ticker: str) -> list[dict[str, str | None]]:
-    """Return reverse split history entries for a ticker.
-
-    Args:
-        ticker: Symbol to query.
-
-    Returns:
-        List of reverse split history rows ordered by newest ingestion
-        timestamp first.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; reverse split history lookup skipped.")
-        return []
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT ticker, split_ratio, split_date, ingestion_timestamp, source
-            FROM ReverseSplitLog
-            WHERE ticker = ?
-            ORDER BY ingestion_timestamp DESC
-            """,
-            (ticker.upper(),),
-        )
-        rows = cursor.fetchall()
-
-    return [
-        {
-            "ticker": row[0],
-            "split_ratio": row[1],
-            "split_date": row[2],
-            "ingestion_timestamp": row[3],
-            "source": row[4],
-        }
-        for row in rows
-    ]
-
-
-def insert_reverse_split_account_entry(
-    account_id: int,
-    ticker: str,
-    entry_type: str,
-    price: float,
-    source: str,
-    timestamp: str | None = None,
-) -> bool:
-    """Insert an append-only account-level reverse split entry.
-
-    Args:
-        account_id: Internal account identifier.
-        ticker: Symbol associated with the entry.
-        entry_type: Entry classification (for example ``cost`` or ``proceeds``).
-        price: Price value to persist.
-        source: Origin identifier for traceability.
-        timestamp: Optional timestamp override.
-
-    Returns:
-        ``True`` when inserted, otherwise ``False`` when SQL logging is
-        disabled.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning("SQL logging disabled; reverse split account insert skipped.")
-        return False
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        if timestamp:
-            cursor.execute(
-                """
-                INSERT INTO ReverseSplitAccountEntries (
-                    account_id,
-                    ticker,
-                    entry_type,
-                    price,
-                    timestamp,
-                    source
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (account_id, ticker.upper(), entry_type, price, timestamp, source),
-            )
-        else:
-            cursor.execute(
-                """
-                INSERT INTO ReverseSplitAccountEntries (
-                    account_id,
-                    ticker,
-                    entry_type,
-                    price,
-                    source
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (account_id, ticker.upper(), entry_type, price, source),
-            )
-        conn.commit()
-    return True
-
-
-def fetch_reverse_split_account_entries(
-    account_id: int, ticker: str
-) -> list[dict[str, Any]]:
-    """Return account-level reverse split entries for an account+ticker pair."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.warning(
-            "SQL logging disabled; reverse split account entry lookup skipped."
-        )
-        return []
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT account_id, ticker, entry_type, price, timestamp, source
-            FROM ReverseSplitAccountEntries
-            WHERE account_id = ? AND ticker = ?
-            ORDER BY timestamp DESC, entry_id DESC
-            """,
-            (account_id, ticker.upper()),
-        )
-        rows = cursor.fetchall()
-
-    return [
-        {
-            "account_id": row[0],
-            "ticker": row[1],
-            "entry_type": row[2],
-            "price": row[3],
-            "timestamp": row[4],
-            "source": row[5],
-        }
-        for row in rows
-    ]
-
-
-def update_holdings_live(
-    broker, broker_number, account_number, ticker, quantity, price
+def stage_current_holdings_snapshot(
+    refresh_id, holdings_rows, *, source="holdings_refresh"
 ):
-    """Insert a holding into ``HoldingsLive`` when logging is enabled."""
-
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping holdings update.")
-        return
-
-    logger.info(
-        f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}."
-    )
-    account_id = get_or_create_account_id(broker, broker_number, account_number)
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
-                VALUES (?, ?, ?, ?, DATETIME('now'))
-                """,
-                (account_id, ticker, quantity, price),
-            )
-
-            logger.info(
-                f"Holdings updated successfully for ticker {ticker}, account {account_id}."
-            )
-        except sqlite3.Error as e:
-            logger.error(f"Error updating holdings: {e}")
-            raise
-
-
-def update_holdings_live_batch(holdings: list[dict[str, Any]]) -> int:
-    """Insert many holdings into ``HoldingsLive`` in a single DB transaction.
-
-    Args:
-        holdings: Items with keys ``broker``, ``broker_number``,
-            ``account_number``, ``ticker``, ``quantity``, and ``price``.
-
-    Returns:
-        Number of rows inserted into ``HoldingsLive``.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; skipping holdings batch update.")
-        return 0
-
-    if not holdings:
-        return 0
-
-    inserted_rows = 0
-    account_id_cache: dict[tuple[str, str, str], int] = {}
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        rows_to_insert: list[tuple[int, str, float, float]] = []
-
-        for item in holdings:
-            broker = str(item.get("broker", "")).strip()
-            broker_number = str(item.get("broker_number", "")).strip()
-            account_number = str(item.get("account_number", "")).strip()
-            ticker = str(item.get("ticker", "")).strip()
-            if not (broker and account_number and ticker):
-                continue
-
-            try:
-                quantity = float(item.get("quantity", 0))
-                price = float(item.get("price", 0))
-            except (TypeError, ValueError):
-                continue
-            if quantity < 0:
-                continue
-
-            account_key = (broker, broker_number, account_number)
-            account_id = account_id_cache.get(account_key)
-            if account_id is None:
-                account_nickname = get_account_nickname_or_default(
-                    broker, broker_number, account_number
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO Accounts (
-                        broker, account_number, broker_number, account_nickname
-                    ) VALUES (?, ?, ?, ?)
-                    ON CONFLICT(broker, broker_number, account_number) DO NOTHING
-                    """,
-                    (broker, account_number, broker_number, account_nickname),
-                )
-                cursor.execute(
-                    """SELECT account_id FROM Accounts
-                       WHERE broker=? AND broker_number=? AND account_number=?""",
-                    (broker, broker_number, account_number),
-                )
-                account_id = int(cursor.fetchone()[0])
-                account_id_cache[account_key] = account_id
-
-            rows_to_insert.append((account_id, ticker, quantity, price))
-
-        if rows_to_insert:
-            cursor.executemany(
-                """
-                INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
-                VALUES (?, ?, ?, ?, DATETIME('now'))
-                """,
-                rows_to_insert,
-            )
-            inserted_rows = len(rows_to_insert)
-            logger.info("Holdings batch update inserted %d rows.", inserted_rows)
-
-    return inserted_rows
-
-
-def update_historical_holdings(target_date: str | None = None) -> int:
-    """Upsert the latest observation per holding for one business date."""
-    logger.info("Updating historical holdings based on live data.")
-    target_date = target_date or (datetime.now() - timedelta(days=1)).strftime(
-        "%Y-%m-%d"
+    return holdings.stage_current_holdings(
+        refresh_id, holdings_rows, source=source, database=SQL_DATABASE
     )
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                INSERT INTO HistoricalHoldings (
-                    account_id, ticker, date, quantity, average_price
-                )
-                SELECT live.account_id, live.ticker, DATE(live.timestamp),
-                       live.quantity, live.average_price
-                FROM HoldingsLive AS live
-                WHERE DATE(live.timestamp) = ?
-                  AND live.holding_id = (
-                      SELECT MAX(latest.holding_id)
-                      FROM HoldingsLive AS latest
-                      WHERE latest.account_id IS live.account_id
-                        AND latest.ticker = live.ticker
-                        AND DATE(latest.timestamp) = DATE(live.timestamp)
-                  )
-                ON CONFLICT(account_id, ticker, date) DO UPDATE SET
-                    quantity = excluded.quantity,
-                    average_price = excluded.average_price
-                """,
-                (target_date,),
-            )
-            conn.commit()
-            logger.info("Historical holdings updated successfully.")
-            return cursor.rowcount
-        except sqlite3.Error as e:
-            logger.error(f"Error updating historical holdings: {e}")
-            raise
+
+def activate_current_holdings_snapshot(refresh_id):
+    return holdings.activate_staged_holdings(refresh_id, database=SQL_DATABASE)
+
+
+def discard_current_holdings_snapshot(refresh_id):
+    return holdings.discard_staged_holdings(refresh_id, database=SQL_DATABASE)
+
+
+def get_current_holdings_snapshot():
+    return holdings.get_current_holdings(database=SQL_DATABASE)
 
 
 def validate_order_data(order_data):
-    required_fields = [
-        "order_id",
-        "account_id",
-        "broker",
-        "broker_name",
-        "broker_number",
-        "account_number",
-        "ticker",
-        "date",
-        "action",
-        "quantity",
-        "price",
+    """Validate the historical normalized-order mapping contract."""
+    required_fields = (
+        "order_id", "account_id", "broker", "broker_name", "broker_number",
+        "account_number", "ticker", "date", "action", "quantity", "price",
         "total_value",
-    ]
+    )
     for field in required_fields:
         if field not in order_data:
             raise ValueError(f"Missing required field in order_data: {field}")
 
 
 def insert_order_history(order_data):
-    """
-    Inserts a logged order into the ``OrderHistory`` table.
-
-    Expected input fields (via ORDERS_HEADERS):
-      - 'Broker Name'
-      - 'Broker Number'
-      - 'Account Number'
-      - 'Order Type'
-      - 'Stock'
-      - 'Quantity'
-      - 'Price'
-      - 'Date'
-      - 'Timestamp'
-
-    This function:
-      1. Maps these fields into the columns we use internally
-      2. Generates order_id and account_id if missing
-      3. Validates the final data
-      4. Inserts into the OrderHistory table
-    """
-
-    logger.info("Attempting to insert order into OrderHistory.")
-    mapped_order = {}
-    mapped_order["broker_name"] = order_data.get("Broker Name", "")
-    mapped_order["broker_number"] = order_data.get("Broker Number", "")
-    mapped_order["account_number"] = order_data.get("Account Number", "")
-    mapped_order["action"] = order_data.get("Order Type", "")  # e.g. buy/sell
-    mapped_order["ticker"] = order_data.get("Stock", "")
-    mapped_order["quantity"] = float(order_data.get("Quantity", 0))
-    mapped_order["price"] = float(order_data.get("Price", 0.0))
-    mapped_order["date"] = order_data.get("Date", "")
-    mapped_order["timestamp"] = order_data.get("Timestamp", "")  # if you need it
-    mapped_order["broker"] = mapped_order["broker_name"] or "Unknown Broker"
-    mapped_order["total_value"] = mapped_order["quantity"] * mapped_order["price"]
-    mapped_order["order_id"] = order_data.get("order_id") or str(uuid.uuid4())
-    mapped_order["account_id"] = order_data.get("account_id")
-    if not mapped_order["account_id"]:
-        broker = mapped_order["broker"]
-        broker_num = mapped_order["broker_number"]
-        acct_num = mapped_order["account_number"]
-        mapped_order["account_id"] = get_or_create_account_id(
-            broker, broker_num, acct_num
-        )
-
-    try:
-        validate_order_data(mapped_order)
-    except ValueError as ve:
-        logger.error(f"Validation error: {ve}")
-        raise
-
-    # ------------------------------------------------------
-    # 4) Insert into OrderHistory table
-    # ------------------------------------------------------
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            logger.debug(f"Inserting order: {mapped_order}")
-            cursor.execute(
-                """
-                INSERT INTO OrderHistory (
-                    order_id,
-                    account_id,
-                    broker,
-                    broker_name,
-                    broker_number,
-                    account_number,
-                    ticker,
-                    date,
-                    action,
-                    quantity,
-                    price,
-                    total_value
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    mapped_order["order_id"],
-                    mapped_order["account_id"],
-                    mapped_order["broker"],
-                    mapped_order["broker_name"],
-                    mapped_order["broker_number"],
-                    mapped_order["account_number"],
-                    mapped_order["ticker"],
-                    mapped_order["date"],
-                    mapped_order["action"],
-                    mapped_order["quantity"],
-                    mapped_order["price"],
-                    mapped_order["total_value"],
-                ),
-            )
-            conn.commit()
-        logger.info(
-            f"Order inserted successfully for ticker: {mapped_order['ticker']} "
-            f"(Order ID: {mapped_order['order_id']})."
-        )
-    except sqlite3.Error as e:
-        logger.error(f"Error inserting order into OrderHistory: {e}")
-        raise
-
-
-'''
-def insert_order_history(order_data):
-    """Inserts a logged order into the OrderHistory table."""
-    logger.info("Attempting to insert order into OrderHistory.")
-    try:
-
-        if "order_id" not in order_data or not order_data["order_id"]:
-            order_data["order_id"] = str(uuid.uuid4())
-            logger.debug(f"Generated order_id: {order_data['order_id']}")
-
-        if "account_id" not in order_data or not order_data["account_id"]:
-            broker = order_data["broker_name"]
-            broker_number = order_data["broker_number"]
-            account_number = order_data["account_number"]
-            account_nickname = get_account_nickname_or_default(
-                broker, broker_number, account_number
-            )
-
-            order_data["account_id"] = get_or_create_account_id(broker, broker_number, account_number, account_nickname)
-        order_id = order_data["order_id"]
-        account_id = order_data["account_id"]
-        logger.info(f"Saving order with saved or generated OrderNo. {order_id} AccountNo. {account_id}")
-
-        validate_order_data(order_data)
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            logger.debug(f"Inserting order: {order_data}")
-            cursor.execute(
-                """
-                INSERT INTO OrderHistory (
-                    order_id, account_id, broker, broker_name, broker_number,
-                    account_number, ticker, date, action, quantity, price, total_value
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    order_data["order_id"], order_data["account_id"], order_data["broker"],
-                    order_data["broker_name"], order_data["broker_number"], order_data["account_number"],
-                    order_data["ticker"], order_data["date"], order_data["action"],
-                    order_data["quantity"], order_data["price"], order_data["total_value"]
-                ),
-            )
-            conn.commit()
-            logger.info(f"Order inserted successfully for ticker: {order_data['ticker']}.")
-    except ValueError as ve:
-        logger.error(f"Validation error: {ve}")
-        raise
-    except sqlite3.Error as e:
-        logger.error(f"Error inserting order into OrderHistory: {e}")
-        raise
-'''
+    """Compatibility entrypoint for legacy CSV-shaped order dictionaries."""
+    orders.insert_order_event(
+        order_data, database=SQL_DATABASE, export_csv=CSV_LOGGING_ENABLED
+    )
 
 
 def bot_query_database(table_name, filters=None, order_by=None, limit=10):
-    """Query a table and return rows or an error message.
-
-    Returns a descriptive error when SQL logging is disabled.
-    """
-
-    if not SQL_LOGGING_ENABLED:
-        logger.info("SQL logging disabled; query aborted.")
-        return {"error": "SQL logging disabled"}
-
-    logger.info(
-        f"Querying table {table_name} with filters: {filters}, order_by: {order_by}, limit: {limit}."
+    """Compatibility delegate for validated operator table queries."""
+    return admin.query_table(
+        table_name, filters, order_by, limit, database=SQL_DATABASE
     )
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            # Validate table name
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            valid_tables = [row[0] for row in cursor.fetchall()]
-            if table_name not in valid_tables:
-                logger.error(
-                    f"Invalid table: {table_name}. Available tables: {valid_tables}"
-                )
-                return {
-                    "error": f"Invalid table name. Available tables: {valid_tables}"
-                }
 
-            # Fetch column names
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            columns = [row[1] for row in cursor.fetchall()]
 
-            # Construct query
-            query = f"SELECT * FROM {table_name}"
-            params = []
-
-            if filters:
-                conditions = []
-                for key, value in filters.items():
-                    if key in columns:
-                        conditions.append(f"{key} = ?")
-                        params.append(value)
-                    else:
-                        logger.warning(
-                            f"Invalid filter column: {key}. Available columns: {columns}"
-                        )
-                        return {
-                            "error": f"Invalid filter column: {key}. Available columns: {columns}"
-                        }
-                query += " WHERE " + " AND ".join(conditions)
-
-            if order_by and order_by in columns:
-                query += f" ORDER BY {order_by}"
-
-            if limit:
-                query += f" LIMIT {limit}"
-
-            logger.debug(f"Executing query: {query} with params: {params}")
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            logger.info(f"Query executed successfully. Retrieved {len(rows)} rows.")
-            return {"data": rows, "columns": columns}
-        except sqlite3.Error as e:
-            logger.error(f"Database query error: {e}")
-            return {"error": str(e)}
+__all__ = [
+    "SQL_DATABASE",
+    "SQL_LOGGING_ENABLED",
+    "ACCOUNT_MAPPING",
+    "WATCH_FILE",
+    "SELL_FILE",
+    "get_db_connection",
+    "get_or_create_account_id",
+    "upsert_account_mapping",
+    "sync_account_mappings",
+    "clear_account_nicknames",
+    "fetch_account_mappings",
+    "fetch_account_nickname",
+    "fetch_account_labels",
+    "resolve_account_id",
+    "has_account_mappings",
+    "fetch_watchlist_entries",
+    "upsert_watchlist_entry",
+    "delete_watchlist_entry",
+    "fetch_sell_list_entries",
+    "upsert_sell_list_entry",
+    "delete_sell_list_entry",
+    "fetch_watchlist_entry",
+    "replace_watchlist_entries",
+    "fetch_sell_list_entry",
+    "replace_sell_list_entries",
+    "migrate_legacy_json_data",
+    "init_db",
+    "insert_reverse_split_log_entry",
+    "fetch_reverse_split_history",
+    "insert_reverse_split_account_entry",
+    "fetch_reverse_split_account_entries",
+    "update_holdings_live",
+    "update_holdings_live_batch",
+    "replace_current_holdings_snapshot",
+    "stage_current_holdings_snapshot",
+    "activate_current_holdings_snapshot",
+    "discard_current_holdings_snapshot",
+    "get_current_holdings_snapshot",
+    "update_historical_holdings",
+    "validate_order_data",
+    "insert_order_history",
+    "bot_query_database",
+]

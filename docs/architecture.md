@@ -23,7 +23,6 @@ All runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
 - `db/` (SQLite DB, split watchlist, order queue, auto-rsa holdings snapshot)
 - `logs/` (application logs + CSV exports such as holdings/orders)
-- `excel/` (legacy archive only; no runtime writes)
 
 ## Local operations UI
 

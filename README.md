@@ -93,7 +93,6 @@ Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
 - `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot, reverse split history)
 - `volumes/logs/` (app logs, holdings logs)
-- `volumes/excel/` (legacy archive only; Excel writes are deprecated)
 
 Reverse split persistence uses SQL append-only tables:
 
@@ -110,12 +109,13 @@ matching SQL tables are empty), and can also be migrated manually with:
 ### Migration note for legacy Excel users
 
 If your workflow previously depended on `volumes/excel/ReverseSplitLog.xlsx`,
-use SQL and CSV outputs instead:
+use SQL and CSV outputs instead. RSAssistant no longer reads, writes, mounts,
+or creates an Excel runtime directory. Keep any historical workbook separately
+if you still need it for reference:
 
 - Account mappings/watchlist/sell list are read from SQLite (`volumes/db/`).
 - Operational logs are emitted as CSV files in `volumes/logs/` (for example
   holdings and orders logs).
-- `volumes/excel/` is retained only as an archive and is not updated at runtime.
 
 
 ```bash
@@ -180,7 +180,6 @@ shared `volumes/` directory (or Docker volume). Example:
     volumes/
       db/auto_rsa_holdings.json
       logs/
-      excel/
 ```
 
 Point both apps at the same `AUTO_RSA_HOLDINGS_FILE` path. `AutoRSA-GUI` is optional
@@ -188,10 +187,21 @@ and is not referenced by RSAssistant.
 
 ### Version control options for local clones
 
-- Recommended: keep `auto-rsa/` and `AutoRSA-GUI/` as separate repos (outside this repo).
-- If you keep them inside this repo for convenience, either:
-  - Add them as git submodules, or
-  - Add them to `.gitignore` so credentials and binaries are not tracked.
+- Recommended: keep `auto-rsa/` and `AutoRSA-GUI/` as separate repos (outside this repo),
+  gitignored here (see `.gitignore`).
+- For `auto-rsa/`, maintain your customizations as a real fork rather than hand-editing
+  the working tree:
+  ```bash
+  cd auto-rsa
+  git remote rename origin upstream
+  git remote add origin git@github.com:<you>/auto-rsa.git
+  git fetch upstream && git rebase upstream/main   # pull upstream changes
+  git push origin main
+  ```
+  This replaces the old pattern of accumulating uncommitted edits that `patches/auto-rsa-holdings.patch`
+  could drift out of sync with. The patch/`..patchautorsa` workflow above is still the
+  right tool for bootstrapping the holdings-shim onto a *fresh*, unmodified auto-rsa clone
+  (yours or someone else's) — it's unrelated to fork maintenance.
 
 ## Holdings snapshots
 

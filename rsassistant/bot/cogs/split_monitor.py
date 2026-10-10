@@ -8,8 +8,7 @@ from discord.ext import commands
 from utils.discord_permissions import operator_only
 
 from utils import split_watch_utils
-from utils.config_utils import CSV_LOGGING_ENABLED, ORDERS_LOG_CSV
-from utils.csv_utils import load_csv_log
+from rsassistant.persistence.orders import list_order_history
 
 
 class SplitMonitorCog(commands.Cog):
@@ -88,14 +87,6 @@ class SplitMonitorCog(commands.Cog):
     async def split_orders(
         self, ctx: commands.Context, ticker: str, broker: str | None = None
     ) -> None:
-        if not CSV_LOGGING_ENABLED:
-            await ctx.send("CSV logging is disabled; no order history is available.")
-            return
-
-        if not ORDERS_LOG_CSV.exists():
-            await ctx.send("Orders log not found. No order history is available yet.")
-            return
-
         ticker = ticker.upper()
         watch_status = split_watch_utils.get_status(ticker)
         if not watch_status:
@@ -103,7 +94,24 @@ class SplitMonitorCog(commands.Cog):
                 f"{ticker} is not on the reverse-split watchlist. Showing history anyway."
             )
 
-        orders = load_csv_log(ORDERS_LOG_CSV)
+        try:
+            orders = [
+                {
+                    "Broker Name": row["broker_name"],
+                    "Broker Number": row["broker_number"],
+                    "Account Number": row["account_number"],
+                    "Order Type": row["action"],
+                    "Stock": row["ticker"],
+                    "Quantity": row["quantity"],
+                    "Price": row["price"],
+                    "Date": row["date"],
+                    "Timestamp": row["timestamp"],
+                }
+                for row in list_order_history(ticker=ticker)
+            ]
+        except (OSError, ValueError) as exc:
+            await ctx.send(f"Unable to read order history: {exc}")
+            return
         if not orders:
             await ctx.send("Orders log is empty.")
             return

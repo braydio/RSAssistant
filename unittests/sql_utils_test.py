@@ -95,6 +95,21 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
                        VALUES (999999, 'NONE', 1, 1)"""
                 )
 
+    def test_runtime_database_remains_available_when_legacy_sql_toggle_is_disabled(self):
+        sql_utils.SQL_LOGGING_ENABLED = False
+
+        sql_utils.init_db()
+        account_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1234")
+        sql_utils.upsert_account_mapping("BrokerA", "1", "1234", "Primary")
+
+        self.assertIsInstance(account_id, int)
+        self.assertEqual(
+            sql_utils.fetch_account_mappings(),
+            {"BrokerA": {"1": {"1234": "Primary"}}},
+        )
+        with sql_utils.get_db_connection() as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
+
     def test_historical_holdings_uses_latest_daily_observation_idempotently(self):
         account_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1234")
         with sql_utils.get_db_connection() as conn:
@@ -121,7 +136,7 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
 
     def test_init_db_sets_schema_version_and_required_indexes(self):
         with sql_utils.get_db_connection() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
             indexes = {
                 row[0]
                 for row in conn.execute(

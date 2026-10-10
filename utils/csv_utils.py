@@ -21,7 +21,14 @@ from utils.config_utils import (
     ORDERS_LOG_CSV,
     CSV_LOGGING_ENABLED,
 )
-from utils.sql_utils import update_holdings_live_batch
+from rsassistant.persistence.holdings import (
+    activate_staged_holdings as activate_current_holdings_snapshot,
+    clear_current_holdings, get_current_holdings,
+    discard_staged_holdings as discard_current_holdings_snapshot,
+    replace_current_holdings as replace_current_holdings_snapshot,
+    stage_current_holdings as stage_current_holdings_snapshot,
+    update_holdings_live_batch,
+)
 from utils.order_exec import send_sell_command
 
 logger = logging.getLogger(__name__)
@@ -130,49 +137,21 @@ def _coerce_datetime(raw_value, datetime_format, column_name, row_index):
 
 
 def is_ticker_currently_held(ticker: str) -> bool:
-    """Returns True if the ticker is currently held based on CSV log."""
-    from utils.config_utils import HOLDINGS_LOG_CSV
-    import csv
-    import os
-
-    if not os.path.exists(HOLDINGS_LOG_CSV):
-        return False
-
-    with open(HOLDINGS_LOG_CSV, mode="r") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            if row.get("Stock", "").strip().upper() == ticker.upper():
-                try:
-                    quantity = float(row.get("Quantity", 0))
-                    if quantity > 0:
-                        return True
-                except ValueError:
-                    continue
-    return False
+    """Return whether a positive current SQL position exists for ticker."""
+    return any(r["ticker"].upper() == ticker.upper() and r["quantity"] > 0
+               for r in get_current_holdings())
 
 
 def was_ticker_held_recently(ticker: str, days: int = 7) -> bool:
-    """Returns True if the ticker appears in CSV with a timestamp within the last X days."""
-    from utils.config_utils import HOLDINGS_LOG_CSV
-    import csv
-    import os
-
-    if not os.path.exists(HOLDINGS_LOG_CSV):
-        return False
-
+    """Return whether current SQL data observed the ticker within the last X days."""
     cutoff = datetime.now() - timedelta(days=days)
-
-    with open(HOLDINGS_LOG_CSV, mode="r") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            if row.get("Stock", "").strip().upper() == ticker.upper():
-                ts = row.get("Timestamp", "")
-                try:
-                    parsed = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-                    if parsed >= cutoff:
-                        return True
-                except Exception:
-                    continue
+    for row in get_current_holdings():
+        if row["ticker"].upper() == ticker.upper():
+            try:
+                if datetime.fromisoformat(row["observed_at"]) >= cutoff:
+                    return True
+            except (TypeError, ValueError):
+                continue
     return False
 
 
@@ -192,19 +171,23 @@ def begin_holdings_refresh(filename=HOLDINGS_LOG_CSV):
 
     global _ACTIVE_HOLDINGS_REFRESH_TARGET
 
-    if not CSV_LOGGING_ENABLED:
-        logger.info("CSV logging disabled; skipping holdings refresh staging.")
-        return None
-
     staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
     if os.path.exists(staging_path):
         _ACTIVE_HOLDINGS_REFRESH_TARGET = staging_path
         logger.info("Holdings refresh staging already active at %s", staging_path)
         return staging_path
 
-    with open(staging_path, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(HOLDINGS_HEADERS)
+    if CSV_LOGGING_ENABLED:
+        with open(staging_path, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(HOLDINGS_HEADERS)
+
+    try:
+        stage_current_holdings_snapshot(str(staging_path), [])
+    except Exception:
+        if os.path.exists(staging_path):
+            os.remove(staging_path)
+        raise
 
     _ACTIVE_HOLDINGS_REFRESH_TARGET = staging_path
     logger.info("Started holdings refresh staging at %s", staging_path)
@@ -217,13 +200,15 @@ def finalize_holdings_refresh(filename=HOLDINGS_LOG_CSV):
     global _ACTIVE_HOLDINGS_REFRESH_TARGET
 
     staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
-    if not os.path.exists(staging_path):
+    if not os.path.exists(staging_path) and not _ACTIVE_HOLDINGS_REFRESH_TARGET:
         logger.warning("No staged holdings file found to finalize: %s", staging_path)
         _ACTIVE_HOLDINGS_REFRESH_TARGET = None
         return False
 
-    _validate_existing_holdings_csv(staging_path)
-    os.replace(staging_path, filename)
+    if not activate_current_holdings_snapshot(staging_path):
+        replace_current_holdings_snapshot([], source=str(filename))
+    if CSV_LOGGING_ENABLED and os.path.exists(staging_path):
+        os.replace(staging_path, filename)
     _ACTIVE_HOLDINGS_REFRESH_TARGET = None
     logger.info("Promoted staged holdings snapshot from %s to %s", staging_path, filename)
     return True
@@ -235,6 +220,7 @@ def abort_holdings_refresh(filename=HOLDINGS_LOG_CSV):
     global _ACTIVE_HOLDINGS_REFRESH_TARGET
 
     staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
+    discard_current_holdings_snapshot(staging_path)
     if os.path.exists(staging_path):
         os.remove(staging_path)
         logger.info("Discarded staged holdings snapshot at %s", staging_path)
@@ -243,7 +229,7 @@ def abort_holdings_refresh(filename=HOLDINGS_LOG_CSV):
 
 def holdings_refresh_in_progress(filename=HOLDINGS_LOG_CSV):
     staging_path = _ACTIVE_HOLDINGS_REFRESH_TARGET or _get_holdings_staging_path(filename)
-    return os.path.exists(staging_path)
+    return bool(_ACTIVE_HOLDINGS_REFRESH_TARGET) or os.path.exists(staging_path)
 
 
 def load_csv_log(file_path):
@@ -367,48 +353,24 @@ def alert_negative_quantity(order_data):
 
 
 def save_order_to_csv(order_data):
-    """Persist an order to ``ORDERS_LOG_CSV`` if logging is enabled.
-
-    When :data:`CSV_LOGGING_ENABLED` is ``False`` this function logs the
-    skip and returns without writing to disk.
-    """
-
-    if not CSV_LOGGING_ENABLED:
-        logger.info("CSV logging disabled; skipping order save.")
-        return
-
+    """Persist an order in SQL and optionally refresh the compatibility CSV."""
     try:
-        logger.info(f"Processing order data: {order_data}")
-
-        ensure_csv_file_exists(ORDERS_LOG_CSV, ORDERS_HEADERS)
-        logger.info(
-            "Processing new order in csv_utils, checking for duplicates and stale entries."
+        from uuid import uuid4
+        from rsassistant.persistence.orders import (
+            export_order_history_csv, insert_order_history,
         )
 
-        if "Timestamp" not in order_data or not order_data["Timestamp"]:
-            order_data["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # Load existing orders
-        existing_orders = load_csv_log(ORDERS_LOG_CSV)
-
-        # Check for negative quantity
+        order_data = dict(order_data)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        order_data.setdefault("Timestamp", now)
+        order_data.setdefault("Date", order_data["Timestamp"])
+        order_data.setdefault("order_id", str(uuid4()))
         alert_negative_quantity(order_data)
-
-        # Archive stale orders
-        # cutoff_date = datetime.now() - timedelta(days=30)
-        # non_stale_orders = archive_stale_orders(
-        #    existing_orders, cutoff_date, ORDERS_LOG_CSV
-        # )
-
-        # Identify the latest orders to handle duplicates
-        updated_orders = identify_latest_orders(existing_orders, order_data)
-
-        # Write updated orders back to the CSV
-        write_orders_to_csv(updated_orders, ORDERS_LOG_CSV)
-        logger.info(f"Order saved to csv: {order_data}")
-
+        insert_order_history(order_data)
+        if CSV_LOGGING_ENABLED:
+            export_order_history_csv(ORDERS_LOG_CSV)
     except Exception as e:
-        logger.error(f"Error saving order to CSV: {e}")
+        logger.error("Error saving order history: %s", e)
 
 
 # ! --- Holdings Management ---
@@ -479,6 +441,25 @@ def _normalize_holding_row(holding, row_index):
     return row
 
 
+def _current_holdings_payload(rows, source):
+    """Convert normalized CSV rows into current holdings domain records."""
+    return [
+        {
+            "broker": row["Broker Name"],
+            "broker_number": row["Broker Number"],
+            "account_number": row["Account Number"],
+            "ticker": row["Stock"],
+            "quantity": row["Quantity"],
+            "price": row["Price"],
+            "position_value": row["Position Value"],
+            "account_total": row["Account Total"],
+            "observed_at": row["Timestamp"],
+            "source": source,
+        }
+        for row in rows
+    ]
+
+
 def _validate_existing_holdings_csv(file_path):
     """Load and validate existing holdings CSV data.
 
@@ -528,10 +509,6 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
     and row validations succeed.
     """
 
-    if not CSV_LOGGING_ENABLED:
-        logger.info("CSV logging disabled; skipping holdings save.")
-        return
-
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
@@ -539,7 +516,15 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
         if use_refresh_target and _ACTIVE_HOLDINGS_REFRESH_TARGET:
             target_file = _ACTIVE_HOLDINGS_REFRESH_TARGET
 
-        existing_holdings = _validate_existing_holdings_csv(target_file)
+        existing_holdings = [] if (_ACTIVE_HOLDINGS_REFRESH_TARGET and use_refresh_target) else [
+            {"Key": f"{r['broker']}_{r['broker_number']}_{r['account_number']}_{r['ticker']}",
+             "Broker Name": r["broker"], "Broker Number": r["broker_number"],
+             "Account Number": r["account_number"], "Stock": r["ticker"],
+             "Quantity": r["quantity"], "Price": r["price"],
+             "Position Value": r["position_value"], "Account Total": r["account_total"] or 0,
+             "Timestamp": r["observed_at"][:19].replace("T", " ")}
+            for r in get_current_holdings()
+        ]
 
         existing_by_key = {}
         for row_index, holding in enumerate(existing_holdings, start=1):
@@ -600,6 +585,24 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
                     }
                 )
 
+        snapshot_rows = list(existing_by_key.values())
+        sql_snapshot_rows = _current_holdings_payload(snapshot_rows, str(target_file))
+        refresh_id = (
+            str(_ACTIVE_HOLDINGS_REFRESH_TARGET)
+            if use_refresh_target and _ACTIVE_HOLDINGS_REFRESH_TARGET
+            else None
+        )
+        should_write_snapshot = bool(
+            refresh_id or snapshot_rows or os.path.exists(target_file)
+        )
+        if should_write_snapshot:
+            if refresh_id:
+                stage_current_holdings_snapshot(refresh_id, sql_snapshot_rows)
+            else:
+                replace_current_holdings_snapshot(
+                    sql_snapshot_rows, source=str(target_file)
+                )
+
         if sql_batch_holdings:
             inserted_rows = update_holdings_live_batch(sql_batch_holdings)
             logger.info(
@@ -608,7 +611,7 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
                 len(sql_batch_holdings),
             )
 
-        if new_holdings or updated_holdings:
+        if CSV_LOGGING_ENABLED and (new_holdings or updated_holdings):
             with open(target_file, mode="w", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=HOLDINGS_HEADERS)
                 writer.writeheader()
@@ -632,17 +635,17 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
 def clear_holdings_log(filename):
     """Clear all holdings from the CSV file, preserving only headers.
 
-    Returns ``True`` if successful, ``False`` otherwise. No-op when
-    :data:`CSV_LOGGING_ENABLED` is ``False``.
+    Returns ``True`` if successful, ``False`` otherwise. SQL current state is
+    cleared regardless of compatibility CSV export configuration.
     """
-    if not CSV_LOGGING_ENABLED:
-        logger.info("CSV logging disabled; skipping clear for %s", filename)
-        return True, "CSV logging disabled; nothing to clear."
     try:
         abort_holdings_refresh(filename)
-        # Check if the file exists
+        clear_current_holdings()
+        if not CSV_LOGGING_ENABLED:
+            return True, "Current holdings cleared."
         if not os.path.exists(filename):
-            return False, f'Holdings at: "{filename}" does not exist.'
+            ensure_csv_file_exists(filename, HOLDINGS_HEADERS)
+            return True, "Current holdings cleared; compatibility CSV created empty."
 
         # Read the headers from the file
         with open(filename, mode="r") as file:
@@ -686,13 +689,10 @@ async def sell_all_position(ctx, broker: str, live_mode: str = "false"):
             )
             return
 
-        # Load holdings from CSV
-        holdings = []
-        with open(HOLDINGS_LOG_CSV, mode="r", newline="") as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                if row["Broker Name"].lower() == broker.lower():
-                    holdings.append(row)
+        holdings = [
+            {"Broker Name": r["broker"], "Stock": r["ticker"], "Quantity": r["quantity"]}
+            for r in get_current_holdings() if r["broker"].lower() == broker.lower()
+        ]
 
         if not holdings:
             await ctx.send(f"No holdings found for brokerage: {broker}.")
@@ -747,7 +747,14 @@ def get_top_holdings(range=3):
 
     try:
         # Reload holdings from disk each call to avoid stale data
-        current_holdings = load_csv_log(HOLDINGS_LOG_CSV)
+        current_holdings = [
+            {"Broker Name": r["broker"], "Broker Number": r["broker_number"],
+             "Account Number": r["account_number"], "Stock": r["ticker"],
+             "Quantity": r["quantity"], "Price": r["price"],
+             "Position Value": r["position_value"], "Account Total": r["account_total"] or 0,
+             "Timestamp": r["observed_at"][:19].replace("T", " ")}
+            for r in get_current_holdings()
+        ]
 
         # Filter holdings where Quantity <= 1 and group by broker
         filtered_holdings = []

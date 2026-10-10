@@ -1,16 +1,16 @@
 # TP-20261003-012: Parsing and Runtime Cleanup
 
-**Packet ID:** TP-20261003-012  
-**Status:** Draft  
-**Created:** 2026-10-03  
-**Last updated:** 2026-10-03  
-**Repository:** braydio/RSAssistant  
-**Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261003-012-parsing-runtime-cleanup.md`  
-**Workstream size:** One implementation packet  
-**Depends on:** TP-20261003-011  
-**Priority:** Normal  
-**Controller:** TP-20261003-001  
+**Packet ID:** TP-20261003-012
+**Status:** Draft
+**Created:** 2026-10-03
+**Last updated:** 2026-10-03
+**Repository:** braydio/RSAssistant
+**Target branch:** main
+**Canonical path:** `docs/task-packets/active/TP-20261003-012-parsing-runtime-cleanup.md`
+**Workstream size:** One implementation packet
+**Depends on:** TP-20261003-011
+**Priority:** Normal
+**Controller:** TP-20261003-001
 
 ## Required dependency-refresh checkpoint
 

@@ -1,12 +1,12 @@
 # TP-20261004-001: Performance History Capture
 
 **Packet ID:** TP-20261004-001  
-**Status:** Draft  
+**Status:** Complete  
 **Created:** 2026-10-04  
-**Last updated:** 2026-10-04  
+**Last updated:** 2026-10-10  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261004-001-performance-history-capture.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261004-001-performance-history-capture.md`  
 **Workstream size:** One implementation packet  
 **Depends on:** TP-20261003-006  
 **Priority:** High  
@@ -235,12 +235,13 @@ Cover:
 
 ## Acceptance criteria
 
-- [ ] every committed holdings refresh can persist account value snapshots.
-- [ ] recent and historical value queries have durable data.
-- [ ] account totals are not double-counted across positions.
-- [ ] historical positions-value data is backfilled where available.
-- [ ] historical position-sum data is distinguishable from newer reported-total data.
-- [ ] failed holdings refreshes cannot create phantom growth points.
+- [x] every committed holdings refresh can persist account value snapshots.
+- [x] recent and historical value queries have durable data.
+- [x] account totals are not double-counted across positions.
+- [x] historical positions-value data is backfilled where available (function
+      added; not yet invoked against the real production database).
+- [x] historical position-sum data is distinguishable from newer reported-total data.
+- [x] failed holdings refreshes cannot create phantom growth points.
 
 ## Validation
 
@@ -253,13 +254,41 @@ python -m pytest -q
 
 ## Completion report
 
-Report:
-
-1. final schema/migration version;
-2. exact effective-value rule;
-3. how conflicting account totals are handled;
-4. refresh transaction integration;
-5. HistoricalHoldings rows backfilled;
-6. earliest/newest history available;
-7. tests;
-8. any changes required after TP-20261003-006 review.
+1. Migration 9 (`LATEST_SCHEMA_VERSION` 8 → 9) adds `account_value_snapshots`
+   plus its two indexes, in `rsassistant/persistence/schema.py`.
+2. `effective_value = reported_account_total` when exactly one distinct
+   non-null `account_total` is present for that account in the commit,
+   otherwise `positions_value` (`SUM(position_value)` over that account's
+   current positions).
+3. Conflicting (more than one distinct non-null) totals fall back to
+   `positions_sum` with a logged warning naming the account; never averaged,
+   never blocks the holdings commit.
+4. `record_account_value_snapshots(conn, ...)` is called inside the same
+   `BEGIN IMMEDIATE` transaction as both `holdings.replace_current_holdings()`
+   and `holdings.activate_staged_holdings()`, so an aborted/discarded staged
+   refresh (which never reaches those functions) produces no snapshot rows.
+5. `backfill_historical_account_values()` was added and tested against
+   synthetic `HistoricalHoldings` rows (idempotent via the `legacy_imports`
+   ledger); it has not yet been invoked against the real production
+   database — that's an explicit operator action, not done as part of this
+   packet.
+6. No real history exists yet; it starts accumulating from the next holdings
+   refresh and from whenever the backfill is actually run against production
+   data.
+7. `unittests/performance_repository_test.py`: 12/12 passed, covering every
+   item in this packet's test list. `python -m compileall -q rsassistant
+   utils plugins unittests`: passed. `python -m pytest -q`: 171 passed, 6
+   failed — the same pre-existing, unrelated `RSAssistant.watch_list_manager`
+   monkeypatch failures called out in TP-20261003-009/010/011; unchanged by
+   this packet. Two unrelated tests hardcoded `PRAGMA user_version == 8`
+   (`unittests/sql_utils_test.py`, `unittests/order_queue_manager_test.py`)
+   and were updated to 9.
+8. TP-20261003-006 landed with the refresh lifecycle always doing a full
+   `holdings_current` replace (not incremental per-account updates), so
+   "affected accounts" is every account in the new snapshot. The pre-authored
+   `record_account_value_snapshots(conn, refresh_id, accounts, observed_at,
+   source)` signature was adapted to make `accounts`/`observed_at` optional,
+   defaulting to aggregating `holdings_current` directly via `conn`; the
+   historical backfill path still supplies `accounts` explicitly since its
+   data comes from `HistoricalHoldings`. Full detail in
+   `docs/task-packets/summaries/TP-20261004-001-SUMMARY.md`.

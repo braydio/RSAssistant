@@ -10,7 +10,8 @@ import io
 import discord
 import pandas as pd
 
-from utils.sql_utils import get_db_connection, resolve_account_id
+from rsassistant.persistence.accounts import resolve_account_id
+from rsassistant.persistence.db import connect_runtime_db
 
 
 async def show_sql_holdings_history(
@@ -70,7 +71,7 @@ async def show_sql_holdings_history(
             params["end_date"] = end_date
 
         # Fetch data from SQL
-        with get_db_connection() as conn:
+        with connect_runtime_db() as conn:
             df = pd.read_sql_query(query, conn, params=params)
 
         if df.empty:

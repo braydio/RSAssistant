@@ -1,29 +1,20 @@
-import csv
 import logging
-import os
 from typing import Dict, List, Set
 
-from utils.config_utils import HOLDINGS_LOG_CSV
+from rsassistant.persistence.holdings import get_current_holdings
 from utils.watch_utils import watch_list_manager
 
 logger = logging.getLogger(__name__)
 
 
 def _load_holdings() -> Dict[str, Dict[str, Set[str]]]:
-    """Load holdings from the CSV grouped by broker and account."""
+    """Load current SQL holdings grouped by broker and account."""
     holdings: Dict[str, Dict[str, Set[str]]] = {}
-    if not os.path.exists(HOLDINGS_LOG_CSV):
-        logger.warning("Holdings log not found: %s", HOLDINGS_LOG_CSV)
-        return holdings
-
-    with open(HOLDINGS_LOG_CSV, newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            broker = row.get("Broker Name", "").strip()
-            account = row.get("Account Number", "").strip()
-            ticker = row.get("Stock", "").strip().upper()
-            if not broker or not ticker:
-                continue
+    for row in get_current_holdings():
+        broker = row["broker"].strip()
+        account = row["account_number"].strip()
+        ticker = row["ticker"].strip().upper()
+        if broker and ticker:
             holdings.setdefault(broker, {}).setdefault(account, set()).add(ticker)
     return holdings
 
