@@ -23,6 +23,24 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | TP-20261003-010 | main | 2026-10-08 | [packet](active/TP-20261003-011-on-message-decomposition.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
+## Resource optimization train (2026-10-10)
+
+The following packets were audited on `main@b35ea948`. TP-001 through TP-009 are independently executable Ready workstreams (recommended order 001, 005, 004, 002, 003, 006, 007, 008, 009). TP-010/011 are intentionally Draft pending their modernization dependency and a targeted refresh. No measured runtime reductions are claimed from static inspection.
+
+| Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TP-20261010-001 | Runtime Resource Baseline and Regression Instrumentation | Ready | High | None | main | 2026-10-10 | [packet](active/TP-20261010-001-runtime-resource-baseline.md) |
+| TP-20261010-002 | Replace Threaded Scheduler with Asyncio-Native Jobs | Ready | High | None | main | 2026-10-10 | [packet](active/TP-20261010-002-asyncio-native-scheduler.md) |
+| TP-20261010-003 | Keep Network and Disk Operations off Discord Event Loop | Ready | High | None | main | 2026-10-10 | [packet](active/TP-20261010-003-nonblocking-discord-network.md) |
+| TP-20261010-004 | Make Holdings Snapshot Import Change-Driven and Retry-Safe | Ready | High | None | main | 2026-10-10 | [packet](active/TP-20261010-004-holdings-import-change-detection.md) |
+| TP-20261010-005 | Bound Logging Memory, Disk Churn, and Sensitive Payloads | Ready | High | None | main | 2026-10-10 | [packet](active/TP-20261010-005-bounded-and-safe-logging.md) |
+| TP-20261010-006 | Bound Market Price Cache and Minimize Disk Writes | Ready | Normal | None | main | 2026-10-10 | [packet](active/TP-20261010-006-price-cache-bounds-and-atomicity.md) |
+| TP-20261010-007 | ULT-MA Plugin Nonblocking Market Data and Idle Efficiency | Ready | Normal | None | main | 2026-10-10 | [packet](active/TP-20261010-007-ultma-idle-and-async-market-data.md) |
+| TP-20261010-008 | Lean Docker Image, Startup I/O, and Health Checks | Ready | Normal | None | main | 2026-10-10 | [packet](active/TP-20261010-008-lean-container-startup.md) |
+| TP-20261010-009 | Stop Shipping Runtime Artifacts and Add Safe Retention | Ready | Normal | None | main | 2026-10-10 | [packet](active/TP-20261010-009-artifact-hygiene-and-retention.md) |
+| TP-20261010-010 | Replace Per-Ticker Holdings CSV Scans with One SQL Read | Draft | High | TP-20261003-007 and TP-20261003-011 (dependency refresh required) | main | 2026-10-10 | [packet](active/TP-20261010-010-holdings-summary-single-pass.md) |
+| TP-20261010-011 | Consolidate Long-Sleep Order Tasks without Changing Execution Semantics | Draft | High | TP-20261003-004 (dependency refresh required) | main | 2026-10-10 | [packet](active/TP-20261010-011-scheduled-order-timer-consolidation.md) |
+
 ## Historical / re-baseline queue
 
 | Packet ID | Title | Status | Reason | Next action | Packet |
