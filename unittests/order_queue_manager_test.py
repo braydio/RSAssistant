@@ -87,7 +87,7 @@ class OrderQueueManagerTest(TestCase):
         )
         with sqlite3.connect(self.database) as conn:
             self.assertEqual(
-                conn.execute("PRAGMA user_version").fetchone()[0], 8
+                conn.execute("PRAGMA user_version").fetchone()[0], 9
             )
             self.assertIsNone(
                 conn.execute(

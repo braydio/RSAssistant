@@ -108,7 +108,7 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
             {"BrokerA": {"1": {"1234": "Primary"}}},
         )
         with sql_utils.get_db_connection() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
 
     def test_historical_holdings_uses_latest_daily_observation_idempotently(self):
         account_id = sql_utils.get_or_create_account_id("BrokerA", "1", "1234")
@@ -136,7 +136,7 @@ class SqlUtilsAccountMappingTest(unittest.TestCase):
 
     def test_init_db_sets_schema_version_and_required_indexes(self):
         with sql_utils.get_db_connection() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
             indexes = {
                 row[0]
                 for row in conn.execute(

@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 8
+LATEST_SCHEMA_VERSION = 9
 
 logger = logging.getLogger(__name__)
 
@@ -380,10 +380,40 @@ def _migration_8(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_9(conn: sqlite3.Connection) -> None:
+    """Create durable account/portfolio value snapshot history."""
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS account_value_snapshots (
+               snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               refresh_id TEXT NOT NULL,
+               account_id INTEGER NOT NULL,
+               observed_at TEXT NOT NULL,
+               positions_value REAL NOT NULL,
+               reported_account_total REAL,
+               effective_value REAL NOT NULL,
+               valuation_basis TEXT NOT NULL
+                   CHECK(valuation_basis IN (
+                       'reported_total', 'positions_sum', 'historical_positions_sum')),
+               source TEXT NOT NULL,
+               FOREIGN KEY (account_id) REFERENCES Accounts(account_id),
+               UNIQUE (refresh_id, account_id)
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_account_value_snapshots_account_time "
+        "ON account_value_snapshots(account_id, observed_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_account_value_snapshots_time "
+        "ON account_value_snapshots(observed_at)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
-    8: _migration_8,
+    8: _migration_8, 9: _migration_9,
 }
 
 

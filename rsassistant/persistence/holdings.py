@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from os import PathLike
 from typing import Any, Iterable
 
 from rsassistant.persistence.db import connect_runtime_db
 from rsassistant.persistence.schema import run_migrations
-from rsassistant.persistence import accounts
+from rsassistant.persistence import accounts, performance
 from utils.config_utils import SQL_DATABASE, get_account_nickname_or_default
 
 DATABASE_PATH = SQL_DATABASE
@@ -162,11 +163,15 @@ def replace_current_holdings(
     """Atomically replace all current positions with a validated snapshot."""
 
     positions = _prepare_holdings(holdings, source)
+    refresh_id = f"replace:{uuid.uuid4()}"
     with _connect(database) as conn:
         conn.execute("BEGIN IMMEDIATE")
         _resolve_account_ids(conn, positions)
         conn.execute("DELETE FROM holdings_current")
         _insert_positions(conn, "holdings_current", positions)
+        performance.record_account_value_snapshots(
+            conn, refresh_id, source=f"holdings_replace:{source}"
+        )
     return len(positions)
 
 
@@ -218,6 +223,9 @@ def activate_staged_holdings(
                 SELECT {', '.join(_SNAPSHOT_FIELDS)} FROM holdings_refresh_staging
                 WHERE refresh_id=?""",
             (str(refresh_id),),
+        )
+        performance.record_account_value_snapshots(
+            conn, str(refresh_id), source="holdings_refresh"
         )
         conn.execute(
             "DELETE FROM holdings_refreshes WHERE refresh_id=?", (str(refresh_id),)

@@ -353,7 +353,7 @@ Do not migrate production readers in this packet.
 
 ---
 
-## Added Packet: Performance History Capture
+## Added Packet: Performance History Capture (Complete: TP-20261004-001)
 
 Canonical child: `TP-20261004-001`
 
@@ -604,7 +604,7 @@ The modernization train is complete only when:
 - [ ] split monitor runtime state is not module-global/JSON-authoritative;
 - [ ] SQL represents negative holdings and atomic current snapshots correctly;
 - [x] holdings operational readers use SQL;
-- [ ] account/portfolio value snapshots are retained historically;
+- [x] account/portfolio value snapshots are retained historically (TP-20261004-001);
 - [ ] operator can see recent value growth and historical trends with coverage/basis disclosure;
 - [x] CSV holdings output can be disabled without breaking operational holdings behavior;
 - [x] OrderHistory is authoritative for order-history reads;
