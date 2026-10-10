@@ -9,7 +9,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | None | main | 2026-10-03 | [packet](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
-| TP-20261004-002 | Performance Visibility and Growth History | Draft | High | TP-20261004-001 | main | 2026-10-04 | [packet](active/TP-20261004-002-performance-visibility.md) |
+| TP-20261004-002 | Performance Visibility and Growth History | Ready | High | TP-20261003-007, TP-20261004-001 | main | 2026-10-10 | [packet](active/TP-20261004-002-performance-visibility.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Completed packets
@@ -62,6 +62,5 @@ TP-20261004-001, TP-20261004-008, and TP-20261003-009 through TP-20261003-011 ar
 
 ## Blockers
 
-- **Resolved 2026-10-10:** TP-20261003-009/010/011 were implemented in the production checkout but never pushed, which is why the 2026-10-08 refresh above couldn't see TP-010 on GitHub `main`. All three are now committed and merged into `main`; the gap is closed.
-- TP-20261004-002 remains Draft pending its own dependency-refresh checkpoint against TP-20261004-001's actual API (see `docs/task-packets/summaries/TP-20261004-001-SUMMARY.md`'s "Next Handoff").
-- TP-20261003-012 remains Draft until its dependency is reviewed.
+- TP-20261004-002 has completed its dependency refresh and is Ready.
+- TP-20261003-012 remains Draft until TP-20261004-002 is implemented/reviewed and TP-012 is refreshed against the resulting code. Authoring/refresh chat: https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
