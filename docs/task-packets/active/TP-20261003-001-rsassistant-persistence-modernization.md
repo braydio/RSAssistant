@@ -17,9 +17,9 @@ Finish the incomplete RSAssistant migration away from Excel/JSON/CSV as operatio
 
 This packet is the authoritative decomposition for the next modernization train. Do not run the legacy `docs/task-packets/rsassistant-hardening/00-09` sequence directly.
 
-The expected implementation count is **11 child packets**. They are now pre-authored as TP-20261003-002 through TP-20261003-012.
+The expected implementation count is now **13 child packets**. The original 11 are TP-20261003-002 through TP-20261003-012, with two performance packets added after holdings-v2: TP-20261004-001 and TP-20261004-002.
 
-TP-20261003-002 is Ready. TP-20261003-003 through TP-20261003-012 are intentionally Draft until the immediately preceding dependency is implemented and reviewed.
+TP-20261003-002 is Ready. All dependent children are intentionally Draft until their prerequisite implementation is reviewed and the next packet is refreshed.
 
 Dependency review/refresh conversation:
 https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
@@ -96,7 +96,7 @@ Rules:
 
 # Expected child packet train
 
-## Packet 1 of 11: CI baseline
+## Packet 1 of 13: CI baseline
 
 ### Purpose
 
@@ -130,7 +130,7 @@ A normal push/PR to main executes compile + unit tests.
 
 ---
 
-## Packet 2 of 11: SQLite runtime foundation
+## Packet 2 of 13: SQLite runtime foundation
 
 ### Purpose
 
@@ -174,7 +174,7 @@ Do not rewrite all SQL helpers here.
 
 ---
 
-## Packet 3 of 11: Order runtime JSON -> SQLite
+## Packet 3 of 13: Order runtime JSON -> SQLite
 
 ### Purpose
 
@@ -231,7 +231,7 @@ Reuse the good parts of historical Packet 06, but rebase against current main.
 
 ---
 
-## Packet 4 of 11: Split monitor JSON -> SQLite
+## Packet 4 of 13: Split monitor JSON -> SQLite
 
 ### Purpose
 
@@ -286,7 +286,7 @@ Reuse historical Packet 07 only as a design reference.
 
 ---
 
-## Packet 5 of 11: Holdings SQL contract v2
+## Packet 5 of 13: Holdings SQL contract v2
 
 ### Purpose
 
@@ -353,7 +353,23 @@ Do not migrate production readers in this packet.
 
 ---
 
-## Packet 6 of 11: Holdings authority inversion
+## Added Packet: Performance History Capture
+
+Canonical child: `TP-20261004-001`
+
+Runs after Holdings SQL Contract v2 and before holdings authority inversion.
+
+Purpose:
+
+- persist one account-value observation per successful holdings refresh;
+- preserve reported account totals separately from summed position values;
+- backfill historical position-value data from `HistoricalHoldings`;
+- preserve valuation basis so older positions-only history is not confused with newer account-total history;
+- create the durable time series required for recent growth and historical visibility.
+
+---
+
+## Packet 6 of 13: Holdings authority inversion
 
 ### Purpose
 
@@ -394,7 +410,25 @@ After this packet, disabling CSV export must not break holdings commands.
 
 ---
 
-## Packet 7 of 11: OrderHistory authority + CSV demotion
+## Added Packet: Performance Visibility and Growth History
+
+Canonical child: `TP-20261004-002`
+
+Runs after holdings authority inversion + performance history capture.
+
+Purpose:
+
+- add `..performance` / `..perf` / `..growth`;
+- show current value plus 1D/7D/30D/90D/YTD/1Y/all-time value change;
+- show dollar and percentage growth;
+- render historical value charts;
+- support account/broker filtering;
+- protect comparisons against changing account coverage;
+- clearly label value growth rather than true cash-flow-adjusted investment return.
+
+---
+
+## Packet 7 of 13: OrderHistory authority + CSV demotion
 
 ### Purpose
 
@@ -415,7 +449,7 @@ After migration, operational queries must read SQL. CSV can be regenerated/expor
 
 ---
 
-## Packet 8 of 11: Excel retirement (Complete: TP-20261003-009)
+## Packet 8 of 13: Excel retirement (Complete: TP-20261003-009)
 
 ### Preconditions
 
@@ -436,7 +470,7 @@ Keep `docs/excel_to_sql_mapping.md` as historical migration documentation, but m
 
 ---
 
-## Packet 9 of 11: Decompose sql_utils.py by domain
+## Packet 9 of 13: Decompose sql_utils.py by domain
 
 ### Purpose
 
@@ -464,7 +498,7 @@ Do not rewrite queries just for style while moving them.
 
 ---
 
-## Packet 10 of 11: Decompose on_message.py into services
+## Packet 10 of 13: Decompose on_message.py into services
 
 ### Purpose
 
@@ -489,7 +523,7 @@ Preserve behavior and tests.
 
 ---
 
-## Packet 11 of 11: Parsing/runtime cleanup
+## Packet 11 of 13: Parsing/runtime cleanup
 
 ### Purpose
 
@@ -521,7 +555,11 @@ Do not introduce a new persistence architecture in this final packet.
 4 split monitor persistence ├─ may run separately after 2
 5 holdings SQL v2 ──────────┘
   ↓
+Performance history capture (TP-20261004-001)
+  ↓
 6 holdings authority inversion
+  ↓
+Performance visibility (TP-20261004-002)
   ↓
 7 order-history authority
   ↓
@@ -566,6 +604,8 @@ The modernization train is complete only when:
 - [ ] split monitor runtime state is not module-global/JSON-authoritative;
 - [ ] SQL represents negative holdings and atomic current snapshots correctly;
 - [x] holdings operational readers use SQL;
+- [ ] account/portfolio value snapshots are retained historically;
+- [ ] operator can see recent value growth and historical trends with coverage/basis disclosure;
 - [x] CSV holdings output can be disabled without breaking operational holdings behavior;
 - [x] OrderHistory is authoritative for order-history reads;
 - [x] Excel runtime code/dependency/config/volume is removed;

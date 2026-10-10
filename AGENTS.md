@@ -12,6 +12,7 @@ Canonical control files:
 - `docs/task-packets/active/` – Draft, Ready, In Progress, and Blocked packets.
 - `docs/task-packets/completed/` – Complete packets.
 - `docs/task-packets/archived/` – Superseded and Cancelled packets.
+- `docs/task-packets/summaries/` – durable implementation/refresh closeout summaries keyed by Packet ID.
 
 Canonical filenames use:
 
@@ -36,6 +37,98 @@ When asked to implement or continue a packet:
 9. Record exact blockers/deviations instead of weakening requirements silently.
 10. On completion, move the packet to `completed/` and update index/tracker in the same change.
 
+### Packet is the brief
+
+When the user names a Packet ID, packet title, or clearly recognizable packeted workstream, resolve and read the canonical packet before implementation. Treat that packet as the complete brief; do not ask the user to restate requirements already present there.
+
+Current-turn user instructions may narrow, pause, or explicitly override packet details. Otherwise preserve the packet's objective, non-goals, acceptance criteria, validation, dependency/refresh gates, and handoff requirements.
+
+If the packet is stale relative to current `main`, refresh the packet first rather than silently improvising around drift.
+
+### Authoring chat backlinks
+
+When a task packet contains an `Authoring chat:` or `Refresh planning chat:` URL:
+
+- copy the exact URL verbatim into every durable packet completion/recovery/refresh summary;
+- include the same exact URL in the final user-facing completion or refresh-required response;
+- never shorten, redirect, normalize, or replace it with a generic ChatGPT/project link;
+- never infer or invent a conversation URL;
+- when the user supplies a conversation URL while authoring or refreshing a packet, add it to that packet's metadata immediately.
+
+The backlink exists so the next planning/review pass can return to the exact conversation that authored the packet.
+
+### Durable packet summaries
+
+Every implemented canonical packet writes one durable closeout file:
+
+```text
+docs/task-packets/summaries/<PACKET-ID>-SUMMARY.md
+```
+
+Use one file per Packet ID. Update/overwrite that file as the same packet advances; do not create duplicate summaries for the same packet. Commit the summary with the implementation whenever practical.
+
+Required summary shape:
+
+```markdown
+# <PACKET-ID> Completion Summary
+
+Authoring chat: <exact packet URL | not-recorded>
+
+## Outcome
+- Status: success | partial | blocked
+- What changed: ...
+- Files changed: ...
+
+## Validation
+- <command>: passed | failed | not-run
+- ...
+
+## Process Feedback
+- Friction severity: none | low | medium | high
+- What went wrong: none | ...
+- Root cause / contributing factors: none | ...
+- Tooling / docs drift discovered: none | ...
+- Follow-up: none | fixed-in-scope | <Packet ID> | manual-follow-up
+
+## Next Handoff
+- Next packet: <Packet ID | none>
+- Next packet state: ready | dependency-gated | refresh-required | human-required | none
+- ChatGPT/user planning refresh required: yes | no
+- Authoring chat: <exact packet URL | not-recorded>
+- Refresh reason: none | ...
+- Next action: ...
+- Blockers or open questions: none | ...
+```
+
+Keep the summary factual. Record awkward parts, failed checks, stale assumptions, or follow-up debt rather than writing a victory note that merely repeats the diff.
+
+### User-facing closeout format
+
+For a completed packet, keep the final response concise and include:
+
+```text
+PACKET COMPLETE
+Packet: <Packet ID — title>
+Summary: <one-sentence result>
+Validation: <focused/full result>
+Persistent summary: docs/task-packets/summaries/<PACKET-ID>-SUMMARY.md
+Next: <next Packet ID/state/action>
+Authoring chat: <exact URL when recorded>
+```
+
+When a dependency or packet requires return to ChatGPT/user planning before implementation continues, do not dump a long terminal recap. Use:
+
+```text
+PLANNING REFRESH REQUIRED
+Packet: <Packet ID>
+Persistent summary: docs/task-packets/summaries/<PACKET-ID>-SUMMARY.md
+Reason: <specific drift/decision>
+Authoring chat: <exact recorded URL>
+Next action: review/refresh the named successor against current main
+```
+
+The durable summary carries the implementation detail; the chat response is the navigation card.
+
 ### Task packet authoring rules
 
 These rules apply to ChatGPT, Codex, and any other agent writing packets:
@@ -53,6 +146,7 @@ These rules apply to ChatGPT, Codex, and any other agent writing packets:
 - Keep each packet independently testable and bounded to one coherent workstream.
 - Minimize token burn by supplying real file paths and real code recommendations rather than telling the implementer to search broadly.
 - When new runtime evidence changes the diagnosis, update the canonical packet and tracker directly.
+- When the user provides a ChatGPT planning/review URL, record it exactly as `Authoring chat:` in the packet; use `Refresh planning chat:` too when a later dependency refresh must return to that conversation.
 
 ### Persistence modernization rule
 

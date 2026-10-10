@@ -9,6 +9,8 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | None | main | 2026-10-03 | [packet](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
+| TP-20261004-001 | Performance History Capture | Draft | High | TP-20261003-006 | main | 2026-10-04 | [packet](active/TP-20261004-001-performance-history-capture.md) |
+| TP-20261004-002 | Performance Visibility and Growth History | Draft | High | TP-20261004-001 | main | 2026-10-04 | [packet](active/TP-20261004-002-performance-visibility.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Completed packets
@@ -46,7 +48,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 
 ## Dependency-review protocol
 
-Packets TP-20261003-003 through TP-20261003-012 were authored ahead of their prerequisites. After a dependency lands, review its implementation and refresh the next packet against current main before changing that packet from Draft to Ready.
+Dependent modernization packets, including TP-20261004-001 and TP-20261004-002, were intentionally authored ahead of their prerequisites. Each contains the required review checkpoint:
 
 https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
@@ -54,4 +56,5 @@ TP-20261004-008 and TP-20261003-009 through TP-20261003-011 are complete locally
 
 ## Blockers
 
-None. TP-20261003-012 is next and remains Draft pending its dependency refresh.
+- **Resolved 2026-10-10:** TP-20261003-009/010/011 were implemented in the production checkout but never pushed, which is why the 2026-10-08 refresh above couldn't see TP-010 on GitHub `main`. All three are now committed and merged into `main`; the gap is closed.
+- Other dependent packets (TP-20261003-012, TP-20261004-001, TP-20261004-002) remain Draft until their dependency is reviewed.
