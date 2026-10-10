@@ -38,9 +38,10 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = parse_args()
 
-    from utils.sql_utils import init_db, migrate_legacy_json_data
+    from rsassistant.persistence.runtime import initialize_runtime
+    from rsassistant.persistence.watchlists import migrate_legacy_json_data
 
-    init_db()
+    initialize_runtime()
     results = migrate_legacy_json_data(remove_legacy_files=args.archive)
     logger.info(
         "Migration finished: account_mappings=%s watchlist=%s sell_list=%s",

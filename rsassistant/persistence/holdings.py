@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 import math
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
 from os import PathLike
 from typing import Any, Iterable
 
 from rsassistant.persistence.db import connect_runtime_db
 from rsassistant.persistence.schema import run_migrations
-from utils.config_utils import SQL_DATABASE
+from rsassistant.persistence import accounts
+from utils.config_utils import SQL_DATABASE, get_account_nickname_or_default
 
 DATABASE_PATH = SQL_DATABASE
+logger = logging.getLogger(__name__)
+
+
+def _get_db_connection(database=None):
+    return connect_runtime_db(database or DATABASE_PATH)
 
 _SNAPSHOT_FIELDS = (
     "account_id",
@@ -278,3 +286,149 @@ __all__ = [
     "replace_current_holdings",
     "stage_current_holdings",
 ]
+
+
+def update_holdings_live(
+    broker, broker_number, account_number, ticker, quantity, price, *, database=None):
+    """Insert a holding into ``HoldingsLive`` when logging is enabled."""
+
+
+    logger.info(
+        f"Updating holdings for ticker {ticker}, broker {broker}, account {account_number}."
+    )
+    account_id = accounts.get_or_create_account_id(broker, broker_number, account_number, database=database)
+
+    with _get_db_connection(database) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
+                VALUES (?, ?, ?, ?, DATETIME('now'))
+                """,
+                (account_id, ticker, quantity, price),
+            )
+
+            logger.info(
+                f"Holdings updated successfully for ticker {ticker}, account {account_id}."
+            )
+        except sqlite3.Error as e:
+            logger.error(f"Error updating holdings: {e}")
+            raise
+
+
+def update_holdings_live_batch(holdings: list[dict[str, Any]], *, database=None) -> int:
+    """Insert many holdings into ``HoldingsLive`` in a single DB transaction.
+
+    Args:
+        holdings: Items with keys ``broker``, ``broker_number``,
+            ``account_number``, ``ticker``, ``quantity``, and ``price``.
+
+    Returns:
+        Number of rows inserted into ``HoldingsLive``.
+    """
+
+
+    if not holdings:
+        return 0
+
+    inserted_rows = 0
+    account_id_cache: dict[tuple[str, str, str], int] = {}
+
+    with _get_db_connection(database) as conn:
+        cursor = conn.cursor()
+        rows_to_insert: list[tuple[int, str, float, float]] = []
+
+        for item in holdings:
+            broker = str(item.get("broker", "")).strip()
+            broker_number = str(item.get("broker_number", "")).strip()
+            account_number = str(item.get("account_number", "")).strip()
+            ticker = str(item.get("ticker", "")).strip()
+            if not (broker and account_number and ticker):
+                continue
+
+            try:
+                quantity = float(item.get("quantity", 0))
+                price = float(item.get("price", 0))
+            except (TypeError, ValueError):
+                continue
+            if quantity < 0:
+                continue
+
+            account_key = (broker, broker_number, account_number)
+            account_id = account_id_cache.get(account_key)
+            if account_id is None:
+                account_nickname = get_account_nickname_or_default(
+                    broker, broker_number, account_number
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO Accounts (
+                        broker, account_number, broker_number, account_nickname
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(broker, broker_number, account_number) DO NOTHING
+                    """,
+                    (broker, account_number, broker_number, account_nickname),
+                )
+                cursor.execute(
+                    """SELECT account_id FROM Accounts
+                       WHERE broker=? AND broker_number=? AND account_number=?""",
+                    (broker, broker_number, account_number),
+                )
+                account_id = int(cursor.fetchone()[0])
+                account_id_cache[account_key] = account_id
+
+            rows_to_insert.append((account_id, ticker, quantity, price))
+
+        if rows_to_insert:
+            cursor.executemany(
+                """
+                INSERT INTO HoldingsLive (account_id, ticker, quantity, average_price, timestamp)
+                VALUES (?, ?, ?, ?, DATETIME('now'))
+                """,
+                rows_to_insert,
+            )
+            inserted_rows = len(rows_to_insert)
+            logger.info("Holdings batch update inserted %d rows.", inserted_rows)
+
+    return inserted_rows
+
+
+def update_historical_holdings(target_date: str | None = None, *, database=None) -> int:
+    """Upsert the latest observation per holding for one business date."""
+    logger.info("Updating historical holdings based on live data.")
+    target_date = target_date or (datetime.now() - timedelta(days=1)).strftime(
+        "%Y-%m-%d"
+    )
+
+    with _get_db_connection(database) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO HistoricalHoldings (
+                    account_id, ticker, date, quantity, average_price
+                )
+                SELECT live.account_id, live.ticker, DATE(live.timestamp),
+                       live.quantity, live.average_price
+                FROM HoldingsLive AS live
+                WHERE DATE(live.timestamp) = ?
+                  AND live.holding_id = (
+                      SELECT MAX(latest.holding_id)
+                      FROM HoldingsLive AS latest
+                      WHERE latest.account_id IS live.account_id
+                        AND latest.ticker = live.ticker
+                        AND DATE(latest.timestamp) = DATE(live.timestamp)
+                  )
+                ON CONFLICT(account_id, ticker, date) DO UPDATE SET
+                    quantity = excluded.quantity,
+                    average_price = excluded.average_price
+                """,
+                (target_date,),
+            )
+            conn.commit()
+            logger.info("Historical holdings updated successfully.")
+            return cursor.rowcount
+        except sqlite3.Error as e:
+            logger.error(f"Error updating historical holdings: {e}")
+            raise

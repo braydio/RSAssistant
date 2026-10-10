@@ -3,7 +3,7 @@
 **Packet ID:** TP-20261003-001  
 **Status:** In Progress
 **Created:** 2026-10-03  
-**Last updated:** 2026-10-03
+**Last updated:** 2026-10-04
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
 **Canonical path:** `docs/task-packets/active/TP-20261003-001-rsassistant-persistence-modernization.md`  
@@ -54,16 +54,7 @@ Confirmed files and behavior:
   - reads `holdings_current` through the persistence repository.
 - `utils/holdings_importer.py`
   - JSON snapshot input ultimately routes through `save_holdings_to_csv()`.
-- `utils/excel_utils.py`
-  - Excel is hard-disabled/deprecated, but the module still ships.
-- `requirements.txt`
-  - still includes `openpyxl`.
-- `config/.env.example`
-  - still includes `EXCEL_LOGGING_ENABLED`.
-- `docker-compose.yml`
-  - still mounts `./volumes/excel:/app/volumes/excel`.
-- `entrypoint.sh`
-  - still creates `$VOLUMES_DIR/excel`.
+- Excel runtime code, `openpyxl`, the toggle/path configuration, Docker mount, and startup directory creation were removed by TP-20261003-009. Historical workbooks are not mounted or modified.
 - `.github/workflows/submit-pr.yaml`
   - is not CI; it is a stale/broken auto-PR workflow.
 - There is currently no `utils/runtime_db.py`.
@@ -424,7 +415,7 @@ After migration, operational queries must read SQL. CSV can be regenerated/expor
 
 ---
 
-## Packet 8 of 11: Excel retirement
+## Packet 8 of 11: Excel retirement (Complete: TP-20261003-009)
 
 ### Preconditions
 
@@ -577,11 +568,11 @@ The modernization train is complete only when:
 - [x] holdings operational readers use SQL;
 - [x] CSV holdings output can be disabled without breaking operational holdings behavior;
 - [x] OrderHistory is authoritative for order-history reads;
-- [ ] Excel runtime code/dependency/config/volume is removed;
-- [ ] `utils/sql_utils.py` is decomposed behind stable domain repository modules;
-- [ ] Discord orchestration is thinner and domain services do not require Discord contexts unnecessarily;
+- [x] Excel runtime code/dependency/config/volume is removed;
+- [x] `utils/sql_utils.py` is decomposed behind stable domain repository modules;
+- [x] Discord orchestration is thinner and domain services do not require Discord contexts unnecessarily;
 - [ ] no new JSON/CSV/Excel operational database is introduced;
-- [ ] full unittest suite and compileall pass after each child packet.
+- [x] full unittest suite and compileall pass after each child packet.
 
 ---
 

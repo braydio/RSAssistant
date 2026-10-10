@@ -1,28 +1,26 @@
 # TP-20261003-010: Decompose sql_utils.py by Domain
 
 **Packet ID:** TP-20261003-010
-**Status:** Draft
+**Status:** Complete
 **Created:** 2026-10-03
-**Last updated:** 2026-10-03
+**Last updated:** 2026-10-08
 **Repository:** braydio/RSAssistant
 **Target branch:** main
-**Canonical path:** `docs/task-packets/active/TP-20261003-010-sql-utils-decomposition.md`
+**Canonical path:** `docs/task-packets/completed/TP-20261003-010-sql-utils-decomposition.md`
 **Workstream size:** One implementation packet
 **Depends on:** TP-20261003-009
 **Priority:** Normal
 **Controller:** TP-20261003-001
 
-## Required dependency-refresh checkpoint
+## Dependency-refresh checkpoint (2026-10-08)
 
-This packet was authored **before TP-20261003-009 landed**. Do not implement it blindly after the dependency merges.
+This packet was authored **before TP-20261003-009 landed**. The completion report and current persistence tree were reviewed before implementation.
 
 Before coding:
 
-1. pull/re-open current `main`;
-2. read TP-20261003-009's completion report and diff;
-3. compare this packet's named files, schema assumptions, and public APIs against current main;
-4. if any material assumption changed, **stop before implementation** and call out that this packet needs review/refresh;
-5. include this review link in that handoff:
+1. Re-open current repository state and the TP-009 completion report.
+2. Compare the named persistence modules and public APIs against the current tree.
+3. Preserve the review link for traceability:
 
 https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
@@ -30,7 +28,7 @@ Suggested handoff wording:
 
 > TP-20261003-009 has landed. The next packet was pre-authored and needs a dependency refresh against current main before implementation. Review/update it here: https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e
 
-Do not silently reinterpret stale instructions.
+Review finding: TP-009 completed Excel retirement and did not change SQL ownership or schemas. Existing `rsassistant/persistence/orders.py` and `holdings.py` are the packet's previously planned reused repositories. `accounts.py`, `watchlists.py`, and `reverse_splits.py` are still absent. SQL schemas and public APIs remain present in `utils/sql_utils.py`; no material assumption changed. Proceed with this packet.
 
 
 ## Objective
@@ -134,11 +132,11 @@ Add import-contract tests for compatibility shim and direct repositories.
 
 ## Acceptance criteria
 
-- [ ] domain SQL implementations live under `rsassistant/persistence`.
-- [ ] persistence modules do not import Discord contexts.
-- [ ] production callers use domain repositories.
-- [ ] `utils/sql_utils.py` is compatibility-only or very small.
-- [ ] no behavior/schema redesign is mixed in.
+- [x] domain SQL implementations live under `rsassistant/persistence`.
+- [x] persistence modules do not import Discord contexts.
+- [x] production callers use domain repositories.
+- [x] `utils/sql_utils.py` is compatibility-only or very small.
+- [x] no behavior/schema redesign is mixed in.
 
 ## Validation
 
@@ -154,4 +152,15 @@ Do not repair unrelated pre-existing failures without documenting them.
 
 ## Completion report
 
-Report final function ownership map, remaining compatibility exports, production imports still pointing at `utils.sql_utils`, and tests.
+- Account identity, nickname mapping, label, and resolution APIs live in `rsassistant/persistence/accounts.py`.
+- Watchlist/sell-list CRUD and legacy JSON migration live in `rsassistant/persistence/watchlists.py`.
+- OrderHistory CRUD and legacy event/CSV adaptation live in `rsassistant/persistence/orders.py`.
+- Current and historical holdings operations live in `rsassistant/persistence/holdings.py`.
+- Reverse split log and account-entry APIs live in `rsassistant/persistence/reverse_splits.py`.
+- Validated generic table queries live in `rsassistant/persistence/admin.py`; coordinated schema and legacy import startup lives in `rsassistant/persistence/runtime.py`.
+- `utils/sql_utils.py` is a 196-line compatibility facade. It retains legacy names and patchable configuration constants, including `init_db`, normalized-order validation, CSV-shaped order insertion, current-holdings snapshot helpers, and the operator query adapter.
+- Production Python imports of `utils.sql_utils` are zero. Text search found only a historical API mention in an older completed packet; the current config documentation no longer points callers there.
+- `python -m unittest discover -s unittests -p '*_test.py'`: 83 tests passed.
+- `python -m compileall -q rsassistant utils plugins unittests`: passed.
+- `python -m pytest -q`: 152 passed, 7 failed. The failures are outside this packet: two tests assume `RSAssistant` exports `discord`/`bot`, one round-up snippet expectation, two command tests invoke decorated Discord commands with a missing context, and two sell-queue tests assume a module-level `RSAssistant.watch_list_manager` export. They were left unchanged per the packet's instruction to document unrelated failures.
+- No query/schema redesign was introduced. The watch utility test fixture now redirects the direct watchlist and holdings repository database paths alongside legacy shim paths.

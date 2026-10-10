@@ -21,15 +21,13 @@ from utils.config_utils import (
     ORDERS_LOG_CSV,
     CSV_LOGGING_ENABLED,
 )
-from utils.sql_utils import (
-    activate_current_holdings_snapshot,
-    discard_current_holdings_snapshot,
-    replace_current_holdings_snapshot,
-    stage_current_holdings_snapshot,
-    update_holdings_live_batch,
-)
 from rsassistant.persistence.holdings import (
+    activate_staged_holdings as activate_current_holdings_snapshot,
     clear_current_holdings, get_current_holdings,
+    discard_staged_holdings as discard_current_holdings_snapshot,
+    replace_current_holdings as replace_current_holdings_snapshot,
+    stage_current_holdings as stage_current_holdings_snapshot,
+    update_holdings_live_batch,
 )
 from utils.order_exec import send_sell_command
 

@@ -5,11 +5,8 @@ from __future__ import annotations
 from discord.ext import commands
 from utils.discord_permissions import operator_only
 
-from utils.sql_utils import (
-    clear_account_nicknames,
-    migrate_legacy_json_data,
-    upsert_account_mapping,
-)
+from rsassistant.persistence.accounts import clear_account_nicknames, upsert_account_mapping
+from rsassistant.persistence.watchlists import migrate_legacy_json_data
 from utils.utility_utils import all_account_nicknames, all_brokers
 
 
@@ -65,13 +62,13 @@ class AccountsCog(commands.Cog):
     @commands.command(
         name="loadmap",
         aliases=["lm"],
-        help="Migrate legacy JSON/Excel-era account data into SQL storage.",
+        help="Migrate legacy JSON account data into SQL storage.",
         extras={"category": "Accounts"},
     )
     async def load_account_mappings_command(self, ctx: commands.Context) -> None:
-        """Migrate legacy JSON/Excel-era account mappings into SQL storage."""
+        """Migrate legacy JSON account mappings into SQL storage."""
         await ctx.send(
-            "Migrating legacy JSON/Excel-era data (mappings/watchlist/sell list) to SQL..."
+            "Migrating legacy JSON data (mappings/watchlist/sell list) to SQL..."
         )
         results = migrate_legacy_json_data()
         await ctx.send(
@@ -83,12 +80,12 @@ class AccountsCog(commands.Cog):
     @commands.command(
         name="loadlog",
         aliases=["ll"],
-        help="Re-run legacy JSON/Excel-era migration into SQL storage.",
+        help="Re-run legacy JSON migration into SQL storage.",
         extras={"category": "Accounts"},
     )
     async def update_log_with_mappings(self, ctx: commands.Context) -> None:
-        """Re-run the legacy JSON/Excel-era migration for account mappings."""
-        await ctx.send("Re-running legacy JSON/Excel-era migration...")
+        """Re-run the legacy JSON migration for account mappings."""
+        await ctx.send("Re-running legacy JSON migration...")
         results = migrate_legacy_json_data()
         await ctx.send(
             "Migration refresh complete."

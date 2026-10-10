@@ -7,8 +7,8 @@
 - Optional plugin loading exists via `ENABLED_PLUGINS` and `plugins/`.
 - Configuration is centralized in `config/.env` (with `config/.env.example` as
   template) plus a legacy `config/settings.yml`.
-- Excel logging is deprecated; SQL persistence is the source of truth for order
-  history, account mappings, and watchlists.
+- SQL persistence is the source of truth for order history, account mappings,
+  and watchlists. Excel has no runtime integration.
 
 ## Newcomer Experience: What Is Confusing
 1. Two parallel homes for logic (`rsassistant/` vs `utils/`) without a clear

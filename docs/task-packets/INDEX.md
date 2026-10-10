@@ -9,15 +9,15 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 | Packet ID | Title | Status | Priority | Canonical packet |
 | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
-| TP-20261003-009 | Excel Runtime Retirement | Draft | Normal | [active/TP-20261003-009-excel-retirement.md](active/TP-20261003-009-excel-retirement.md) |
-| TP-20261003-010 | Decompose sql_utils.py by Domain | Draft | Normal | [active/TP-20261003-010-sql-utils-decomposition.md](active/TP-20261003-010-sql-utils-decomposition.md) |
-| TP-20261003-011 | Decompose on_message.py into Services | Draft | Normal | [active/TP-20261003-011-on-message-decomposition.md](active/TP-20261003-011-on-message-decomposition.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | [active/TP-20261003-012-parsing-runtime-cleanup.md](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Completed
 
 | Packet ID | Title | Status | Canonical packet |
 | --- | --- | --- | --- |
+| TP-20261003-009 | Excel Runtime Retirement | Complete | [completed/TP-20261003-009-excel-retirement.md](completed/TP-20261003-009-excel-retirement.md) |
+| TP-20261003-010 | Decompose sql_utils.py by Domain | Complete | [completed/TP-20261003-010-sql-utils-decomposition.md](completed/TP-20261003-010-sql-utils-decomposition.md) |
+| TP-20261003-011 | Decompose on_message.py into Services | Complete | [completed/TP-20261003-011-on-message-decomposition.md](completed/TP-20261003-011-on-message-decomposition.md) |
 | TP-20261003-002 | Establish a Full CI Baseline | Complete | [completed/TP-20261003-002-ci-baseline.md](completed/TP-20261003-002-ci-baseline.md) |
 | TP-20261003-003 | Establish the SQLite Runtime Foundation | Complete | [completed/TP-20261003-003-sqlite-runtime-foundation.md](completed/TP-20261003-003-sqlite-runtime-foundation.md) |
 | TP-20261003-004 | Move Order Runtime State to SQLite | Complete | [completed/TP-20261003-004-order-runtime-sqlite.md](completed/TP-20261003-004-order-runtime-sqlite.md) |

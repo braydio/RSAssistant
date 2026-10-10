@@ -10,7 +10,6 @@ services:
     volumes:
       - ./volumes/logs:/app/volumes/logs   # Persist logs
       - ./volumes/db:/app/volumes/db       # Persist database
-      - ./volumes/excel:/app/volumes/excel # Persist Excel
       - ./volumes/cache:/app/volumes/cache # Persist price cache
       - ./config:/app/config               # Mount unified config directory
     environment:

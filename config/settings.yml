@@ -44,7 +44,7 @@ environment:
 feature_flags:
   history_query_enabled: false  # Set true to enable the ..history command
 
-# Account Owners List - Customizable account ownership - set in Account Nicknames as per your Excel log > Account Details
+# Account Owners List - Customizable account ownership - set in Account Nicknames
 account_owners : 
   1 : Braydio     # Example: Fidelity 1 xxxx1234 will map to Braydio in summary view
   2 : Dre         # Example: Fidelity 2 xxxx5678 will map to Dre in summary view

@@ -93,7 +93,6 @@ Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 
 - `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot, reverse split history)
 - `volumes/logs/` (app logs, holdings logs)
-- `volumes/excel/` (legacy archive only; Excel writes are deprecated)
 
 Reverse split persistence uses SQL append-only tables:
 
@@ -110,12 +109,13 @@ matching SQL tables are empty), and can also be migrated manually with:
 ### Migration note for legacy Excel users
 
 If your workflow previously depended on `volumes/excel/ReverseSplitLog.xlsx`,
-use SQL and CSV outputs instead:
+use SQL and CSV outputs instead. RSAssistant no longer reads, writes, mounts,
+or creates an Excel runtime directory. Keep any historical workbook separately
+if you still need it for reference:
 
 - Account mappings/watchlist/sell list are read from SQLite (`volumes/db/`).
 - Operational logs are emitted as CSV files in `volumes/logs/` (for example
   holdings and orders logs).
-- `volumes/excel/` is retained only as an archive and is not updated at runtime.
 
 
 ```bash
@@ -180,7 +180,6 @@ shared `volumes/` directory (or Docker volume). Example:
     volumes/
       db/auto_rsa_holdings.json
       logs/
-      excel/
 ```
 
 Point both apps at the same `AUTO_RSA_HOLDINGS_FILE` path. `AutoRSA-GUI` is optional

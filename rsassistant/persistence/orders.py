@@ -10,7 +10,7 @@ from typing import Any
 
 from rsassistant.persistence.db import connect_runtime_db
 from rsassistant.persistence.schema import run_migrations
-from utils.config_utils import ORDERS_LOG_CSV, SQL_DATABASE
+from utils.config_utils import CSV_LOGGING_ENABLED, ORDERS_LOG_CSV, SQL_DATABASE
 
 DATABASE_PATH = SQL_DATABASE
 ORDER_CSV_HEADERS = [
@@ -107,6 +107,27 @@ def insert_order_history(order: dict[str, Any], *, database=None) -> bool:
         return _insert(conn, normalized)
 
 
+def insert_order_event(order: dict[str, Any], *, database=None, export_csv=None) -> bool:
+    """Insert an order and optionally refresh the compatibility CSV snapshot.
+
+    Accepts the legacy CSV-shaped mapping as well as repository field names.
+    A CSV export error does not undo the authoritative SQL insert.
+    """
+    inserted = insert_order_history(order, database=database)
+    if export_csv is None:
+        export_csv = CSV_LOGGING_ENABLED
+    if export_csv:
+        try:
+            export_order_history_csv(database=database)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Order committed to SQL but compatibility CSV export failed: %s", exc
+            )
+    return inserted
+
+
 def import_legacy_order_csv(path=None, *, database=None) -> int:
     """Import an existing legacy CSV once; malformed input leaves no SQL changes."""
     source = Path(path or ORDERS_LOG_CSV).expanduser()
@@ -190,4 +211,10 @@ def export_order_history_csv(path=ORDERS_LOG_CSV, *, database=None) -> int:
     return len(rows)
 
 
-__all__ = ["insert_order_history", "import_legacy_order_csv", "list_order_history", "export_order_history_csv"]
+__all__ = [
+    "export_order_history_csv",
+    "import_legacy_order_csv",
+    "insert_order_event",
+    "insert_order_history",
+    "list_order_history",
+]

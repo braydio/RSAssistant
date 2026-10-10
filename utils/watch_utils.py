@@ -14,7 +14,7 @@ from utils.config_utils import (
 )
 from utils.utility_utils import send_large_message_chunks
 from utils.price_fetcher import get_last_prices
-from utils.sql_utils import (
+from rsassistant.persistence.watchlists import (
     delete_sell_list_entry,
     delete_watchlist_entry,
     fetch_sell_list_entries,
@@ -23,8 +23,8 @@ from utils.sql_utils import (
     replace_watchlist_entries,
     upsert_sell_list_entry,
     upsert_watchlist_entry,
-    update_historical_holdings,
 )
+from rsassistant.persistence.holdings import update_historical_holdings
 from rsassistant.bot.channel_resolver import (
     resolve_reply_channel,
     resolve_watchlist_channel,
@@ -169,16 +169,12 @@ class WatchListManager:
     async def watch_ticker(self, ctx, ticker, split_date, split_ratio=None):
         """Add a stock ticker with split details to the watch list.
 
-        Watchlist entries are persisted to SQL storage. Excel updates are
-        deprecated and no longer emitted from this flow.
+        Watchlist entries are persisted to SQL storage.
         """
         ticker = ticker.upper()
 
         if not self.ticker_exists(ticker):
             self.add_ticker(ticker, split_date, split_ratio or "N/A")
-            logging.warning(
-                "Excel logging is deprecated; watchlist updates are stored in SQL."
-            )
             logging.info(
                 "%s with Split Ratio %s on %s saved to watchlist.",
                 ticker,

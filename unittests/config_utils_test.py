@@ -1,10 +1,15 @@
 from utils import config_utils
 from utils import sql_utils
+from rsassistant.persistence import accounts
 
 
 def test_get_account_nickname_creates_mapping(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setattr(sql_utils, "SQL_DATABASE", db_path)
+    monkeypatch.setattr(accounts, "DATABASE_PATH", db_path)
+    monkeypatch.setattr(sql_utils, "ACCOUNT_MAPPING", tmp_path / "missing-mappings.json")
+    monkeypatch.setattr(sql_utils, "WATCH_FILE", tmp_path / "missing-watchlist.json")
+    monkeypatch.setattr(sql_utils, "SELL_FILE", tmp_path / "missing-sell-list.json")
     monkeypatch.setattr(sql_utils, "SQL_LOGGING_ENABLED", True)
     sql_utils.init_db()
 
@@ -60,23 +65,23 @@ def test_ignore_brokers_file_and_env_merge(tmp_path, monkeypatch):
 
 def test_persistence_defaults_true():
     assert config_utils.CSV_LOGGING_ENABLED
-    assert config_utils.EXCEL_LOGGING_ENABLED
     assert config_utils.SQL_LOGGING_ENABLED
+    assert not hasattr(config_utils, "EXCEL_LOGGING_ENABLED")
+    assert not hasattr(config_utils, "EXCEL_FILE_MAIN")
 
 
 def test_persistence_env_override(monkeypatch):
     monkeypatch.setenv("CSV_LOGGING_ENABLED", "false")
-    monkeypatch.setenv("EXCEL_LOGGING_ENABLED", "false")
     monkeypatch.setenv("SQL_LOGGING_ENABLED", "false")
     import importlib
 
     cu = importlib.reload(config_utils)
     assert not cu.CSV_LOGGING_ENABLED
-    assert not cu.EXCEL_LOGGING_ENABLED
     assert not cu.SQL_LOGGING_ENABLED
+    assert not hasattr(cu, "EXCEL_LOGGING_ENABLED")
+    assert not hasattr(cu, "EXCEL_FILE_MAIN")
     assert cu.load_config()["persistence"] == {
         "csv": False,
-        "excel": False,
         "sql": True,
     }
 
@@ -85,7 +90,7 @@ def test_load_account_mappings_uses_sql_when_legacy_toggle_is_disabled(monkeypat
     monkeypatch.setattr(config_utils, "SQL_LOGGING_ENABLED", False)
     monkeypatch.setattr(sql_utils, "SQL_LOGGING_ENABLED", False)
     sql_mappings = {"BrokerA": {"1": {"1234": "From SQL"}}}
-    monkeypatch.setattr(sql_utils, "fetch_account_mappings", lambda: sql_mappings)
+    monkeypatch.setattr(accounts, "fetch_account_mappings", lambda: sql_mappings)
     monkeypatch.setattr(
         config_utils,
         "_load_legacy_account_mappings",
@@ -99,7 +104,7 @@ def test_save_account_mappings_uses_sql_when_legacy_toggle_is_disabled(monkeypat
     monkeypatch.setattr(config_utils, "SQL_LOGGING_ENABLED", False)
     monkeypatch.setattr(sql_utils, "SQL_LOGGING_ENABLED", False)
     saved = []
-    monkeypatch.setattr(sql_utils, "sync_account_mappings", saved.append)
+    monkeypatch.setattr(accounts, "sync_account_mappings", saved.append)
 
     mappings = {"BrokerA": {"1": {"1234": "Primary"}}}
     config_utils.save_account_mappings(mappings)
