@@ -52,6 +52,7 @@ _CORE_COGS: tuple[str, ...] = (
     "rsassistant.bot.cogs.holdings",
     "rsassistant.bot.cogs.split_monitor",
     "rsassistant.bot.cogs.reporting",
+    "rsassistant.bot.cogs.performance",
     "rsassistant.bot.cogs.aliases",
     "rsassistant.bot.cogs.primary_channel_error_watcher",
 )

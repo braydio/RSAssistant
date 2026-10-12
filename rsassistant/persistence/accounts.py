@@ -293,3 +293,19 @@ def has_account_mappings(*, database=None) -> bool:
             logger.error("Failed checking account mappings: %s", exc)
             return False
     return count > 0
+
+
+def resolve_broker_account_ids(broker_input: str, *, database=None) -> list[int]:
+    """Return every account ID whose broker matches ``broker_input`` (case-insensitive)."""
+
+    with _get_db_connection(database) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT account_id FROM Accounts WHERE LOWER(broker) = LOWER(?) "
+                "ORDER BY account_id",
+                (broker_input.strip(),),
+            ).fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Failed resolving broker accounts: %s", exc)
+            return []
+    return [int(row[0]) for row in rows]

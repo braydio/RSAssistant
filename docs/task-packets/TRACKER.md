@@ -9,7 +9,6 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | None | main | 2026-10-03 | [packet](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
-| TP-20261004-002 | Performance Visibility and Growth History | Ready | High | TP-20261003-007, TP-20261004-001 | main | 2026-10-10 | [packet](active/TP-20261004-002-performance-visibility.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Resource optimization train (2026-10-10)
@@ -33,6 +32,7 @@ The following packets were audited on `main@b35ea948`. TP-001 through TP-009 are
 
 | Packet ID | Title | Status | Completed | Packet |
 | --- | --- | --- | --- | --- |
+| TP-20261004-002 | Performance Visibility and Growth History | Complete | 2026-10-12 | [packet](completed/TP-20261004-002-performance-visibility.md) |
 | TP-20261004-001 | Performance History Capture | Complete | 2026-10-10 | [packet](completed/TP-20261004-001-performance-history-capture.md) |
 | TP-20261003-009 | Excel Runtime Retirement | Complete | 2026-10-04 | [packet](completed/TP-20261003-009-excel-retirement.md) |
 | TP-20261003-010 | Decompose sql_utils.py by Domain | Complete | 2026-10-08 | [packet](completed/TP-20261003-010-sql-utils-decomposition.md) |
@@ -79,5 +79,5 @@ TP-20261004-001, TP-20261004-008, and TP-20261003-009 through TP-20261003-011 ar
 
 ## Blockers
 
-- TP-20261004-002 has completed its dependency refresh and is Ready.
+- TP-20261004-002 is Complete (see `summaries/TP-20261004-002-SUMMARY.md`).
 - TP-20261003-012 remains Draft until TP-20261004-002 is implemented/reviewed and TP-012 is refreshed against the resulting code. Authoring/refresh chat: https://chatgpt.com/c/6abd8dc2-cab4-83e9-a614-b554cf5dd69e

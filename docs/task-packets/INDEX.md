@@ -9,7 +9,6 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 | Packet ID | Title | Status | Priority | Canonical packet |
 | --- | --- | --- | --- | --- |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
-| TP-20261004-002 | Performance Visibility and Growth History | Ready | High | [active/TP-20261004-002-performance-visibility.md](active/TP-20261004-002-performance-visibility.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | [active/TP-20261003-012-parsing-runtime-cleanup.md](active/TP-20261003-012-parsing-runtime-cleanup.md) |
 
 ## Resource optimization train (2026-10-10)
@@ -32,6 +31,7 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 
 | Packet ID | Title | Status | Canonical packet |
 | --- | --- | --- | --- |
+| TP-20261004-002 | Performance Visibility and Growth History | Complete | [completed/TP-20261004-002-performance-visibility.md](completed/TP-20261004-002-performance-visibility.md) |
 | TP-20261004-001 | Performance History Capture | Complete | [completed/TP-20261004-001-performance-history-capture.md](completed/TP-20261004-001-performance-history-capture.md) |
 | TP-20261003-009 | Excel Runtime Retirement | Complete | [completed/TP-20261003-009-excel-retirement.md](completed/TP-20261003-009-excel-retirement.md) |
 | TP-20261003-010 | Decompose sql_utils.py by Domain | Complete | [completed/TP-20261003-010-sql-utils-decomposition.md](completed/TP-20261003-010-sql-utils-decomposition.md) |
