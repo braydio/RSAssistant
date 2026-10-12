@@ -3,17 +3,16 @@
 Everything here is *value change*, never investment return: deposits and
 withdrawals are not modeled, so no time- or money-weighted return is claimed.
 
-Comparison-boundary rules (``as_of`` defaults to now):
+Comparison-boundary rules (``as_of`` only excludes future observations):
 
-- ``1d``: the latest observation on an earlier calendar day than the newest one.
-- ``7d``/``30d``/``90d``/``1y`` (7/30/90/365 days): the latest observation at or
-  before ``as_of - N days``.
+- ``1d``/``7d``/``30d``/``90d``/``1y`` (1/7/30/90/365 days): the newest
+  observation at or before ``latest_observation - N days``; none -> unavailable.
 - ``ytd``: the latest observation at or before Jan 1 of ``as_of``'s year (the
   prior year-end baseline); if none exists, the earliest one after Jan 1.
 - ``all``: the earliest observation.
 
-An *observation* is one holdings refresh (``refresh_id``); backfilled
-``historical:`` rows are grouped by ``observed_at`` instead. Changes are only
+An *observation* is one holdings refresh (``refresh_id``); rows from the
+``historical_holdings_backfill`` source are grouped by calendar date instead. Changes are only
 computed over accounts present in **both** endpoints (common accounts), so
 newly added or removed accounts never look like growth; the difference is
 reported in ``added_accounts``/``removed_accounts``.
@@ -25,7 +24,7 @@ from datetime import datetime, timedelta
 from typing import Any, Iterable
 
 from rsassistant.persistence import performance as repo
-from rsassistant.persistence.accounts import fetch_account_labels
+from rsassistant.persistence.accounts import fetch_account_identities
 
 WINDOWS: dict[str, int | None] = {
     "1d": 1,
@@ -63,7 +62,10 @@ def _load_observations(
     grouped: dict[str, dict[str, Any]] = {}
     for row in rows:
         refresh_id = str(row["refresh_id"])
-        key = row["observed_at"] if refresh_id.startswith("historical:") else refresh_id
+        if row["source"] == "historical_holdings_backfill":
+            key = "historical:" + str(_parse_ts(row["observed_at"]).date())
+        else:
+            key = "refresh:" + refresh_id
         obs = grouped.setdefault(key, {"time": None, "accounts": {}})
         ts = _parse_ts(row["observed_at"])
         if obs["time"] is None or ts > obs["time"]:
@@ -78,17 +80,14 @@ def _comparison_observation(
     latest = observations[-1]
     if window == "all":
         return observations[0]
-    if window == "1d":
-        earlier = [o for o in observations if o["time"].date() < latest["time"].date()]
-        return earlier[-1] if earlier else None
     if window == "ytd":
-        jan1 = datetime(as_of.year, 1, 1)
+        jan1 = datetime(latest["time"].year, 1, 1)
         before = [o for o in observations if o["time"] <= jan1]
         if before:
             return before[-1]
         after = [o for o in observations if o["time"] > jan1 and o is not latest]
         return after[0] if after else None
-    target = as_of - timedelta(days=WINDOWS[window])
+    target = latest["time"] - timedelta(days=WINDOWS[window])
     before = [o for o in observations if o["time"] <= target]
     return before[-1] if before else None
 
@@ -131,8 +130,28 @@ def _change(latest, comparison, field="effective_value") -> dict[str, Any]:
     return result
 
 
-def _labels() -> dict[int, str]:
-    return {int(e["account_id"]): e["account_nickname"] for e in fetch_account_labels()}
+class ScopeError(LookupError):
+    """Raised when a scope token matches no account or broker."""
+
+
+def resolve_scope(token: str | None, *, database=None) -> tuple[list[int] | None, str]:
+    """Resolve ``None`` / account ID / exact nickname / exact broker to ids.
+
+    Numeric ID and nickname win over broker; matching is exact (case-insensitive).
+    """
+
+    if not token or not token.strip():
+        return None, "Portfolio"
+    token = token.strip()
+    identities = fetch_account_identities(database=database)
+    for ident in identities:
+        nick = (ident["account_nickname"] or "").lower()
+        if (token.isdigit() and str(ident["account_id"]) == token) or nick == token.lower():
+            return [ident["account_id"]], ident["account_nickname"] or token
+    broker_ids = [i["account_id"] for i in identities if i["broker"].lower() == token.lower()]
+    if broker_ids:
+        return broker_ids, token
+    raise ScopeError(f"No account or broker matches '{token}'.")
 
 
 def get_performance_summary(
@@ -158,9 +177,9 @@ def get_performance_summary(
     since = main if window == "all" else _change(latest, earliest if earliest is not latest else None)
 
     ids = list(latest["accounts"])
-    labels = _labels()
+    names = _account_names(database)
     contributors = sorted(
-        ({"account_id": i, "name": labels.get(i, f"Account {i}"),
+        ({"account_id": i, "name": names.get(i, f"Account {i}"),
           "value": latest["accounts"][i]["effective_value"]} for i in ids),
         key=lambda c: c["value"], reverse=True,
     )[:3]
@@ -188,28 +207,33 @@ def get_performance_summary(
     }
 
 
+def _account_names(database=None) -> dict[int, str]:
+    """Nickname when set, else broker plus the last four of the account number."""
+
+    return {
+        i["account_id"]: i["account_nickname"]
+        or f"{i['broker']} …{str(i['account_number'])[-4:]}"
+        for i in fetch_account_identities(database=database)
+    }
+
+
 def _comparison_ids(observations, window, as_of) -> list[int]:
     comparison = _comparison_observation(observations, window, as_of)
     return list(comparison["accounts"]) if comparison else []
 
 
 def _downsample(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Display-only thinning: raw ≤120d, daily ≤2y, weekly ≤5y, else monthly."""
+    """Display-only thinning: all ≤120 points, daily ≤730, else weekly."""
 
-    if len(observations) < 2:
+    if len(observations) <= 120:
         return observations
-    span = (observations[-1]["time"] - observations[0]["time"]).days
-    if span <= 120:
-        return observations
-    if span <= 730:
+    if len(observations) <= 730:
         key = lambda o: o["time"].date()
-    elif span <= 1825:
-        key = lambda o: tuple(o["time"].isocalendar()[:2])
     else:
-        key = lambda o: (o["time"].year, o["time"].month)
+        key = lambda o: tuple(o["time"].isocalendar()[:2])
     kept: dict[Any, dict[str, Any]] = {}
     for obs in observations:
-        kept[key(obs)] = obs  # last observation per bucket wins
+        kept[key(obs)] = obs  # latest observation per bucket wins
     return list(kept.values())
 
 
@@ -252,4 +276,6 @@ __all__ = [
     "get_performance_series",
     "get_performance_summary",
     "normalize_window",
+    "resolve_scope",
+    "ScopeError",
 ]

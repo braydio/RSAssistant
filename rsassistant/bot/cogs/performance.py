@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
+import logging
 from datetime import datetime
 
 import discord
 from discord.ext import commands
 
-from rsassistant.persistence.accounts import resolve_account_id, resolve_broker_account_ids
+from rsassistant.persistence.performance import backfill_historical_account_values
 from rsassistant.services import performance as perf
+
+logger = logging.getLogger(__name__)
 
 _BASIS_LABELS = {
     "reported_total": "reported account totals",
@@ -52,7 +56,12 @@ def format_summary(summary: dict, scope_label: str = "Portfolio") -> str:
         f"{window} value change   {_money(change['change'], True):>14}",
         f"{window} change         {_pct(change['pct']):>14}",
     ]
-    if summary["window"] != "7d":
+    if (
+        change["end_value"] is not None
+        and abs(change["end_value"] - summary["current_value"]) > 0.005
+    ):
+        lines.insert(3, f"Comparable current   {_money(change['end_value']):>14}")
+    if summary["window"] != "7d" and week["change"] is not None:
         lines.append(f"7D value change      {_money(week['change'], True):>14}")
     if summary["window"] != "all":
         lines.append(f"Since tracking       {_money(since['change'], True):>14}")
@@ -70,7 +79,8 @@ def format_summary(summary: dict, scope_label: str = "Portfolio") -> str:
     ]
     if change["added_accounts"] or change["removed_accounts"]:
         lines.append(
-            f"Compared on {change['common_accounts']} common accounts "
+            f"Compared on {change['common_accounts']} of {summary['account_count']} accounts "
+            f"(common to both dates) "
             f"(+{len(change['added_accounts'])} added, "
             f"-{len(change['removed_accounts'])} removed since the comparison point)."
         )
@@ -124,25 +134,22 @@ def render_chart(points: list[dict], title: str) -> bytes | None:
         plt.close(fig)
 
 
-def resolve_scope(token: str | None) -> tuple[list[int] | None, str]:
-    """Resolve an account nickname/ID or broker name to (account_ids, label)."""
-
-    if not token:
-        return None, "Portfolio"
-    account_id = resolve_account_id(token)
-    if account_id is not None:
-        return [account_id], token
-    broker_ids = resolve_broker_account_ids(token)
-    if broker_ids:
-        return broker_ids, token
-    raise LookupError(f"No account or broker matches '{token}'.")
-
-
 class PerformanceCog(commands.Cog):
     """Portfolio value growth commands."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    async def cog_load(self) -> None:
+        """Run the one-time idempotent history backfill without blocking the loop."""
+
+        try:
+            inserted = await asyncio.to_thread(backfill_historical_account_values)
+            logger.info("Performance history backfill inserted %d row(s).", inserted)
+        except Exception:
+            logger.exception(
+                "Performance history backfill failed; live performance remains available."
+            )
 
     @commands.command(
         name="performance",
@@ -157,10 +164,10 @@ class PerformanceCog(commands.Cog):
         if rest and rest[0].lower() in perf.WINDOWS:
             window = rest.pop(0).lower()
         try:
-            account_ids, label = resolve_scope(" ".join(rest) or None)
+            account_ids, label = perf.resolve_scope(" ".join(rest) or None)
             summary = perf.get_performance_summary(window, account_ids)
             points = perf.get_performance_series(window, account_ids)
-        except (LookupError, ValueError) as exc:
+        except (perf.ScopeError, ValueError) as exc:
             await ctx.send(str(exc))
             return
         text = format_summary(summary, label)

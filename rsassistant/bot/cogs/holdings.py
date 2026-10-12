@@ -157,7 +157,7 @@ class HoldingsCog(commands.Cog):
     @commands.command(
         name="history",
         aliases=["hh"],
-        help="Show historical holdings *quantity* from the SQL log. For account value growth use ..performance.",
+        help="Show historical held quantity by account/ticker. Use ..performance for value growth.",
         usage="[account] [ticker] [start_date] [end_date]",
         extras={"category": "Reporting"},
     )

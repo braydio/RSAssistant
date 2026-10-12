@@ -217,6 +217,17 @@ count:
 ```
 
 
+## Account value performance
+
+`..performance [window] [account-or-broker]` (aliases `..perf`, `..growth`) reports
+current value, dollar/percent **value change**, coverage, valuation basis and a
+history chart. Windows: `1d 7d 30d 90d ytd 1y all` (default `30d`). Changes are
+computed over accounts present at both dates, so added/removed accounts never
+look like growth. This is value change, not investment return: deposits and
+withdrawals are not adjusted for. `..history` remains the held-*quantity* history
+command. Historical `HistoricalHoldings` values are backfilled once, idempotently,
+when the performance cog loads.
+
 ## Sent order audit trail
 
 RSAssistant now records each outbound `!rsa` order command with send time, ticker,

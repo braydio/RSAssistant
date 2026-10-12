@@ -295,17 +295,27 @@ def has_account_mappings(*, database=None) -> bool:
     return count > 0
 
 
-def resolve_broker_account_ids(broker_input: str, *, database=None) -> list[int]:
-    """Return every account ID whose broker matches ``broker_input`` (case-insensitive)."""
+def fetch_account_identities(*, database=None) -> list[dict]:
+    """Return broker/account identity fields for every account row."""
 
     with _get_db_connection(database) as conn:
         try:
             rows = conn.execute(
-                "SELECT account_id FROM Accounts WHERE LOWER(broker) = LOWER(?) "
-                "ORDER BY account_id",
-                (broker_input.strip(),),
+                """SELECT account_id, broker, broker_number, account_number,
+                          account_nickname
+                   FROM Accounts
+                   ORDER BY broker, broker_number, account_number"""
             ).fetchall()
         except sqlite3.Error as exc:
-            logger.error("Failed resolving broker accounts: %s", exc)
+            logger.error("Failed reading account identities: %s", exc)
             return []
-    return [int(row[0]) for row in rows]
+    return [
+        {
+            "account_id": int(r[0]),
+            "broker": r[1],
+            "broker_number": r[2],
+            "account_number": r[3],
+            "account_nickname": r[4],
+        }
+        for r in rows
+    ]
