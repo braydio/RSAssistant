@@ -20,7 +20,7 @@ from utils.csv_utils import clear_holdings_log
 from utils.csv_utils import abort_holdings_refresh, finalize_holdings_refresh
 from utils.holdings_importer import import_holdings_if_updated
 from utils.holdings_snapshot import build_holdings_snapshot_embeds
-from utils.utility_utils import track_ticker_summary
+from utils.utility_utils import build_ticker_summaries
 from rsassistant.bot.handlers.on_message import (
     REFRESH_WINDOW_DURATION,
     disable_audit,
@@ -88,12 +88,14 @@ class HoldingsCog(commands.Cog):
                         )
                     await ctx.send(embed=embed)
                 watch_list = watch_list_manager.get_watch_list()
-                results = []
-                last_timestamp = ""
-                for ticker in watch_list.keys():
-                    statuses, ts = await track_ticker_summary(ctx, ticker, collect=True)
-                    results.append((ticker, statuses))
-                    last_timestamp = ts
+                # One snapshot read for the whole watchlist (not one per ticker).
+                summaries = await asyncio.to_thread(
+                    build_ticker_summaries, list(watch_list.keys())
+                )
+                results = [(t, statuses) for t, (statuses, _) in summaries.items()]
+                last_timestamp = next(
+                    (ts for _, ts in reversed(list(summaries.values()))), ""
+                )
                 summary_embed = discord.Embed(
                     title="Broker Holdings Check", color=discord.Color.blue()
                 )
@@ -142,8 +144,11 @@ class HoldingsCog(commands.Cog):
         top_n = max(1, min(top_n, 10))
         channel = resolve_reply_channel(self.bot, DISCORD_HOLDINGS_CHANNEL) or ctx.channel
 
-        import_holdings_if_updated()
-        embeds, error = build_holdings_snapshot_embeds(broker_filter=broker, top_n=top_n)
+        # Disk/SQLite work off the loop; embeds are plain objects, sent on-loop.
+        await asyncio.to_thread(import_holdings_if_updated)
+        embeds, error = await asyncio.to_thread(
+            build_holdings_snapshot_embeds, broker_filter=broker, top_n=top_n
+        )
         if error:
             await ctx.send(error)
             return

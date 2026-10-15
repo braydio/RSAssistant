@@ -193,15 +193,15 @@ class RSAssistantBot(commands.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author == self.user:
-            logger.info("Message is from myself! %s", self.user)
+            logger.debug("Ignoring own message from %s", self.user)
             return
         if message.content.startswith(BOT_PREFIX):
-            logger.info("Handling command %s", message.content)
+            logger.info("Handling command (%d chars)", len(message.content))
             now = datetime.now(MARKET_TZ)
             if not is_market_day(now.date()):
                 logger.info(
-                    "Non-market day command received; orders will schedule for next open: %s",
-                    message.content,
+                    "Non-market day command received (%d chars); orders will schedule for next open.",
+                    len(message.content),
                 )
                 channel_id = getattr(message.channel, "id", None)
                 if channel_id is not None:

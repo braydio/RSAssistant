@@ -120,6 +120,132 @@ def _load_account_owners():
     return {}
 
 
+def _build_holdings_index(mapped_accounts):
+    """Read the committed holdings snapshot once and index it by broker/account.
+
+    Returns ``(accounts_by_broker, held, timestamp_str)`` where
+    ``accounts_by_broker`` maps broker -> ordered account keys seen in the
+    snapshot, ``held`` maps ``(broker, stock)`` -> {account_key: position data}
+    for rows with quantity > 0, and ``timestamp_str`` is the newest row time.
+    """
+
+    broker_name_lookup = {
+        _normalize_identity_field(name).lower(): name for name in mapped_accounts
+    }
+    latest_rows = {}
+    for sql_row in get_current_holdings():
+        row = {"Broker Name": sql_row["broker"], "Broker Number": sql_row["broker_number"],
+               "Account Number": sql_row["account_number"], "Stock": sql_row["ticker"],
+               "Quantity": sql_row["quantity"], "Price": sql_row["price"],
+               "Account Total": sql_row["account_total"], "Timestamp": sql_row["observed_at"]}
+        broker_name_raw = row.get("Broker Name")
+        broker_name_normalized = _normalize_identity_field(broker_name_raw)
+        broker_name = broker_name_lookup.get(
+            broker_name_normalized.lower(), broker_name_normalized
+        )
+        if not broker_name:
+            continue
+
+        broker_number = _normalize_identity_field(row.get("Broker Number"))
+        account_number = _normalize_identity_field(row.get("Account Number"))
+
+        # Resolve importer-specific identifiers to the configured account.
+        mapped_account = None
+        if broker_number and account_number:
+            broker_mapping = mapped_accounts.get(broker_name, {})
+            mapped_account = _resolve_mapped_account(
+                broker_mapping, broker_number, account_number
+            )
+
+        if mapped_account:
+            mapped_group, mapped_account_number, _ = mapped_account
+            account_key = (mapped_group, mapped_account_number)
+        else:
+            # Unmapped rows must not alter the configured account totals.
+            account_key = (broker_number, account_number)
+
+        timestamp_str = row.get("Timestamp", "")
+        try:
+            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            timestamp = datetime.min
+
+        stock = _normalize_ticker_symbol(row.get("Stock", ""))
+        key = (broker_name, account_key, stock)
+        if key not in latest_rows or timestamp > latest_rows[key]["_ts"]:
+            row["_ts"] = timestamp
+            latest_rows[key] = row
+
+    accounts_by_broker = {}
+    held = {}
+    for (broker_name, account_key, stock), row in latest_rows.items():
+        stock = stock or row["Stock"].upper().strip()
+        try:
+            quantity = float(row["Quantity"])
+            price = float(row["Price"])
+            account_total = float(row["Account Total"])
+        except ValueError:
+            continue
+        accounts_by_broker.setdefault(broker_name, {})[account_key] = None
+        if quantity > 0:
+            held.setdefault((broker_name, stock), {})[account_key] = {
+                "status": "✅",
+                "Quantity": quantity,
+                "Price": price,
+                "Account Total": account_total,
+            }
+
+    latest_timestamp = (
+        max(row["_ts"] for row in latest_rows.values()) if latest_rows else None
+    )
+    timestamp_str = (
+        latest_timestamp.strftime("%Y-%m-%d %H:%M:%S") if latest_timestamp else ""
+    )
+    return accounts_by_broker, held, timestamp_str
+
+
+def _holdings_for_ticker(index, ticker):
+    """Build the broker -> account -> status mapping for ``ticker`` from an index."""
+
+    accounts_by_broker, held, _ = index
+    holdings = {}
+    for broker_name, account_keys in accounts_by_broker.items():
+        position = held.get((broker_name, ticker), {})
+        holdings[broker_name] = {
+            account_key: position.get(account_key)
+            or {
+                "status": "❌",
+                "Quantity": "N/A",
+                "Price": "N/A",
+                "Account Total": "N/A",
+            }
+            for account_key in account_keys
+        }
+    return holdings
+
+
+def build_ticker_summaries(tickers, mapped_accounts=None):
+    """Return ``{ticker: (broker_statuses, timestamp)}`` using a single snapshot read.
+
+    Replaces calling :func:`track_ticker_summary` once per ticker: the holdings
+    snapshot and account mappings are loaded exactly once for the whole batch.
+    """
+
+    mapped_accounts = (
+        load_account_mappings() if mapped_accounts is None else mapped_accounts
+    )
+    index = _build_holdings_index(mapped_accounts)
+    timestamp_str = index[2]
+    summaries = {}
+    for raw in tickers:
+        ticker = _normalize_ticker_symbol(raw)
+        statuses = compute_broker_statuses(
+            _holdings_for_ticker(index, ticker), mapped_accounts
+        )
+        summaries[raw] = (statuses, timestamp_str)
+    return summaries
+
+
 async def track_ticker_summary(
     ctx,
     ticker,
@@ -153,99 +279,15 @@ async def track_ticker_summary(
         mapping with the latest timestamp when ``collect`` is requested;
         otherwise ``None`` because embeds are sent via ``ctx``.
     """
-    holdings = {}
     ticker = _normalize_ticker_symbol(ticker)
 
     # Load account mappings
     mapped_accounts = load_account_mappings()
-    broker_name_lookup = {
-        _normalize_identity_field(name).lower(): name for name in mapped_accounts
-    }
 
     try:
-        # Read holdings log and keep only the latest row per account + ticker
-        latest_rows = {}
-        for sql_row in get_current_holdings():
-            row = {"Broker Name": sql_row["broker"], "Broker Number": sql_row["broker_number"],
-                   "Account Number": sql_row["account_number"], "Stock": sql_row["ticker"],
-                   "Quantity": sql_row["quantity"], "Price": sql_row["price"],
-                   "Account Total": sql_row["account_total"], "Timestamp": sql_row["observed_at"]}
-            broker_name_raw = row.get("Broker Name")
-            broker_name_normalized = _normalize_identity_field(broker_name_raw)
-            broker_name = broker_name_lookup.get(
-                broker_name_normalized.lower(), broker_name_normalized
-            )
-            if not broker_name:
-                continue
-
-            broker_number_raw = row.get("Broker Number")
-            account_number_raw = row.get("Account Number")
-            broker_number = _normalize_identity_field(broker_number_raw)
-            account_number = _normalize_identity_field(account_number_raw)
-
-            # Resolve importer-specific identifiers to the configured account.
-            mapped_account = None
-            if broker_number and account_number:
-                broker_mapping = mapped_accounts.get(broker_name, {})
-                mapped_account = _resolve_mapped_account(
-                    broker_mapping, broker_number, account_number
-                )
-
-            if mapped_account:
-                mapped_group, mapped_account_number, _ = mapped_account
-                account_key = (mapped_group, mapped_account_number)
-            else:
-                # Unmapped rows must not alter the configured account totals.
-                account_key = (broker_number, account_number)
-
-            timestamp_str = row.get("Timestamp", "")
-            try:
-                timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-            except Exception:
-                timestamp = datetime.min
-
-            stock_raw = row.get("Stock", "")
-            stock = _normalize_ticker_symbol(stock_raw)
-            key = (broker_name, account_key, stock)
-            if key not in latest_rows or timestamp > latest_rows[key]["_ts"]:
-                row["_ts"] = timestamp
-                latest_rows[key] = row
-
-        # Build holdings dict from latest rows
-        for (broker_name, account_key, stock), row in latest_rows.items():
-            stock = stock or row["Stock"].upper().strip()
-
-            try:
-                quantity = float(row["Quantity"])
-                price = float(row["Price"])
-                account_total = float(row["Account Total"])
-            except ValueError:
-                continue
-
-            if broker_name not in holdings:
-                holdings[broker_name] = {}
-
-            if stock == ticker and quantity > 0:
-                holdings[broker_name][account_key] = {
-                    "status": "✅",
-                    "Quantity": quantity,
-                    "Price": price,
-                    "Account Total": account_total,
-                }
-            elif account_key not in holdings[broker_name]:
-                holdings[broker_name][account_key] = {
-                    "status": "❌",
-                    "Quantity": "N/A",
-                    "Price": "N/A",
-                    "Account Total": "N/A",
-                }
-
-        latest_timestamp = (
-            max(row["_ts"] for row in latest_rows.values()) if latest_rows else None
-        )
-        timestamp_str = (
-            latest_timestamp.strftime("%Y-%m-%d %H:%M:%S") if latest_timestamp else ""
-        )
+        index = _build_holdings_index(mapped_accounts)
+        holdings = _holdings_for_ticker(index, ticker)
+        timestamp_str = index[2]
 
         statuses = compute_broker_statuses(holdings, mapped_accounts)
         # Decide which view to show based on the specific_broker argument

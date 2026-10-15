@@ -1,5 +1,53 @@
-tests/
-temp/
-dev/
+# VCS / local environments. ``.git`` is kept: utils/update_utils.py self-updates via git.
 .venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tests and dev-only material
+tests/
+unittests/
+plugins/*/unittests/
+dev/
 dev*
+temp/
+requirements-dev.txt
+
+# Large sibling projects / local trees (the auto-rsa service builds from its own context)
+auto-rsa/
+auto-rsa.local/
+AutoRSA-GUI.local/
+RSDashboard*/
+*.local
+*.local/
+backups/
+
+# Runtime state is mounted at run time, never baked into the image
+volumes/
+logs/
+*.log
+*.db
+*.db-*
+*.dump
+*.migrated
+*.bak*
+error_details.txt
+error_log.txt
+error*.html
+*.png
+*.jpg
+
+# Credentials and private config (config/ is bind-mounted; examples stay)
+.env
+*.env
+config/.env*
+!config/.env.example
+config/*.json
+config/temp.env
+creds/
+*.pem
+*.key

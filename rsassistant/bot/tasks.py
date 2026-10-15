@@ -9,19 +9,28 @@ from datetime import datetime
 from typing import Optional
 
 import discord
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from discord.ext import commands
 
 from rsassistant.bot.channel_resolver import resolve_reply_channel
 from utils.config_utils import (
+    AUTO_RSA_HOLDINGS_ENABLED,
     BOT_PREFIX,
     DISCORD_PRIMARY_CHANNEL,
     ENABLE_MARKET_REFRESH,
+    RESOURCE_METRICS_ENABLED,
+    RESOURCE_METRICS_INTERVAL_SECONDS,
 )
-from utils.order_exec import schedule_and_execute
-from utils.order_queue_manager import get_order_queue, update_order_time
+from utils.performance_metrics import start_metrics_task
+from utils.order_exec import schedule_and_execute, shutdown_order_dispatcher
+from utils.order_queue_manager import (
+    get_order_queue,
+    recover_stale_dispatching,
+    update_order_time,
+)
 from utils.refresh_scheduler import MARKET_TZ, compute_next_refresh_datetime
 from utils.market_calendar import is_market_open_at, next_market_open
 from utils.watch_utils import send_reminder_message
@@ -38,13 +47,26 @@ class BackgroundTasks:
 
     total_refresh_task: Optional[asyncio.Task] = None
     reschedule_task: Optional[asyncio.Task] = None
-    reminder_scheduler: Optional[BackgroundScheduler] = None
+    reminder_scheduler: Optional[AsyncIOScheduler] = None
+    metrics_task: Optional[asyncio.Task] = None
 
 
 async def reschedule_queued_orders(bot: commands.Bot) -> None:
     """Reschedule persisted orders from previous runs."""
 
-    queue = get_order_queue()
+    parked = recover_stale_dispatching()
+    if parked:
+        logger.warning(
+            "%d order(s) were interrupted mid-send and are parked as needs_review "
+            "(not re-sent automatically): %s",
+            len(parked),
+            ", ".join(parked),
+        )
+    queue = {
+        oid: data
+        for oid, data in get_order_queue().items()
+        if data.get("state", "pending") == "pending"
+    }
     if not queue:
         logger.info("No queued orders to reschedule.")
         return
@@ -93,7 +115,11 @@ async def reschedule_queued_orders(bot: commands.Bot) -> None:
 async def reschedule_past_due_orders(bot: commands.Bot) -> None:
     """Reschedule past-due queued orders to the next market open."""
 
-    queue = get_order_queue()
+    queue = {
+        oid: data
+        for oid, data in get_order_queue().items()
+        if data.get("state", "pending") == "pending"
+    }
     if not queue:
         logger.info("No queued orders to check for past-due rescheduling.")
         return
@@ -194,27 +220,74 @@ async def run_total_refresh_scheduler(bot: commands.Bot) -> None:
             logger.exception("Scheduled '..all' refresh failed: %s", exc)
 
 
-def _start_reminder_scheduler(bot: commands.Bot) -> BackgroundScheduler:
-    """Start APScheduler reminders at 8:45 AM and 3:30 PM."""
+_reminder_scheduler: Optional[AsyncIOScheduler] = None
 
-    scheduler = BackgroundScheduler()
+
+async def _import_holdings_job() -> None:
+    """Run the synchronous holdings import off the event loop."""
+
+    await asyncio.to_thread(import_holdings_if_updated)
+
+
+def _log_job_event(event) -> None:
+    """Log scheduler job failures without payloads; never stops the scheduler."""
+
+    if event.code == EVENT_JOB_MISSED:
+        logger.warning("Scheduled job %s missed its run time.", event.job_id)
+    else:
+        logger.error(
+            "Scheduled job %s failed (%s).",
+            event.job_id,
+            type(event.exception).__name__ if event.exception else "unknown",
+        )
+
+
+def _start_reminder_scheduler(bot: commands.Bot) -> AsyncIOScheduler:
+    """Start asyncio-native reminders (08:45, 15:30) and 07:00 past-due sweep.
+
+    Must be called from the running event loop. Repeated calls return the
+    already-running scheduler instead of starting a second one.
+    """
+
+    global _reminder_scheduler
+    if _reminder_scheduler is not None and _reminder_scheduler.running:
+        return _reminder_scheduler
+
+    scheduler = AsyncIOScheduler(
+        event_loop=asyncio.get_running_loop(), timezone=MARKET_TZ
+    )
+    job_defaults = {"replace_existing": True, "max_instances": 1, "coalesce": True}
     scheduler.add_job(
-        lambda: bot.loop.create_task(send_reminder_message(bot)),
-        CronTrigger(hour=8, minute=45),
+        send_reminder_message,
+        CronTrigger(hour=8, minute=45, timezone=MARKET_TZ),
+        args=[bot],
+        id="reminder_morning",
+        **job_defaults,
     )
     scheduler.add_job(
-        lambda: bot.loop.create_task(send_reminder_message(bot)),
-        CronTrigger(hour=15, minute=30),
+        send_reminder_message,
+        CronTrigger(hour=15, minute=30, timezone=MARKET_TZ),
+        args=[bot],
+        id="reminder_afternoon",
+        **job_defaults,
     )
     scheduler.add_job(
-        lambda: bot.loop.create_task(reschedule_past_due_orders(bot)),
-        CronTrigger(hour=7, minute=0),
+        reschedule_past_due_orders,
+        CronTrigger(hour=7, minute=0, timezone=MARKET_TZ),
+        args=[bot],
+        id="reschedule_past_due_orders",
+        **job_defaults,
     )
-    scheduler.add_job(
-        import_holdings_if_updated,
-        IntervalTrigger(minutes=5),
-    )
+    if AUTO_RSA_HOLDINGS_ENABLED:
+        scheduler.add_job(
+            _import_holdings_job,
+            IntervalTrigger(minutes=5),
+            id="holdings_import",
+            **job_defaults,
+        )
+    scheduler.add_listener(_log_job_event, EVENT_JOB_ERROR | EVENT_JOB_MISSED)
     scheduler.start()
+    _reminder_scheduler = scheduler
     logger.info("Scheduled reminders at 8:45 AM and 3:30 PM started.")
     return scheduler
 
@@ -227,8 +300,12 @@ async def start_background_tasks(bot: commands.Bot) -> BackgroundTasks:
     if ENABLE_MARKET_REFRESH:
         total_refresh = asyncio.create_task(run_total_refresh_scheduler(bot))
     rescheduler = asyncio.create_task(reschedule_queued_orders(bot))
+    metrics = start_metrics_task(
+        RESOURCE_METRICS_ENABLED, RESOURCE_METRICS_INTERVAL_SECONDS
+    )
 
     return BackgroundTasks(
+        metrics_task=metrics,
         total_refresh_task=total_refresh,
         reschedule_task=rescheduler,
         reminder_scheduler=reminder_scheduler,
@@ -241,6 +318,7 @@ async def stop_background_tasks(tasks: BackgroundTasks) -> None:
     for task in (
         tasks.total_refresh_task,
         tasks.reschedule_task,
+        tasks.metrics_task,
     ):
         if task and not task.done():
             task.cancel()
@@ -249,5 +327,13 @@ async def stop_background_tasks(tasks: BackgroundTasks) -> None:
             except asyncio.CancelledError:
                 logger.info("Cancelled task %s", task.get_name() or task)
 
+    global _reminder_scheduler
+    await shutdown_order_dispatcher()
+
     if tasks.reminder_scheduler:
-        tasks.reminder_scheduler.shutdown(wait=False)
+        try:
+            tasks.reminder_scheduler.shutdown(wait=False)
+        except Exception as exc:  # scheduler may already be stopped
+            logger.debug("Scheduler shutdown: %s", type(exc).__name__)
+        if tasks.reminder_scheduler is _reminder_scheduler:
+            _reminder_scheduler = None

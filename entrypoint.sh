@@ -6,8 +6,8 @@ set -e
 
 echo "Initializing RSAssistant environment..."
 
-# Optionally set the DISPLAY environment variable in development mode
-export DISPLAY=:99
+# DISPLAY is intentionally not set: the bot is headless. For GUI/browser tooling,
+# pass DISPLAY through the compose ``environment:`` block instead.
 
 # Determine the volumes directory (default /app/volumes)
 VOLUMES_DIR="${VOLUMES_DIR:-/app/volumes}"
@@ -19,11 +19,12 @@ for DIR in $REQUIRED_DIRECTORIES; do
   if [ ! -d "$DIR" ]; then
     echo "Creating directory: $DIR"
     mkdir -p "$DIR"
+    # Only newly created directories get a mode; existing data trees are never
+    # walked or re-permissioned. To repair permissions deliberately, run:
+    #   docker compose run --rm --entrypoint chmod rsassistant -R u+rwX /app/volumes
+    chmod 755 "$DIR"
   fi
 done
-
-# Set permissions to ensure the container user has appropriate access
-chmod -R 755 "$VOLUMES_DIR"
 
 # Set ownership (if running as a non-root user)
 # chown -R appuser:appuser /app/volumes

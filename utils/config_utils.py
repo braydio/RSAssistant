@@ -208,6 +208,11 @@ OPENAI_POLICY_ENABLED = _get_env_bool("OPENAI_POLICY_ENABLED", False)
 PROGRAMMATIC_POLICY_ENABLED = _get_env_bool("PROGRAMMATIC_POLICY_ENABLED", True)
 # Minimum interval between outbound !rsa commands (rate-limit protection)
 RSA_COMMAND_MIN_INTERVAL_SECONDS = _get_env_float("RSA_COMMAND_MIN_INTERVAL_SECONDS", 2)
+# Opt-in resource telemetry: one structured log line per interval (TP-20261010-001).
+RESOURCE_METRICS_ENABLED = _get_env_bool("RESOURCE_METRICS_ENABLED", False)
+RESOURCE_METRICS_INTERVAL_SECONDS = _get_env_int("RESOURCE_METRICS_INTERVAL_SECONDS", 300)
+# Max symbols kept in the yfinance price cache (memory and disk).
+PRICE_CACHE_MAX_ENTRIES = _get_env_int("PRICE_CACHE_MAX_ENTRIES", 1000)
 # Enable scheduled ``..all`` refreshes every 15 minutes during market hours
 ENABLE_MARKET_REFRESH = _get_env_bool("ENABLE_MARKET_REFRESH", False)
 # Watch primary-channel error messages and invoke codex remediation workflows.

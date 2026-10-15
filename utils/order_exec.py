@@ -12,7 +12,20 @@ from utils.config_utils import (
     DISCORD_PRIMARY_CHANNEL,
     RSA_COMMAND_MIN_INTERVAL_SECONDS,
 )
-from utils.order_queue_manager import add_to_order_queue, remove_order
+from utils.order_dispatcher import (
+    OrderDispatcher,
+    PendingOrder,
+    effective_execution_time,
+)
+from utils.order_queue_manager import (
+    CLAIM_CLAIMED,
+    CLAIM_MISSING,
+    add_to_order_queue,
+    claim_order,
+    mark_order_needs_review,
+    release_order,
+    remove_order,
+)
 from utils.order_send_log_manager import record_sent_rsa_order
 from utils.market_calendar import MARKET_TZ, is_market_open_at, next_market_open
 
@@ -240,6 +253,37 @@ async def process_sell_list():
             logger.error(f"Error processing sell list: {e}")
 
 
+def _rsa_order_command(order) -> str:
+    return f"!rsa {order.action} {order.quantity} {order.ticker.upper()} {order.broker} false"
+
+
+async def _send_registered_order(order: PendingOrder) -> bool:
+    """Send one claimed order via the canonical command path."""
+
+    resolved_bot = order.bot or getattr(order.ctx, "bot", None)
+    return await send_sell_command(
+        order.ctx,
+        _rsa_order_command(order),
+        loop=asyncio.get_running_loop(),
+        bot=resolved_bot,
+    )
+
+
+def _after_order_sent(order: PendingOrder) -> None:
+    if order.action.lower() == "sell":
+        watch_list_manager.remove_from_sell_list(order.ticker)
+
+
+# One dispatcher task serves every scheduled order (constant task count).
+_dispatcher = OrderDispatcher(send=_send_registered_order, on_sent=_after_order_sent)
+
+
+async def shutdown_order_dispatcher() -> None:
+    """Stop the dispatcher task; queued orders stay persisted in SQLite."""
+
+    await _dispatcher.stop()
+
+
 async def schedule_and_execute(
     ctx,
     action: str,
@@ -252,7 +296,13 @@ async def schedule_and_execute(
     order_id: str | None = None,
     add_to_queue: bool = True,
 ):
-    """Schedule and execute an order at ``execution_time``."""
+    """Schedule an order for ``execution_time``.
+
+    Compatibility adapter: the order is persisted (when ``add_to_queue``) and,
+    when it is due now, sent before this coroutine returns exactly as before.
+    Future orders are registered with the shared dispatcher instead of each
+    holding a sleeping task, and this coroutine returns immediately.
+    """
 
     try:
         if order_id is None:
@@ -280,34 +330,54 @@ async def schedule_and_execute(
             )
 
         now = datetime.now(MARKET_TZ)
-        if execution_time.tzinfo is None:
-            execution_time = execution_time.replace(tzinfo=MARKET_TZ)
-        reference_time = execution_time if execution_time > now else now
-        if not is_market_open_at(reference_time):
-            execution_time = next_market_open(reference_time)
-
-        delay = max((execution_time - now).total_seconds(), 0)
-        if delay > 0:
-            logger.info(
-                "Waiting %.0f seconds to execute %s command (scheduled for %s).",
-                delay,
-                action,
-                execution_time,
-            )
-            await asyncio.sleep(delay)
-
-        command = f"!rsa {action} {quantity} {ticker.upper()} {broker} false"
-        resolved_bot = bot or getattr(ctx, "bot", None)
-        sent = await send_sell_command(
-            ctx, command, loop=asyncio.get_event_loop(), bot=resolved_bot
+        effective = effective_execution_time(execution_time, now)
+        order = PendingOrder(
+            order_id=order_id,
+            action=action,
+            ticker=ticker,
+            quantity=quantity,
+            broker=broker,
+            ctx=ctx,
+            bot=bot,
         )
-        if not sent:
-            logger.warning("Order %s remains queued because Discord send failed.", order_id)
+
+        if (effective - now).total_seconds() > 0:
+            logger.info(
+                "Registering %s order %s with dispatcher (due %s).",
+                action,
+                order_id,
+                effective,
+            )
+            _dispatcher.register(order)
             return
 
-        if action.lower() == "sell":
-            watch_list_manager.remove_from_sell_list(ticker)
-
+        # Due now: claim and send inline. A row that is missing while
+        # ``add_to_queue`` is True means persistence was bypassed; keep the
+        # legacy behaviour of sending. A missing row for a rehydrated order
+        # means it was cancelled, so nothing is sent.
+        claim = claim_order(order_id)
+        if claim == CLAIM_MISSING and add_to_queue:
+            sent = await _send_registered_order(order)
+            if sent:
+                _after_order_sent(order)
+                remove_order(order_id)
+            else:
+                logger.warning("Order %s remains queued because Discord send failed.", order_id)
+            return
+        if claim != CLAIM_CLAIMED:
+            logger.info("Order %s is not claimable (%s); not sending.", order_id, claim)
+            return
+        _dispatcher.discard(order_id)
+        try:
+            sent = await _send_registered_order(order)
+        except Exception as exc:
+            mark_order_needs_review(order_id, f"{type(exc).__name__} during send")
+            raise
+        if not sent:
+            release_order(order_id, "send reported failure")
+            logger.warning("Order %s remains queued because Discord send failed.", order_id)
+            return
+        _after_order_sent(order)
         remove_order(order_id)
 
     except Exception as e:

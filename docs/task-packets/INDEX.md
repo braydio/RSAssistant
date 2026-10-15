@@ -17,22 +17,22 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 
 | Packet ID | Title | Status | Priority | Canonical packet |
 | --- | --- | --- | --- | --- |
-| TP-20261010-001 | Runtime Resource Baseline and Regression Instrumentation | Ready | High | [active/TP-20261010-001-runtime-resource-baseline.md](active/TP-20261010-001-runtime-resource-baseline.md) |
-| TP-20261010-002 | Replace Threaded Scheduler with Asyncio-Native Jobs | Ready | High | [active/TP-20261010-002-asyncio-native-scheduler.md](active/TP-20261010-002-asyncio-native-scheduler.md) |
-| TP-20261010-003 | Keep Network and Disk Operations off Discord Event Loop | Ready | High | [active/TP-20261010-003-nonblocking-discord-network.md](active/TP-20261010-003-nonblocking-discord-network.md) |
-| TP-20261010-004 | Make Holdings Snapshot Import Change-Driven and Retry-Safe | Ready | High | [active/TP-20261010-004-holdings-import-change-detection.md](active/TP-20261010-004-holdings-import-change-detection.md) |
-| TP-20261010-005 | Bound Logging Memory, Disk Churn, and Sensitive Payloads | Ready | High | [active/TP-20261010-005-bounded-and-safe-logging.md](active/TP-20261010-005-bounded-and-safe-logging.md) |
-| TP-20261010-006 | Bound Market Price Cache and Minimize Disk Writes | Ready | Normal | [active/TP-20261010-006-price-cache-bounds-and-atomicity.md](active/TP-20261010-006-price-cache-bounds-and-atomicity.md) |
-| TP-20261010-007 | ULT-MA Plugin Nonblocking Market Data and Idle Efficiency | Ready | Normal | [active/TP-20261010-007-ultma-idle-and-async-market-data.md](active/TP-20261010-007-ultma-idle-and-async-market-data.md) |
-| TP-20261010-008 | Lean Docker Image, Startup I/O, and Health Checks | Ready | Normal | [active/TP-20261010-008-lean-container-startup.md](active/TP-20261010-008-lean-container-startup.md) |
-| TP-20261010-009 | Stop Shipping Runtime Artifacts and Add Safe Retention | Ready | Normal | [active/TP-20261010-009-artifact-hygiene-and-retention.md](active/TP-20261010-009-artifact-hygiene-and-retention.md) |
-| TP-20261010-010 | Replace Per-Ticker Holdings CSV Scans with One SQL Read | Draft | High | [active/TP-20261010-010-holdings-summary-single-pass.md](active/TP-20261010-010-holdings-summary-single-pass.md) |
-| TP-20261010-011 | Consolidate Long-Sleep Order Tasks without Changing Execution Semantics | Draft | High | [active/TP-20261010-011-scheduled-order-timer-consolidation.md](active/TP-20261010-011-scheduled-order-timer-consolidation.md) |
 
 ## Completed
 
 | Packet ID | Title | Status | Canonical packet |
 | --- | --- | --- | --- |
+| TP-20261010-011 | Consolidate Long-Sleep Order Tasks without Changing Execution Semantics | Complete | [completed/TP-20261010-011-scheduled-order-timer-consolidation.md](completed/TP-20261010-011-scheduled-order-timer-consolidation.md) |
+| TP-20261010-010 | Replace Per-Ticker Holdings CSV Scans with One SQL Read | Complete | [completed/TP-20261010-010-holdings-summary-single-pass.md](completed/TP-20261010-010-holdings-summary-single-pass.md) |
+| TP-20261010-009 | Stop Shipping Runtime Artifacts and Add Safe Retention | Complete | [completed/TP-20261010-009-artifact-hygiene-and-retention.md](completed/TP-20261010-009-artifact-hygiene-and-retention.md) |
+| TP-20261010-008 | Lean Docker Image, Startup I/O, and Health Checks | Complete | [completed/TP-20261010-008-lean-container-startup.md](completed/TP-20261010-008-lean-container-startup.md) |
+| TP-20261010-007 | ULT-MA Plugin Nonblocking Market Data and Idle Efficiency | Complete | [completed/TP-20261010-007-ultma-idle-and-async-market-data.md](completed/TP-20261010-007-ultma-idle-and-async-market-data.md) |
+| TP-20261010-006 | Bound Market Price Cache and Minimize Disk Writes | Complete | [completed/TP-20261010-006-price-cache-bounds-and-atomicity.md](completed/TP-20261010-006-price-cache-bounds-and-atomicity.md) |
+| TP-20261010-003 | Keep Network and Disk Operations off Discord Event Loop | Complete | [completed/TP-20261010-003-nonblocking-discord-network.md](completed/TP-20261010-003-nonblocking-discord-network.md) |
+| TP-20261010-002 | Replace Threaded Scheduler with Asyncio-Native Jobs | Complete | [completed/TP-20261010-002-asyncio-native-scheduler.md](completed/TP-20261010-002-asyncio-native-scheduler.md) |
+| TP-20261010-004 | Make Holdings Snapshot Import Change-Driven and Retry-Safe | Complete | [completed/TP-20261010-004-holdings-import-change-detection.md](completed/TP-20261010-004-holdings-import-change-detection.md) |
+| TP-20261010-005 | Bound Logging Memory, Disk Churn, and Sensitive Payloads | Complete | [completed/TP-20261010-005-bounded-and-safe-logging.md](completed/TP-20261010-005-bounded-and-safe-logging.md) |
+| TP-20261010-001 | Runtime Resource Baseline and Regression Instrumentation | Complete | [completed/TP-20261010-001-runtime-resource-baseline.md](completed/TP-20261010-001-runtime-resource-baseline.md) |
 | TP-20261004-002 | Performance Visibility and Growth History | Complete | [completed/TP-20261004-002-performance-visibility.md](completed/TP-20261004-002-performance-visibility.md) |
 | TP-20261004-001 | Performance History Capture | Complete | [completed/TP-20261004-001-performance-history-capture.md](completed/TP-20261004-001-performance-history-capture.md) |
 | TP-20261003-009 | Excel Runtime Retirement | Complete | [completed/TP-20261003-009-excel-retirement.md](completed/TP-20261003-009-excel-retirement.md) |

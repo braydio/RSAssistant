@@ -2,6 +2,13 @@
 RSDashboard/*
 auto-rsa/
 volumes/logs*
+# Runtime data stays out of git; only small docs/fixtures are allowlisted (TP-20261010-009).
+# Already-tracked legacy artifacts are untouched until explicitly untracked.
+volumes/**
+!volumes/db/
+!volumes/db/README.md
+!volumes/excel/
+!volumes/excel/example.ReverseSplitLog.xlsx
 heartbeat.txt
 *.local
 .venv/*

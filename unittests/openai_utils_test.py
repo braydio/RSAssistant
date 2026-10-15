@@ -1,3 +1,4 @@
+import unittest
 import sys
 from pathlib import Path
 
@@ -47,3 +48,26 @@ def test_clip_notice_text_prefers_share_consolidation_section():
     lower = clipped.lower()
     assert "share consolidation" in lower or "rounded up" in lower
     assert len(clipped) <= 6000
+
+
+class OpenAILogRedactionTest(unittest.TestCase):
+    def test_prompt_and_response_not_logged(self):
+        from unittest import mock
+        from utils import openai_utils
+
+        secret = "SECRET-NOTICE-BODY-123"
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.json.return_value = {
+            "choices": [{"message": {"content": "SECRET-LLM-OUTPUT {}"}}]
+        }
+        response.headers = {}
+        response.status_code = 200
+        with mock.patch.object(openai_utils, "OPENAI_POLICY_ENABLED", True), \
+            mock.patch.object(openai_utils, "OPENAI_API_KEY", "k"), \
+            mock.patch.object(openai_utils.requests, "post", return_value=response), \
+            self.assertLogs(openai_utils.logger, level="DEBUG") as logs:
+            openai_utils.extract_reverse_split_details(secret, ticker="ABC")
+        joined = "\n".join(logs.output)
+        self.assertNotIn(secret, joined)
+        self.assertNotIn("SECRET-LLM-OUTPUT", joined)

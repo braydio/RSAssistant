@@ -215,3 +215,127 @@ def test_execute_trade_defaults_to_all_when_no_brokers():
 
         sell_calls = [call for call in executor.calls if call[0] == "sell"]
         assert sell_calls == [("sell", "TQQQ", "all", None)]
+
+
+# --- TP-20261010-007: nonblocking market data -------------------------------
+import threading
+import time
+
+
+class SlowProvider(StubDataProvider):
+    def __init__(self, price_sequence, delay=0.2):
+        super().__init__(price_sequence)
+        self.delay = delay
+        self.candle_calls = 0
+        self.price_calls = 0
+        self.threads = []
+
+    def fetch_candles(self, symbol, interval="4h", range_="1mo"):
+        self.candle_calls += 1
+        self.threads.append(threading.get_ident())
+        time.sleep(self.delay)
+        return [
+            Candle(timestamp=i, open=1, high=1, low=1, close=float(i + 1))
+            for i in range(30)
+        ]
+
+    def fetch_last_price(self, symbol):
+        self.price_calls += 1
+        self.threads.append(threading.get_ident())
+        time.sleep(self.delay)
+        return 100.0
+
+
+async def _ticks_during(coro):
+    ticks = 0
+    done = asyncio.Event()
+
+    async def beat():
+        nonlocal ticks
+        while not done.is_set():
+            ticks += 1
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(beat())
+    try:
+        await coro
+    finally:
+        done.set()
+        await task
+    return ticks
+
+
+def test_refresh_color_does_not_block_event_loop_and_caches_candles():
+    async def run():
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = SlowProvider([], delay=0.2)
+            bot = _create_bot(Path(tmp), provider)
+            ticks = await _ticks_during(bot._refresh_color())
+            assert ticks > 5
+            assert provider.threads and threading.get_ident() not in provider.threads
+            await bot._refresh_color()  # same candle interval: served from cache
+            assert provider.candle_calls == 1
+
+    asyncio.run(run())
+
+
+def test_overlapping_cycles_are_skipped():
+    async def run():
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = SlowProvider([], delay=0.2)
+            bot = _create_bot(Path(tmp), provider)
+            await asyncio.gather(bot._refresh_color(), bot._refresh_color())
+            assert provider.candle_calls == 1
+
+    asyncio.run(run())
+
+
+def test_idle_position_check_makes_no_fetch_and_exit_price_never_cached():
+    async def run():
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = SlowProvider([], delay=0.05)
+            bot = _create_bot(Path(tmp), provider)
+            await bot._check_position()
+            assert provider.price_calls == 0
+            bot.store.save_active_position(
+                TradePosition(
+                    symbol="TQQQ", direction="long", entry_price=100.0, quantity=1.0,
+                    take_profit=1000.0, stop_loss=1.0, opened_at=datetime.now(timezone.utc),
+                )
+            )
+            await bot._check_position()
+            await bot._check_position()
+            assert provider.price_calls == 2  # every check fetches a fresh quote
+
+    asyncio.run(run())
+
+
+def test_force_entry_fetch_off_loop_and_stop_cancels_tasks():
+    async def run():
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = SlowProvider([], delay=0.2)
+            bot = _create_bot(Path(tmp), provider)
+            ticks = await _ticks_during(bot.force_entry("long"))
+            assert ticks > 5
+            await bot.start()
+            await bot.stop()
+            assert bot._monitor_task.done() and bot._position_task.done()
+
+    asyncio.run(run())
+
+
+def test_fetch_errors_counted_without_payload():
+    class Boom(StubDataProvider):
+        def fetch_candles(self, *a, **k):
+            raise RuntimeError("SECRET-PAYLOAD")
+
+    async def run():
+        with tempfile.TemporaryDirectory() as tmp:
+            bot = _create_bot(Path(tmp), Boom([]))
+            try:
+                await bot._refresh_color()
+            except RuntimeError:
+                pass
+            assert bot.fetch_error_count == 1
+
+    asyncio.run(run())

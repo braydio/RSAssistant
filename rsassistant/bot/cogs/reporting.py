@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from discord.ext import commands
 
 from utils.csv_utils import send_top_holdings_embed
@@ -27,7 +29,7 @@ class ReportingCog(commands.Cog):
         extras={"category": "Reporting"},
     )
     async def broker_has(self, ctx: commands.Context, ticker: str, *args: str) -> None:
-        import_holdings_if_updated()
+        await asyncio.to_thread(import_holdings_if_updated)
         specific_broker = args[0] if args else None
         await track_ticker_summary(
             ctx,

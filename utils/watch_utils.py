@@ -231,7 +231,7 @@ class WatchListManager:
 
         prices = {}
         if include_prices:
-            prices = get_last_prices(watch_list.keys())
+            prices = await asyncio.to_thread(get_last_prices, tuple(watch_list))
 
         for ticker, data in sorted(watch_list.items()):
             split_date = data.get("split_date", "N/A")
@@ -257,7 +257,7 @@ class WatchListManager:
             await ctx.send("No tickers are being watched.")
             return
 
-        prices = get_last_prices(watch_list.keys())
+        prices = await asyncio.to_thread(get_last_prices, tuple(watch_list))
         lines = []
         for ticker in sorted(watch_list.keys()):
             last_price = prices.get(ticker)

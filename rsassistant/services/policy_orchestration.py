@@ -1,6 +1,7 @@
 """Blocking reverse-split policy analysis behind a Discord-free service API."""
 
 from utils.logging_setup import logger
+from utils.performance_metrics import timed_call
 from utils.policy_resolver import SplitPolicyResolver
 
 
@@ -18,11 +19,12 @@ class PolicyAnalysisService:
         """
         try:
             logger.info("Starting full_analysis for: %s", nasdaq_url)
-            return self.resolver.full_analysis(
-                nasdaq_url,
-                ticker_hint=ticker_hint,
-                fallback_text=fallback_text,
-            )
+            with timed_call("policy_resolution"):
+                return self.resolver.full_analysis(
+                    nasdaq_url,
+                    ticker_hint=ticker_hint,
+                    fallback_text=fallback_text,
+                )
         except Exception as exc:
             logger.error("Critical failure during full_analysis: %s", exc)
             return None

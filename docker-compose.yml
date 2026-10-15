@@ -26,10 +26,12 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-       test: ["CMD", "cat", "/app/volumes/logs/heartbeat.txt"]
+       # Fails when heartbeat.txt is missing, empty or older than 180s (3 intervals).
+       test: ["CMD", "python", "/app/scripts/healthcheck.py"]
        interval: 60s
        timeout: 10s
        retries: 3
+       start_period: 120s
 
   auto-rsa:
     container_name: auto-rsa

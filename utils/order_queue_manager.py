@@ -117,21 +117,29 @@ def _row_to_data(row):
     return str(order_id), data
 
 
+def _row_to_data_with_state(row):
+    *base, state = row
+    order_id, data = _row_to_data(tuple(base))
+    if state != "pending":
+        data["state"] = state  # surfaced only for non-pending (e.g. needs_review)
+    return order_id, data
+
+
 def _load_queue(conn=None):
     if conn is None:
         with _connect() as db:
             _import_legacy_queue(db)
             rows = db.execute(
                 """SELECT order_id, action, ticker, quantity, broker, scheduled_at,
-                          metadata_json FROM scheduled_orders"""
+                          metadata_json, state FROM scheduled_orders"""
             ).fetchall()
     else:
         _import_legacy_queue(conn)
         rows = conn.execute(
             """SELECT order_id, action, ticker, quantity, broker, scheduled_at,
-                      metadata_json FROM scheduled_orders"""
+                      metadata_json, state FROM scheduled_orders"""
         ).fetchall()
-    return dict(_row_to_data(row) for row in rows)
+    return dict(_row_to_data_with_state(row) for row in rows)
 
 
 def add_to_order_queue(order_id, order_data):
@@ -217,3 +225,95 @@ def get_past_due_orders(reference_time) -> list[tuple[str, dict]]:
         if execution_time <= reference_time:
             past_due.append((order_id, data))
     return past_due
+
+
+# --- dispatch state transitions: pending -> dispatching -> (deleted | pending | needs_review)
+
+CLAIM_CLAIMED = "claimed"
+CLAIM_MISSING = "missing"
+CLAIM_BUSY = "busy"
+
+
+def claim_order(order_id) -> str:
+    """Atomically move a ``pending`` order to ``dispatching``.
+
+    Returns ``claimed`` when this caller now owns the send, ``busy`` when the
+    order exists in another state (already dispatching or awaiting review) and
+    ``missing`` when it was removed/cancelled.
+    """
+    with _connect() as conn:
+        _import_legacy_queue(conn)
+        cursor = conn.execute(
+            """UPDATE scheduled_orders
+               SET state='dispatching', attempt_count=attempt_count+1,
+                   updated_at=CURRENT_TIMESTAMP
+               WHERE order_id=? AND state='pending'""",
+            (str(order_id),),
+        )
+        if cursor.rowcount:
+            return CLAIM_CLAIMED
+        exists = conn.execute(
+            "SELECT 1 FROM scheduled_orders WHERE order_id=?", (str(order_id),)
+        ).fetchone()
+        return CLAIM_BUSY if exists else CLAIM_MISSING
+
+
+def release_order(order_id, error: str | None = None) -> bool:
+    """Return a claimed order to ``pending`` after a clean, known send failure."""
+    with _connect() as conn:
+        cursor = conn.execute(
+            """UPDATE scheduled_orders
+               SET state='pending', last_error=?, updated_at=CURRENT_TIMESTAMP
+               WHERE order_id=? AND state='dispatching'""",
+            (error, str(order_id)),
+        )
+        return cursor.rowcount > 0
+
+
+def mark_order_needs_review(order_id, error: str) -> bool:
+    """Park an order whose send outcome is ambiguous; never auto-resent."""
+    with _connect() as conn:
+        cursor = conn.execute(
+            """UPDATE scheduled_orders
+               SET state='needs_review', last_error=?, updated_at=CURRENT_TIMESTAMP
+               WHERE order_id=? AND state='dispatching'""",
+            (error, str(order_id)),
+        )
+        return cursor.rowcount > 0
+
+
+def recover_stale_dispatching() -> list[str]:
+    """After a restart, park orders left ``dispatching``: the send may have happened.
+
+    The Discord send and the durable completion are not atomic, so these orders
+    are *not* automatically re-sent. They stay in the queue as ``needs_review``
+    for manual reconciliation (``..remove`` or ``..orders``).
+    """
+    with _connect() as conn:
+        _import_legacy_queue(conn)
+        rows = conn.execute(
+            "SELECT order_id FROM scheduled_orders WHERE state='dispatching'"
+        ).fetchall()
+        conn.execute(
+            """UPDATE scheduled_orders
+               SET state='needs_review',
+                   last_error='interrupted while dispatching; send outcome unknown',
+                   updated_at=CURRENT_TIMESTAMP
+               WHERE state='dispatching'"""
+        )
+    return [str(row[0]) for row in rows]
+
+
+def get_scheduled_states(order_ids) -> dict[str, tuple[str, str]]:
+    """Return ``{order_id: (scheduled_at, state)}`` for existing orders (one query)."""
+    ids = [str(i) for i in order_ids]
+    if not ids:
+        return {}
+    with _connect() as conn:
+        placeholders = ",".join("?" * len(ids))
+        rows = conn.execute(
+            f"""SELECT order_id, scheduled_at, state FROM scheduled_orders
+                WHERE order_id IN ({placeholders})""",
+            ids,
+        ).fetchall()
+    return {str(r[0]): (r[1], r[2]) for r in rows}

@@ -85,7 +85,7 @@ class WatchUtilsTest(IsolatedAsyncioTestCase):
             "utils.watch_utils.get_last_prices", return_value={"TEST": 12.34}
         ) as price_mock:
             await self.manager.list_watched_tickers(self.ctx, include_prices=True)
-        price_mock.assert_called_once_with(self.manager.watch_list.keys())
+        price_mock.assert_called_once_with(tuple(self.manager.watch_list))
         embed = self.ctx.sent_messages[0]["embed"]
         self.assertEqual(embed.fields[0].name, "TEST — $12.34")
         self.assertIn("Split Ratio: N/A", embed.fields[0].value)

@@ -31,6 +31,10 @@ class YFinanceMarketDataProvider:
     interval, retrying transient errors. Requests are spaced out with a basic
     backoff to reduce rate-limit risk. For production deployments the provider
     can be swapped with TradingView webhooks or a premium data source.
+
+    ``fetch_candles``/``fetch_last_price`` block (network and ``time.sleep``
+    retries) and must only be called from a worker thread, e.g.
+    ``await asyncio.to_thread(...)``; never directly on the event loop.
     """
 
     def __init__(self, max_retries: int = 3, backoff_seconds: float = 1.0) -> None:
@@ -78,14 +82,14 @@ class YFinanceMarketDataProvider:
                 )
             except Exception as exc:  # pragma: no cover - network
                 if attempt + 1 >= self.max_retries:
-                    logger.error("yfinance fetch failed: %s", exc)
+                    logger.error("yfinance fetch failed: %s", type(exc).__name__)
                     raise
                 delay = self._calculate_backoff(attempt)
                 logger.warning(
                     "yfinance fetch failed (attempt %s/%s): %s; retrying in %.2fs",
                     attempt + 1,
                     self.max_retries,
-                    exc,
+                    type(exc).__name__,
                     delay,
                 )
                 time.sleep(delay)

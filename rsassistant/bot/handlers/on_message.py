@@ -939,6 +939,10 @@ async def handle_primary_channel(bot, message):
         await asyncio.to_thread(parse_order_message, message.content)
 
 
+# Bound concurrent blocking network analyses (NASDAQ/SEC/LLM) run in worker threads.
+_SECONDARY_ANALYSIS_SEMAPHORE = asyncio.Semaphore(2)
+
+
 async def handle_secondary_channel(bot, message):
     """Handle NASDAQ alerts posted in the secondary channel.
 
@@ -947,7 +951,12 @@ async def handle_secondary_channel(bot, message):
     continue to use their original destinations.
     """
     logger.info(f"Received message on secondary channel: {message.content}")
-    result = alert_channel_message(message.content)
+    try:
+        async with _SECONDARY_ANALYSIS_SEMAPHORE:
+            result = await asyncio.to_thread(alert_channel_message, message.content)
+    except Exception as exc:
+        logger.error("Secondary alert parsing failed (%s); no action taken.", type(exc).__name__)
+        return
     logger.info(f"Alert parser result: {result}")
     if not (isinstance(result, dict) and result.get("reverse_split_confirmed")):
         logger.warning("Message not confirming reverse split or malformed")
@@ -963,12 +972,13 @@ async def handle_secondary_channel(bot, message):
 
     try:
         logger.info(f"Policy resolution for {url}")
-        policy_info = await asyncio.to_thread(
-            OnMessagePolicyResolver.full_analysis,
-            url,
-            ticker_hint=ticker,
-            fallback_text=message.content,
-        )
+        async with _SECONDARY_ANALYSIS_SEMAPHORE:
+            policy_info = await asyncio.to_thread(
+                OnMessagePolicyResolver.full_analysis,
+                url,
+                ticker_hint=ticker,
+                fallback_text=message.content,
+            )
         if not policy_info:
             logger.warning(f"No policy info for {ticker}")
             return

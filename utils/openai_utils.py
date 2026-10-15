@@ -212,13 +212,6 @@ def extract_reverse_split_details(
         ticker or "N/A",
         extra=openai_log_extra,
     )
-    logger.info(
-        "OpenAI request payload (call_id=%s): system_prompt=%s | user_prompt=%s",
-        call_id,
-        system_prompt,
-        user_prompt,
-        extra=openai_log_extra,
-    )
     try:
         with requests.post(
             OPENAI_CHAT_URL,
@@ -240,19 +233,20 @@ def extract_reverse_split_details(
             extra=openai_log_extra,
         )
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        logger.info(
-            "OpenAI raw response content (call_id=%s): %s",
+        logger.debug(
+            "OpenAI response received (call_id=%s, content_chars=%s).",
             call_id,
-            content,
+            len(content or ""),
             extra=openai_log_extra,
         )
     except Exception as e:
         elapsed = time.monotonic() - start_time
         logger.error(
-            "OpenAI request failed (call_id=%s, elapsed=%.2fs, error=%s).",
+            "OpenAI request failed (call_id=%s, elapsed=%.2fs, error_class=%s, status=%s).",
             call_id,
             elapsed,
-            e,
+            type(e).__name__,
+            getattr(getattr(e, "response", None), "status_code", "n/a"),
             extra=openai_log_extra,
         )
         return None
@@ -270,9 +264,9 @@ def extract_reverse_split_details(
         parsed = json.loads(json_blob)
     except json.JSONDecodeError as e:
         logger.error(
-            "Failed to decode OpenAI JSON (call_id=%s, error=%s).",
+            "Failed to decode OpenAI JSON (call_id=%s, error_class=%s).",
             call_id,
-            e,
+            type(e).__name__,
             extra=openai_log_extra,
         )
         return None

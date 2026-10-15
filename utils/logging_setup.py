@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import time
+from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from threading import Lock, Thread
@@ -21,6 +22,57 @@ _heartbeat_started = False
 class ReplaceInvalidCharactersFilter(logging.Filter):
     def filter(self, record):
         record.msg = "".join("?" if ord(c) > 127 else c for c in str(record.msg))
+        return True
+
+
+class TimeLengthListDuplicateFilter(logging.Filter):
+    """Suppress repeated INFO/DEBUG messages; bounded by time and entry count.
+
+    WARNING and above, and records tagged ``never_dedupe``, always pass through
+    unmodified (no truncation) so failure diagnostics stay complete.
+    """
+
+    def __init__(
+        self, interval=60, max_message_length=200, max_sample_items=5, max_entries=1024
+    ):
+        super().__init__()
+        self.logged_messages = OrderedDict()
+        self.interval = interval
+        self.max_message_length = max_message_length
+        self.max_sample_items = max_sample_items
+        self.max_entries = max_entries
+
+    def truncate_message(self, msg):
+        msg_str = str(msg)
+        return (
+            msg_str
+            if len(msg_str) <= self.max_message_length
+            else f"{msg_str[: self.max_message_length]}... [truncated]"
+        )
+
+    def _evict(self, now):
+        while self.logged_messages:
+            key, ts = next(iter(self.logged_messages.items()))
+            if now - ts >= self.interval or len(self.logged_messages) > self.max_entries:
+                self.logged_messages.popitem(last=False)
+            else:
+                break
+
+    def filter(self, record):
+        if record.levelno >= logging.WARNING or getattr(record, "never_dedupe", False):
+            return True
+        now = time.time()
+        message_text = record.getMessage()
+        msg_key = hash(message_text)
+        self._evict(now)
+        last = self.logged_messages.get(msg_key)
+        if last is not None and now - last < self.interval:
+            return False
+        self.logged_messages[msg_key] = now
+        self.logged_messages.move_to_end(msg_key)
+        self._evict(now)
+        record.msg = self.truncate_message(message_text)
+        record.args = ()
         return True
 
 
@@ -91,62 +143,6 @@ def setup_logging(config=None, verbose=False):
         for h in [handler, console_handler]:
             h.addFilter(filter_invalid_chars)
 
-        class TimeLengthListDuplicateFilter(logging.Filter):
-            def __init__(self, interval=60, max_message_length=200, max_sample_items=5):
-                super().__init__()
-                self.logged_messages = {}
-                self.interval = interval
-                self.max_message_length = max_message_length
-                self.max_sample_items = max_sample_items
-
-            def log_sample(self, data, label="Sample"):
-                if isinstance(data, (list, tuple)):
-                    sample_data = data[: self.max_sample_items]
-                    logging.info(
-                        f"{label} (up to {self.max_sample_items}): {sample_data}..."
-                    )
-                elif isinstance(data, dict):
-                    sample_data = {
-                        k: data[k] for k in list(data.keys())[: self.max_sample_items]
-                    }
-                    logging.info(
-                        f"{label} (up to {self.max_sample_items}): {sample_data}..."
-                    )
-                else:
-                    logging.info(f"{label}: {str(data)}")
-
-            def truncate_message(self, msg):
-                msg_str = str(msg)
-                return (
-                    msg_str
-                    if len(msg_str) <= self.max_message_length
-                    else f"{msg_str[: self.max_message_length]}... [truncated]"
-                )
-
-            def filter(self, record):
-                current_time = time.time()
-                message_text = record.getMessage()
-                if getattr(record, "never_dedupe", False):
-                    record.msg = self.truncate_message(message_text)
-                    record.args = ()
-                    return True
-                try:
-                    msg_key = hash(message_text)
-                except TypeError:
-                    if isinstance(message_text, (list, dict)):
-                        self.log_sample(message_text, "Unhashable message")
-                        return False
-                    msg_key = id(message_text)
-                if (
-                    msg_key in self.logged_messages
-                    and current_time - self.logged_messages[msg_key] < self.interval
-                ):
-                    return False
-                record.msg = self.truncate_message(message_text)
-                record.args = ()
-                self.logged_messages[msg_key] = current_time
-                return True
-
         root_logger.filters.clear()
         root_logger.addFilter(TimeLengthListDuplicateFilter())
 
@@ -161,8 +157,12 @@ def setup_logging(config=None, verbose=False):
 
             def format(self, record):
                 log_color = self.COLORS.get(record.levelno, "")
-                record.levelname = f"{log_color}{record.levelname}{Style.RESET_ALL}"
-                return super().format(record)
+                original = record.levelname
+                record.levelname = f"{log_color}{original}{Style.RESET_ALL}"
+                try:
+                    return super().format(record)
+                finally:
+                    record.levelname = original
 
         console_handler.setFormatter(
             ColorFormatter(

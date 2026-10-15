@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 from utils.config_utils import AUTO_RSA_HOLDINGS_FILE, AUTO_RSA_HOLDINGS_ENABLED
 from utils.csv_utils import save_holdings_to_csv
 from utils.logging_setup import logger
+from utils.performance_metrics import timed_call
 
 
 def _normalize_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
@@ -88,7 +90,73 @@ def _extract_entries(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
-_last_import_mtime: float | None = None
+Fingerprint = tuple[int, int]
+
+OUTCOME_CHANGED = "changed"
+OUTCOME_SKIPPED = "skipped"
+OUTCOME_FAILED = "failed"
+
+# Fingerprint (mtime_ns, size) of the last snapshot that was fully validated and
+# persisted. Only advanced on success so failed imports are retried.
+_last_import_fingerprint: Fingerprint | None = None
+# Last fingerprint we already warned about, to avoid one warning per poll.
+_last_failure_fingerprint: Fingerprint | None = None
+_missing_warned = False
+
+
+def _fingerprint(file_path: Path) -> Fingerprint:
+    stat = file_path.stat()
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _import_snapshot(file_path: Path) -> tuple[str, int, Fingerprint | None]:
+    """Import one snapshot. Returns ``(outcome, imported_count, fingerprint)``.
+
+    The fingerprint is taken before and after the read; a mismatch means the
+    file was being rewritten, so nothing is persisted.
+    """
+
+    try:
+        before = _fingerprint(file_path)
+        text = file_path.read_text()
+        after = _fingerprint(file_path)
+    except OSError as exc:
+        logger.warning("Unable to read holdings file %s: %s", file_path, exc)
+        return OUTCOME_FAILED, 0, None
+    if before != after:
+        logger.warning("Holdings file changed during read; will retry: %s", file_path)
+        return OUTCOME_FAILED, 0, None
+
+    # Re-warn about the same unchanged bad snapshot only at DEBUG.
+    warn = logger.debug if before == _last_failure_fingerprint else logger.warning
+    try:
+        payload = json.loads(text)
+    except ValueError as exc:
+        warn("Failed to parse holdings file %s: %s", file_path, exc)
+        return OUTCOME_FAILED, 0, before
+
+    normalized = []
+    for entry in _extract_entries(payload):
+        normalized_entry = _normalize_entry(entry)
+        if normalized_entry:
+            normalized.append(normalized_entry)
+
+    if not normalized:
+        warn("No valid holdings entries found in %s", file_path)
+        return OUTCOME_FAILED, 0, before
+
+    for holding in normalized:
+        holding["Key"] = (
+            f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
+        )
+
+    try:
+        save_holdings_to_csv(normalized, use_refresh_target=False)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        warn("Failed to persist holdings from %s: %s", file_path, exc)
+        return OUTCOME_FAILED, 0, before
+    logger.info("Imported %d holdings entries from %s", len(normalized), file_path)
+    return OUTCOME_CHANGED, len(normalized), before
 
 
 def import_holdings_file(path: Path | str | None = None) -> int:
@@ -98,64 +166,45 @@ def import_holdings_file(path: Path | str | None = None) -> int:
     """
 
     if not AUTO_RSA_HOLDINGS_ENABLED:
-        logger.info("Auto-RSA holdings import disabled; skipping.")
+        logger.debug("Auto-RSA holdings import disabled; skipping.")
         return 0
 
     file_path = Path(path or AUTO_RSA_HOLDINGS_FILE)
-    logger.info("Holdings import file path: %s", file_path)
     if not file_path.exists():
         logger.warning("Holdings file missing: %s", file_path)
         return 0
-
-    try:
-        payload = json.loads(file_path.read_text())
-    except Exception as exc:
-        logger.warning("Failed to parse holdings file %s: %s", file_path, exc)
-        return 0
-
-    entries = _extract_entries(payload)
-    logger.info("Holdings payload entries extracted: %d", len(entries))
-    normalized = []
-    for entry in entries:
-        normalized_entry = _normalize_entry(entry)
-        if normalized_entry:
-            normalized.append(normalized_entry)
-
-    if not normalized:
-        logger.info("No holdings entries found in %s", file_path)
-        return 0
-
-    for holding in normalized:
-        holding["Key"] = (
-            f"{holding['broker']}_{holding['group']}_{holding['account']}_{holding['ticker']}"
-        )
-
-    save_holdings_to_csv(normalized, use_refresh_target=False)
-    logger.info("Imported %d holdings entries from %s", len(normalized), file_path)
-    return len(normalized)
+    return _import_snapshot(file_path)[1]
 
 
 def import_holdings_if_updated(path: Path | str | None = None) -> int:
-    """Import holdings only when the snapshot file changes."""
-    global _last_import_mtime
+    """Import holdings only when the snapshot file changes.
+
+    The snapshot is acknowledged only after it was validated and persisted, so a
+    failed or empty import is retried on the next poll.
+    """
+    global _last_import_fingerprint, _last_failure_fingerprint, _missing_warned
     if not AUTO_RSA_HOLDINGS_ENABLED:
-        logger.info("Auto-RSA holdings import disabled; skipping.")
         return 0
     file_path = Path(path or AUTO_RSA_HOLDINGS_FILE)
-    logger.info("Holdings import check for file: %s", file_path)
-    if not file_path.exists():
-        logger.warning("Holdings file missing: %s", file_path)
-        return 0
     try:
-        mtime = file_path.stat().st_mtime
+        fingerprint = _fingerprint(file_path)
+    except FileNotFoundError:
+        if not _missing_warned:
+            logger.warning("Holdings file missing: %s", file_path)
+            _missing_warned = True
+        return 0
     except OSError:
         logger.warning("Unable to stat holdings file: %s", file_path)
         return 0
-    logger.info("Holdings file mtime: %s (last import: %s)", mtime, _last_import_mtime)
-    if _last_import_mtime is not None and mtime <= _last_import_mtime:
-        logger.info("Holdings file unchanged; skipping import.")
+    _missing_warned = False
+
+    if fingerprint == _last_import_fingerprint:
         return 0
-    imported = import_holdings_file(file_path)
-    _last_import_mtime = mtime
-    logger.info("Holdings import finished; imported=%d", imported)
+    with timed_call("holdings_import"):
+        outcome, imported, taken = _import_snapshot(file_path)
+    if outcome == OUTCOME_CHANGED:
+        _last_import_fingerprint = taken
+        _last_failure_fingerprint = None
+    else:
+        _last_failure_fingerprint = fingerprint
     return imported

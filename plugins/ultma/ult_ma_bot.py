@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Union
@@ -58,6 +59,12 @@ class UltMaTradingBot:
         self._next_check_at: Optional[datetime] = None
         self._webhook_color: Optional[str] = None
         self._webhook_timestamp: Optional[datetime] = None
+        # Identical polling cycles never overlap (a slow fetch skips, not queues).
+        self._refresh_lock = asyncio.Lock()
+        self._position_lock = asyncio.Lock()
+        # (monotonic fetched_at, candles) per (symbol, interval, range).
+        self._candle_cache: dict[tuple[str, str, str], tuple[float, list]] = {}
+        self.fetch_error_count = 0
 
         self.store.initialise()
         settings = self.store.load_settings()
@@ -152,7 +159,7 @@ class UltMaTradingBot:
         if direction not in {"long", "short"}:
             raise ValueError("direction must be 'long' or 'short'")
         symbol = "TQQQ" if direction == "long" else "SQQQ"
-        price = self.data.fetch_last_price(symbol)
+        price = await asyncio.to_thread(self.data.fetch_last_price, symbol)
         if price is None:
             raise RuntimeError(f"Failed to fetch price for {symbol}")
         color = "green" if direction == "long" else "red"
@@ -187,12 +194,25 @@ class UltMaTradingBot:
 
     # ------------------------------------------------------------------
     async def _refresh_color(self) -> None:
-        timestamp = datetime.now(TZ_UTC)
-        color, price = self._determine_color()
-        if color is None or price is None:
-            logger.debug("Colour detection returned no signal.")
+        if self._refresh_lock.locked():
+            logger.debug("Previous colour refresh still running; skipping.")
             return
-        await self._evaluate_color(color, price, timestamp)
+        async with self._refresh_lock:
+            timestamp = datetime.now(TZ_UTC)
+            try:
+                color, price = await asyncio.to_thread(self._determine_color)
+            except Exception as exc:
+                self.fetch_error_count += 1
+                logger.error(
+                    "ULT-MA colour fetch failed (%s, total_errors=%d).",
+                    type(exc).__name__,
+                    self.fetch_error_count,
+                )
+                raise
+            if color is None or price is None:
+                logger.debug("Colour detection returned no signal.")
+                return
+            await self._evaluate_color(color, price, timestamp)
 
     async def _evaluate_color(
         self, color: str, price: float, timestamp: datetime, forced: bool = False
@@ -303,10 +323,31 @@ class UltMaTradingBot:
         logger.info("Stored new active position for %s", target_symbol)
 
     async def _check_position(self) -> None:
+        # Cheap idle path: no active position means no network fetch at all.
+        if not self.store.load_active_position():
+            return
+        if self._position_lock.locked():
+            logger.debug("Previous position check still running; skipping.")
+            return
+        async with self._position_lock:
+            await self._check_position_locked()
+
+    async def _check_position_locked(self) -> None:
         position = self.store.load_active_position()
         if not position:
             return
-        price = self.data.fetch_last_price(position.symbol)
+        # Exit pricing is always fetched fresh; it is never cached.
+        try:
+            price = await asyncio.to_thread(self.data.fetch_last_price, position.symbol)
+        except Exception as exc:
+            self.fetch_error_count += 1
+            logger.error(
+                "ULT-MA price fetch failed for %s (%s, total_errors=%d).",
+                position.symbol,
+                type(exc).__name__,
+                self.fetch_error_count,
+            )
+            raise
         if price is None:
             logger.debug("Unable to retrieve price for %s", position.symbol)
             return
@@ -378,6 +419,19 @@ class UltMaTradingBot:
             self.executor.sell(symbol, amount, broker=broker)
 
     # ------------------------------------------------------------------
+    def _cached_candles(self, symbol: str, interval: str, range_: str) -> list:
+        """Reuse a candle series only within its effective candle interval."""
+
+        key = (symbol, interval, range_)
+        cached = self._candle_cache.get(key)
+        now = time.monotonic()
+        if cached and now - cached[0] < self.candle_interval.total_seconds():
+            return cached[1]
+        candles = self.data.fetch_candles(symbol, interval=interval, range_=range_)
+        if candles:
+            self._candle_cache[key] = (now, candles)
+        return candles
+
     def _determine_color(self) -> tuple[Optional[str], Optional[float]]:
         if self._webhook_color and self._webhook_timestamp:
             if (
@@ -387,7 +441,7 @@ class UltMaTradingBot:
                 symbol = "TQQQ" if self._webhook_color == "green" else "SQQQ"
                 price = self.data.fetch_last_price(symbol)
                 return self._webhook_color, price
-        candles = self.data.fetch_candles("TQQQ", interval="4h", range_="1mo")
+        candles = self._cached_candles("TQQQ", "4h", "1mo")
         if not candles:
             return None, None
         closes = [c.close for c in candles if c.close]
