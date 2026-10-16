@@ -63,3 +63,16 @@ The `Dockerfile` is a two-stage build (`python:3.12-slim`): dependencies are ins
 ## Runtime artifact hygiene
 
 `volumes/**` is git-ignored (only `volumes/db/README.md` and the sample XLSX are allowlisted) and excluded from the Docker context. `python scripts/audit_runtime_artifacts.py` inventories error captures, rotated logs, active logs and cache files under `VOLUMES_DIR` without changing anything. `--prune --older-than-days N` (N >= 1) deletes only expendable files: `db/fidelity_errors/*.html|png`, rotated `logs/*.log.<n>`, and stale `cache/*.tmp`. Databases, WAL/SHM, holdings/order audit logs, CSV logs, active logs and backups are never candidates, and symlinks are never followed. Error captures are emitted by the auto-rsa container into the shared `volumes/db`, so no retention env var is defined here.
+
+## Split event lifecycle and autobuy idempotency
+
+`rsassistant/persistence/split_events.py` owns `split_event_intents` and
+`split_event_order_intents` (migration 10). `claim_split_event()` runs in a
+`BEGIN IMMEDIATE` transaction and returns `claimed | already_claimed | invalid |
+requires_review`; `_process_round_up_flow` claims before touching watchlists or
+calling `attempt_autobuy`, which persists one stable-key order intent per
+standard/override plan before scheduling. Intent is not a fill: after a failed
+or interrupted schedule the event is `needs_reconciliation` and is never retried
+automatically. `split_monitor` stays ticker-keyed; archiving a completed watch
+keeps the intent history.
+

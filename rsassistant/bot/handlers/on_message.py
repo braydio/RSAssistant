@@ -194,6 +194,30 @@ async def _process_round_up_flow(
     watch_list_manager.load_watch_list()
     split_watch_utils.load_data()
 
+    # Claim the (ticker, effective date) event durably before touching the
+    # watchlist or scheduling anything; duplicates and replays stop here.
+    claim = split_watch_utils.claim_split_event(ticker, split_date, "secondary_alert")
+    if claim == "invalid":
+        await target_channel.send(
+            f"Round-up detected for {ticker} but the effective date "
+            f"({split_date or 'missing'}) is missing or unreasonable: manual "
+            "verification required. No orders were scheduled."
+        )
+        return
+    if claim == "requires_review":
+        await target_channel.send(
+            f"{ticker} is already tracked for a different split date; "
+            f"{split_date} needs operator review (splitreplace). "
+            "No orders were scheduled."
+        )
+        return
+    if claim == "already_claimed":
+        await target_channel.send(
+            f"Round-up for {ticker} ({split_date}) is already tracked; "
+            "no new orders scheduled."
+        )
+        return
+
     watchlist_updated = False
     if not watch_list_manager.ticker_exists(ticker):
         await watch_list_manager.watch_ticker(
@@ -211,19 +235,25 @@ async def _process_round_up_flow(
             )
 
     scheduled_autobuy = False
-    existing_split_watch = split_watch_utils.get_status(ticker)
-    if existing_split_watch:
-        logger.info("Split watch already exists for %s; skipping autobuy.", ticker)
-    else:
-        split_watch_utils.add_split_watch(ticker, split_date)
-        logger.info("Added split watch: %s @ %s", ticker, split_date)
-        await attempt_autobuy(bot, channel, ticker, quantity=1)
+    split_watch_utils.add_split_watch(ticker, split_date)
+    logger.info("Added split watch: %s @ %s", ticker, split_date)
+    try:
+        await attempt_autobuy(bot, channel, ticker, quantity=1, split_date=split_date)
         scheduled_autobuy = True
+    except Exception as exc:
+        logger.exception("Autobuy scheduling failed for %s @ %s", ticker, split_date)
+        split_watch_utils.mark_split_event_needs_reconciliation(
+            ticker, split_date, f"schedule_failed:{type(exc).__name__}"
+        )
+        await target_channel.send(
+            f"Autobuy scheduling for {ticker} ({split_date}) needs operator "
+            "reconciliation (splitreview); it will not be retried automatically."
+        )
 
     summary = (
         f"Round-up confirmed for {ticker}. "
         f"Watchlist {'updated' if watchlist_updated else 'already tracked'}; "
-        f"autobuy {'scheduled' if scheduled_autobuy else 'already tracked'}."
+        f"autobuy {'scheduled' if scheduled_autobuy else 'needs reconciliation'}."
     )
     await target_channel.send(summary)
 
@@ -1032,9 +1062,10 @@ async def handle_secondary_channel(bot, message):
         if _resolve_round_up_confirmation(policy_info):
             summary = build_policy_summary(ticker, policy_info, url)
             await post_policy_summary(bot, ticker, summary)
-            split_date = policy_info.get("effective_date") or date.today().isoformat()
+            # Never default a missing date to today: fail closed to review-only.
+            split_date = policy_info.get("effective_date")
             split_ratio = policy_info.get("split_ratio") or "N/A"
-            watch_date = _format_watch_date(split_date)
+            watch_date = _format_watch_date(split_date) if split_date else ""
             await _process_round_up_flow(
                 bot,
                 response_channel,
@@ -1053,7 +1084,7 @@ async def handle_secondary_channel(bot, message):
         logger.exception("Error during policy analysis secondary channel")
 
 
-async def attempt_autobuy(bot, channel, ticker, quantity=1):
+async def attempt_autobuy(bot, channel, ticker, quantity=1, split_date=None):
     now = datetime.now(MARKET_TZ)
 
     target_channel = resolve_message_destination(bot, channel)
@@ -1072,8 +1103,27 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
     orders_to_schedule = order_orchestration.build_autobuy_orders(
         ticker, quantity, config
     )
-    for order in orders_to_schedule:
+    # With a split_date, every order is persisted as a stable-key intent first;
+    # a failure leaves the event flagged for reconciliation, never retried.
+    dispatch_keys = [
+        f"{order['kind']}:{order['broker']}".lower() for order in orders_to_schedule
+    ]
+    if split_date:
+        if not split_watch_utils.record_split_order_plan(
+            ticker, split_date, dispatch_keys
+        ):
+            logger.warning(
+                "Autobuy plan for %s @ %s was already recorded; not scheduling.",
+                ticker,
+                split_date,
+            )
+            return
+    for order, dispatch_key in zip(orders_to_schedule, dispatch_keys):
         order_id = str(uuid.uuid4())
+        if split_date:
+            split_watch_utils.mark_split_order_queued(
+                ticker, split_date, dispatch_key, order_id
+            )
         bot.loop.create_task(
             schedule_and_execute(
                 ctx=target_channel,
@@ -1103,6 +1153,8 @@ async def attempt_autobuy(bot, channel, ticker, quantity=1):
             )
         await target_channel.send(confirmation)
         logger.info(confirmation)
+    if split_date:
+        split_watch_utils.mark_split_event_submitted(ticker, split_date)
 
 
 def build_policy_summary(ticker, policy_info, fallback_url):

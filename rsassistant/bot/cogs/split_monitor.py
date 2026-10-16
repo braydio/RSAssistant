@@ -43,7 +43,6 @@ class SplitMonitorCog(commands.Cog):
         extras={"category": "Split Monitor"},
     )
     async def split_status(self, ctx: commands.Context, ticker: str) -> None:
-        split_watch_utils.cleanup_expired_tickers()
         status = split_watch_utils.get_status(ticker)
         if not status:
             await ctx.send(f"{ticker.upper()} is not being tracked.")
@@ -51,8 +50,9 @@ class SplitMonitorCog(commands.Cog):
 
         bought = ", ".join(status.get("accounts_bought", [])) or "None"
         sold = ", ".join(status.get("accounts_sold", [])) or "None"
+        phase = _phase_for(ticker, status)
         await ctx.send(
-            f"{ticker.upper()} | Split: {status.get('split_date')} | Phase: {status.get('status')}\n"
+            f"{ticker.upper()} | Split: {status.get('split_date')} | Phase: {phase}\n"
             f"Bought: {bought}\nSold: {sold}"
         )
 
@@ -63,7 +63,6 @@ class SplitMonitorCog(commands.Cog):
         extras={"category": "Split Monitor"},
     )
     async def split_list(self, ctx: commands.Context) -> None:
-        split_watch_utils.cleanup_expired_tickers()
         watchlist = split_watch_utils.get_full_watchlist()
         if not watchlist:
             await ctx.send("No reverse splits are currently being monitored.")
@@ -72,7 +71,7 @@ class SplitMonitorCog(commands.Cog):
         lines = []
         for ticker, info in watchlist.items():
             lines.append(
-                f"{ticker}: {info.get('split_date')} ({info.get('status', 'unknown')})"
+                f"{ticker}: {info.get('split_date')} ({_phase_for(ticker, info)})"
             )
         await ctx.send("\n".join(lines))
 
@@ -190,9 +189,79 @@ class SplitMonitorCog(commands.Cog):
         extras={"category": "Split Monitor"},
     )
     async def split_cleanup(self, ctx: commands.Context) -> None:
-        split_watch_utils.update_split_status()
-        split_watch_utils.cleanup_completed_tickers()
-        await ctx.send("Updated reverse split statuses and cleaned completed entries.")
+        transitioned = split_watch_utils.update_split_status() or []
+        completed = split_watch_utils.cleanup_completed_tickers() or []
+        watchlist = split_watch_utils.get_full_watchlist()
+        attention = [
+            ticker
+            for ticker, info in watchlist.items()
+            if _phase_for(ticker, info) in ("overdue", "reconciliation needed")
+        ]
+        await ctx.send(
+            f"Split cleanup: {len(transitioned)} moved to selling, "
+            f"{len(completed)} completed and archived, "
+            f"{len(watchlist)} still open, {len(attention)} need attention"
+            + (f" ({', '.join(attention)})." if attention else ".")
+        )
+
+    @operator_only()
+    @commands.command(
+        name="splitreview",
+        aliases=["sr"],
+        help="List split events with unresolved order intent.",
+        extras={"category": "Split Monitor"},
+    )
+    async def split_review(self, ctx: commands.Context) -> None:
+        events = split_watch_utils.list_unresolved_events()
+        if not events:
+            await ctx.send("No unresolved split order intents.")
+            return
+        await ctx.send(
+            "\n".join(
+                f"{e['ticker']} {e['split_date']}: {e['state']}"
+                + (f" ({e['reason']})" if e["reason"] else "")
+                for e in events
+            )
+            + "\nUse splitresolve <ticker> <yyyy-mm-dd> after checking brokers."
+        )
+
+    @operator_only()
+    @commands.command(
+        name="splitresolve",
+        help="Mark an unresolved split event reconciled (no orders are sent).",
+        usage="<ticker> <yyyy-mm-dd>",
+        extras={"category": "Split Monitor"},
+    )
+    async def split_resolve(self, ctx: commands.Context, ticker: str, split_date: str) -> None:
+        if split_watch_utils.resolve_split_event(ticker, split_date):
+            await ctx.send(f"{ticker.upper()} {split_date} marked reconciled.")
+        else:
+            await ctx.send(f"No unresolved event for {ticker.upper()} {split_date}.")
+
+    @operator_only()
+    @commands.command(
+        name="splitreplace",
+        help="Replace an active watch with a later split date (drops old account marks).",
+        usage="<ticker> <yyyy-mm-dd>",
+        extras={"category": "Split Monitor"},
+    )
+    async def split_replace(self, ctx: commands.Context, ticker: str, split_date: str) -> None:
+        if split_watch_utils.replace_split_watch(ticker, split_date):
+            await ctx.send(
+                f"{ticker.upper()} now tracked for {split_date}; no orders were scheduled."
+            )
+        else:
+            await ctx.send("Invalid ticker or date (use YYYY-MM-DD, a reasonable date).")
+
+
+def _phase_for(ticker: str, info: dict) -> str:
+    unresolved = any(
+        e["ticker"] == ticker.upper()
+        and e["split_date"] == info.get("split_date")
+        and e["state"] == "needs_reconciliation"
+        for e in split_watch_utils.list_unresolved_events()
+    )
+    return split_watch_utils.split_phase(info, unresolved=unresolved)
 
 
 async def setup(bot: commands.Bot) -> None:

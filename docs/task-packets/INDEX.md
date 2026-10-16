@@ -8,7 +8,6 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 
 | Packet ID | Title | Status | Priority | Canonical packet |
 | --- | --- | --- | --- | --- |
-| TP-20261013-001 | Split Event Lifecycle + Autobuy Idempotency | Ready | High | [active/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md](active/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md) |
 | TP-20261013-002 | Codex Error Watcher: Fail-Closed Diagnostics + Bounded State | Ready | High | [active/TP-20261013-002-codex-error-watcher-sandbox-output-hardening.md](active/TP-20261013-002-codex-error-watcher-sandbox-output-hardening.md) |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | [active/TP-20261003-001-rsassistant-persistence-modernization.md](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | [active/TP-20261003-012-parsing-runtime-cleanup.md](active/TP-20261003-012-parsing-runtime-cleanup.md) |
@@ -22,6 +21,7 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 
 | Packet ID | Title | Status | Canonical packet |
 | --- | --- | --- | --- |
+| TP-20261013-001 | Split Event Lifecycle + Autobuy Idempotency | Complete | [completed/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md](completed/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md) |
 | TP-20261010-011 | Consolidate Long-Sleep Order Tasks without Changing Execution Semantics | Complete | [completed/TP-20261010-011-scheduled-order-timer-consolidation.md](completed/TP-20261010-011-scheduled-order-timer-consolidation.md) |
 | TP-20261010-010 | Replace Per-Ticker Holdings CSV Scans with One SQL Read | Complete | [completed/TP-20261010-010-holdings-summary-single-pass.md](completed/TP-20261010-010-holdings-summary-single-pass.md) |
 | TP-20261010-009 | Stop Shipping Runtime Artifacts and Add Safe Retention | Complete | [completed/TP-20261010-009-artifact-hygiene-and-retention.md](completed/TP-20261010-009-artifact-hygiene-and-retention.md) |

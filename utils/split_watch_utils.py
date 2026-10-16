@@ -6,6 +6,7 @@ import datetime
 import json
 import logging
 
+from rsassistant.persistence import split_events
 from rsassistant.persistence.db import connect_runtime_db
 from rsassistant.persistence.schema import run_migrations
 from utils.config_utils import SQL_DATABASE, VOLUMES_DIR
@@ -162,6 +163,7 @@ def update_split_status():
                WHERE ticker=?""",
             [(ticker,) for ticker in transitioned],
         )
+        return transitioned
 
 
 def mark_account_sold(ticker, account_name):
@@ -179,40 +181,69 @@ def mark_account_sold(ticker, account_name):
             )
 
 
+def is_split_complete(info: dict) -> bool:
+    """Conservative completion test: selling, bought, and every bought account sold."""
+    bought = set(info.get("accounts_bought", []))
+    sold = set(info.get("accounts_sold", []))
+    return info.get("status") == "selling" and bool(bought) and bought <= sold
+
+
+def split_phase(info: dict, unresolved: bool = False, today=None) -> str:
+    """Return buying | selling | overdue | reconciliation needed for display."""
+    if unresolved:
+        return "reconciliation needed"
+    today = today or datetime.date.today()
+    split_dt = _parse_split_date(info.get("split_date"))
+    if split_dt is not None and split_dt < today and not is_split_complete(info):
+        return "overdue"
+    return info.get("status", "unknown")
+
+
+def _unresolved_pairs(conn) -> set[tuple[str, str]]:
+    return {
+        (ticker, split_date)
+        for ticker, split_date in conn.execute(
+            "SELECT ticker, split_date FROM split_event_intents "
+            "WHERE state='needs_reconciliation'"
+        )
+    }
+
+
+def _delete_completed(conn) -> list[str]:
+    blocked = _unresolved_pairs(conn)
+    completed = [
+        ticker
+        for ticker, info in _get_full_watchlist(conn).items()
+        if is_split_complete(info) and (ticker, info["split_date"]) not in blocked
+    ]
+    if completed:
+        conn.executemany(
+            "DELETE FROM split_monitor WHERE ticker=?",
+            [(ticker,) for ticker in completed],
+        )
+    return completed
+
+
 def cleanup_completed_tickers():
+    """Archive watches proven complete; return their tickers.
+
+    Event intent history is retained in ``split_event_intents``.
+    """
     with _connect() as conn:
         _import_legacy_watchlist(conn)
-        watchlist = _get_full_watchlist(conn)
-        completed = []
-        for ticker, info in watchlist.items():
-            bought = set(info["accounts_bought"])
-            sold = set(info["accounts_sold"])
-            if info["status"] == "selling" and bought and bought == sold:
-                completed.append(ticker)
-        if completed:
-            conn.executemany(
-                "DELETE FROM split_monitor WHERE ticker=?",
-                [(ticker,) for ticker in completed],
-            )
+        return _delete_completed(conn)
 
 
 def cleanup_expired_tickers():
-    """Remove tickers whose valid ISO split date has passed."""
-    today = datetime.date.today()
+    """Archive only proven-complete watches.
+
+    Date passage alone never deletes an open watch; overdue entries stay
+    visible (see :func:`split_phase`). Name and return type are kept for
+    existing callers.
+    """
     with _connect() as conn:
         _import_legacy_watchlist(conn)
-        watchlist = _get_full_watchlist(conn)
-        expired = []
-        for ticker, info in watchlist.items():
-            split_dt = _parse_split_date(info.get("split_date"))
-            if split_dt is not None and split_dt < today:
-                expired.append(ticker)
-        if expired:
-            conn.executemany(
-                "DELETE FROM split_monitor WHERE ticker=?",
-                [(ticker,) for ticker in expired],
-            )
-        return expired
+        return _delete_completed(conn)
 
 
 def get_watchlist():
@@ -267,3 +298,68 @@ def _parse_split_date(split_date: str | None) -> datetime.date | None:
         return datetime.datetime.strptime(split_date, "%Y-%m-%d").date()
     except ValueError:
         return None
+
+
+def claim_split_event(ticker, split_date, source_ref=None):
+    """Atomically claim ``(ticker, split_date)``; see persistence.split_events."""
+    return split_events.claim_split_event(
+        ticker, split_date, source_ref, database=DATABASE_PATH
+    )
+
+
+def record_split_order_plan(ticker, split_date, dispatch_keys):
+    return split_events.record_split_order_plan(
+        ticker, split_date, dispatch_keys, database=DATABASE_PATH
+    )
+
+
+def mark_split_order_queued(ticker, split_date, dispatch_key, order_id):
+    return split_events.mark_split_order_queued(
+        ticker, split_date, dispatch_key, order_id, database=DATABASE_PATH
+    )
+
+
+def mark_split_event_submitted(ticker, split_date):
+    split_events.mark_split_event_submitted(ticker, split_date, database=DATABASE_PATH)
+
+
+def mark_split_event_needs_reconciliation(ticker, split_date, reason):
+    split_events.mark_split_event_needs_reconciliation(
+        ticker, split_date, reason, database=DATABASE_PATH
+    )
+
+
+def resolve_split_event(ticker, split_date):
+    return split_events.resolve_split_event(ticker, split_date, database=DATABASE_PATH)
+
+
+def list_unresolved_events():
+    return split_events.list_unresolved_events(database=DATABASE_PATH)
+
+
+def replace_split_watch(ticker, split_date) -> bool:
+    """Operator path: replace an active watch with a later split date.
+
+    Old account markers are dropped (not carried over); the old event intent
+    record is preserved. The new event is recorded ``suppressed`` so alert
+    replays cannot auto-schedule buys for it.
+    """
+    event = split_events.normalize_event(ticker, split_date)
+    if event is None:
+        return False
+    symbol, date_iso = event
+    with _connect() as conn:
+        _import_legacy_watchlist(conn)
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM split_monitor WHERE ticker=?", (symbol,))
+        conn.execute(
+            "INSERT INTO split_monitor(ticker, split_date, status) VALUES (?, ?, 'buying')",
+            (symbol, date_iso),
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO split_event_intents
+               (ticker, split_date, state, last_reason)
+               VALUES (?, ?, 'suppressed', 'operator_replaced')""",
+            (symbol, date_iso),
+        )
+    return True

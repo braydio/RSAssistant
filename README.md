@@ -94,6 +94,16 @@ Runtime state lives under `VOLUMES_DIR` (default `./volumes`):
 - `volumes/db/` (SQLite DB, order queue, auto-rsa holdings snapshot, reverse split history)
 - `volumes/logs/` (app logs, holdings logs)
 
+Reverse-split autobuys are claimed durably per `(ticker, effective_date)` in
+`split_event_intents` / `split_event_order_intents` (SQLite, schema v10). A
+replayed or concurrent alert never schedules a second buy; missing or
+implausible effective dates are review-only (no implicit "today"). Date passage
+never deletes an open watch: `..splitstatus` / `..splitlist` show
+buying / selling / overdue / reconciliation needed, and `..splitcleanup` archives
+only proven-complete watches. Operator commands: `splitreview` (unresolved
+intents), `splitresolve <ticker> <date>` (acknowledge after checking brokers),
+`splitreplace <ticker> <date>` (replace an active watch with a later split).
+
 Reverse split persistence uses SQL append-only tables:
 
 - `ReverseSplitLog` stores ticker-level split history (`ticker`, `split_ratio`,

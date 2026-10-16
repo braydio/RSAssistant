@@ -8,7 +8,6 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 
 | Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TP-20261013-001 | Split Event Lifecycle + Autobuy Idempotency | Ready | High | TP-20261003-005 (Complete); coordinate with Draft TP-20261010-011 | main | 2026-10-13 | [packet](active/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md) |
 | TP-20261013-002 | Codex Error Watcher: Fail-Closed Diagnostics + Bounded State | Ready | High | None; coordinate log redaction with TP-20261010-005 | main | 2026-10-13 | [packet](active/TP-20261013-002-codex-error-watcher-sandbox-output-hardening.md) |
 | TP-20261003-001 | RSAssistant Persistence Modernization and Decomposition | In Progress | High | None | main | 2026-10-03 | [packet](active/TP-20261003-001-rsassistant-persistence-modernization.md) |
 | TP-20261003-012 | Parsing and Runtime Cleanup | Draft | Normal | TP-20261003-011 | main | 2026-10-03 | [packet](active/TP-20261003-012-parsing-runtime-cleanup.md) |
@@ -23,6 +22,7 @@ The following packets were audited on `main@b35ea948`. TP-001 through TP-009 are
 
 | Packet ID | Title | Status | Completed | Packet |
 | --- | --- | --- | --- | --- |
+| TP-20261013-001 | Split Event Lifecycle + Autobuy Idempotency | Complete | 2026-10-15 | [packet](completed/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md) |
 | TP-20261010-011 | Consolidate Long-Sleep Order Tasks without Changing Execution Semantics | Complete | 2026-10-15 | [packet](completed/TP-20261010-011-scheduled-order-timer-consolidation.md) |
 | TP-20261010-010 | Replace Per-Ticker Holdings CSV Scans with One SQL Read | Complete | 2026-10-15 | [packet](completed/TP-20261010-010-holdings-summary-single-pass.md) |
 | TP-20261010-009 | Stop Shipping Runtime Artifacts and Add Safe Retention | Complete | 2026-10-15 | [packet](completed/TP-20261010-009-artifact-hygiene-and-retention.md) |

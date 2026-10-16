@@ -52,15 +52,54 @@ class SplitWatchUtilsTest(unittest.TestCase):
                 0,
             )
 
-    def test_expired_cleanup_removes_only_past_iso_dates(self):
+    def test_expired_cleanup_keeps_open_watches_and_archives_completed(self):
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
-        split_watch.add_split_watch("OLD", yesterday)
+        split_watch.add_split_watch("OPEN", yesterday)
+        split_watch.add_split_watch("DONE", yesterday)
         split_watch.add_split_watch("FUTURE", tomorrow)
         split_watch.add_split_watch("INVALID", "not-a-date")
+        split_watch.mark_account_bought("OPEN", "A")
+        split_watch.mark_account_bought("DONE", "A")
+        split_watch.mark_account_sold("DONE", "A")
+        split_watch.mark_account_sold("DONE", "EXTRA")
+        split_watch.update_split_status()
 
-        self.assertEqual(split_watch.cleanup_expired_tickers(), ["OLD"])
-        self.assertEqual(split_watch.get_watchlist(), ["FUTURE", "INVALID"])
+        self.assertEqual(split_watch.cleanup_expired_tickers(), ["DONE"])
+        self.assertEqual(
+            split_watch.get_watchlist(), ["OPEN", "FUTURE", "INVALID"]
+        )
+        self.assertEqual(split_watch.get_status("OPEN")["accounts_bought"], ["A"])
+        self.assertEqual(
+            split_watch.split_phase(split_watch.get_status("OPEN")), "overdue"
+        )
+
+    def test_needs_reconciliation_blocks_archive(self):
+        today = date.today().isoformat()
+        split_watch.add_split_watch("REC", today)
+        split_watch.mark_account_bought("REC", "A")
+        split_watch.mark_account_sold("REC", "A")
+        split_watch.update_split_status()
+        self.assertEqual(split_watch.claim_split_event("REC", today), "already_claimed")
+        # Watch pre-dated intent tracking -> recorded submitted; force the flag.
+        split_watch.mark_split_event_needs_reconciliation("REC", today, "test")
+        self.assertEqual(split_watch.cleanup_completed_tickers(), [])
+        split_watch.resolve_split_event("REC", today)
+        self.assertEqual(split_watch.cleanup_completed_tickers(), ["REC"])
+
+    def test_replace_split_watch_drops_marks_keeps_history(self):
+        today = date.today()
+        old = (today + timedelta(days=2)).isoformat()
+        new = (today + timedelta(days=60)).isoformat()
+        split_watch.add_split_watch("ABC", old)
+        split_watch.mark_account_bought("ABC", "A")
+        self.assertEqual(split_watch.claim_split_event("ABC", new), "requires_review")
+        self.assertEqual(split_watch.get_status("ABC")["accounts_bought"], ["A"])
+        self.assertTrue(split_watch.replace_split_watch("ABC", new))
+        status = split_watch.get_status("ABC")
+        self.assertEqual(status["split_date"], new)
+        self.assertEqual(status["accounts_bought"], [])
+        self.assertEqual(split_watch.claim_split_event("ABC", new), "already_claimed")
 
     def test_imports_legacy_json_once_and_preserves_dictionary_shape(self):
         self.legacy.write_text(

@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 9
+LATEST_SCHEMA_VERSION = 10
 
 logger = logging.getLogger(__name__)
 
@@ -410,10 +410,52 @@ def _migration_9(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_10(conn: sqlite3.Connection) -> None:
+    """Create durable split-event identity and order-intent records.
+
+    These tables record dispatch *intent* keyed by (ticker, split_date); they
+    are independent of ``split_monitor`` so archiving a watch never erases
+    corporate-action history.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS split_event_intents (
+               ticker TEXT NOT NULL,
+               split_date TEXT NOT NULL,
+               source_ref TEXT,
+               state TEXT NOT NULL CHECK(state IN (
+                   'claimed', 'planned', 'submitted',
+                   'needs_reconciliation', 'suppressed')),
+               first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               last_reason TEXT,
+               PRIMARY KEY (ticker, split_date)
+           )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS split_event_order_intents (
+               ticker TEXT NOT NULL,
+               split_date TEXT NOT NULL,
+               dispatch_key TEXT NOT NULL,
+               order_id TEXT,
+               state TEXT NOT NULL CHECK(state IN (
+                   'planned', 'queued', 'submitted', 'needs_reconciliation')),
+               last_error TEXT,
+               PRIMARY KEY (ticker, split_date, dispatch_key),
+               FOREIGN KEY (ticker, split_date)
+                   REFERENCES split_event_intents(ticker, split_date)
+           )"""
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_split_event_order_id "
+        "ON split_event_order_intents(order_id) WHERE order_id IS NOT NULL"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
-    8: _migration_8, 9: _migration_9,
+    8: _migration_8, 9: _migration_9, 10: _migration_10,
 }
 
 

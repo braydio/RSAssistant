@@ -1,12 +1,12 @@
 # TP-20261013-001: Split Event Lifecycle + Autobuy Idempotency
 
 **Packet ID:** TP-20261013-001  
-**Status:** Ready  
+**Status:** Complete  
 **Created:** 2026-10-13  
-**Last updated:** 2026-10-13  
+**Last updated:** 2026-10-15  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261013-001-split-event-lifecycle-and-autobuy-idempotency.md`  
 **Workstream size:** One implementation packet  
 **Depends on:** TP-20261003-005 (Complete); coordinate with Draft TP-20261010-011  
 **Priority:** High  
