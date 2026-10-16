@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from utils.parsing_utils import (
     alert_channel_message,
+    handle_complete_order,
     parse_general_embed_message,
     parse_order_message,
 )
@@ -113,6 +114,35 @@ class ParseOrderMessageTest(unittest.TestCase):
 
         self.assertEqual(result["ticker"], "SLE")
         self.assertTrue(result["reverse_split_confirmed"])
+
+
+class CompleteOrderPersistenceTest(unittest.TestCase):
+    """A confirmed order must be recorded even when the price lookup fails."""
+
+    def _run(self, price):
+        with (
+            patch(
+                "utils.parsing_utils.parse_broker_data",
+                return_value=("1234", "buy", 1.0, "ABCD"),
+            ),
+            patch("utils.parsing_utils.get_last_stock_price", return_value=price),
+            patch("utils.parsing_utils.handoff_order_data") as handoff,
+        ):
+            handle_complete_order(None, "Fennel", "1")
+        return handoff
+
+    def test_order_is_recorded_with_zero_price_when_lookup_fails(self) -> None:
+        handoff = self._run(None)
+
+        handoff.assert_called_once()
+        order = handoff.call_args.args[0]
+        self.assertEqual(order["Price"], 0.0)
+        self.assertEqual(order["Stock"], "ABCD")
+
+    def test_order_uses_looked_up_price_when_available(self) -> None:
+        handoff = self._run(3.5)
+
+        self.assertEqual(handoff.call_args.args[0]["Price"], 3.5)
 
 
 class ParseHoldingsEmbedTest(unittest.TestCase):

@@ -446,3 +446,23 @@ def test_holdings_ingest_and_refresh_work_when_csv_export_is_disabled(tmp_path):
     assert csv_utils.finalize_holdings_refresh(csv_utils.HOLDINGS_LOG_CSV)
     assert activated
     assert not Path(csv_utils.HOLDINGS_LOG_CSV).exists()
+
+
+def test_normalize_holding_row_keeps_timestamp_from_csv_shaped_dict():
+    row = csv_utils._normalize_holding_row(
+        {
+            "Key": "k",
+            "Broker Name": "Fennel",
+            "Broker Number": "1",
+            "Account Number": "0001",
+            "Stock": "ABCD",
+            "Quantity": 1,
+            "Price": 2,
+            "Position Value": 2,
+            "Account Total": 2,
+            "Timestamp": "2026-10-12 17:44:31",
+        },
+        1,
+    )
+
+    assert row["Timestamp"] == "2026-10-12 17:44:31"

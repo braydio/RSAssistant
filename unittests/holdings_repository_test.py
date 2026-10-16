@@ -4,12 +4,14 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from rsassistant.persistence.holdings import (
     activate_staged_holdings,
     discard_staged_holdings,
     get_current_holdings,
     replace_current_holdings,
+    update_holdings_live_batch,
     stage_current_holdings,
 )
 
@@ -126,3 +128,53 @@ class HoldingsRepositoryTest(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover - convenience for direct execution
     unittest.main()
+
+
+class HoldingsLiveBatchTest(unittest.TestCase):
+    def test_nickname_lookup_does_not_deadlock_the_batch_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            database = Path(tmp) / "holdings.db"
+            # Create the runtime schema.
+            replace_current_holdings(
+                [
+                    {
+                        "broker": "Seed",
+                        "broker_number": "1",
+                        "account_number": "0000",
+                        "ticker": "SEED",
+                        "quantity": 1,
+                        "price": 1,
+                        "observed_at": "2026-01-01T00:00:00",
+                    }
+                ],
+                database=database,
+            )
+
+            def second_writer(broker, broker_number, account_number):
+                # Mimics upsert_account_mapping: a write on its own connection.
+                other = sqlite3.connect(database, timeout=0.2)
+                try:
+                    other.execute("BEGIN IMMEDIATE")
+                    other.rollback()
+                finally:
+                    other.close()
+                return f"{broker} {account_number}"
+
+            holdings = [
+                {
+                    "broker": "NewBroker",
+                    "broker_number": "1",
+                    "account_number": number,
+                    "ticker": "AAA",
+                    "quantity": 1,
+                    "price": 2,
+                }
+                for number in ("1111", "2222", "3333")
+            ]
+            with mock.patch(
+                "rsassistant.persistence.holdings.get_account_nickname_or_default",
+                side_effect=second_writer,
+            ):
+                inserted = update_holdings_live_batch(holdings, database=database)
+
+        self.assertEqual(inserted, 3)

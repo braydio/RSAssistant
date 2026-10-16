@@ -151,9 +151,12 @@ def _import_snapshot(file_path: Path) -> tuple[str, int, Fingerprint | None]:
         )
 
     try:
-        save_holdings_to_csv(normalized, use_refresh_target=False)
+        saved = save_holdings_to_csv(normalized, use_refresh_target=False)
     except (OSError, ValueError, sqlite3.Error) as exc:
         warn("Failed to persist holdings from %s: %s", file_path, exc)
+        return OUTCOME_FAILED, 0, before
+    if saved is False:
+        warn("Holdings from %s were not persisted (see save error above)", file_path)
         return OUTCOME_FAILED, 0, before
     logger.info("Imported %d holdings entries from %s", len(normalized), file_path)
     return OUTCOME_CHANGED, len(normalized), before

@@ -412,6 +412,7 @@ def _normalize_holding_row(holding, row_index):
             "Account Total": holding.get(
                 "account_total", holding.get("Account Total", 0)
             ),
+            "Timestamp": holding.get("Timestamp", ""),
         }
     elif isinstance(holding, (list, tuple)):
         row = dict(zip(HOLDINGS_HEADERS, holding))
@@ -506,7 +507,8 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
     numeric coercion rules.
 
     To protect SQL state consistency, SQL writes occur only when all CSV schema
-    and row validations succeed.
+    and row validations succeed. Returns ``True`` on success and ``False`` when
+    the save failed (the error is logged), so callers can report the failure.
     """
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -625,11 +627,13 @@ def save_holdings_to_csv(parsed_holdings, filename=None, use_refresh_target=True
             )
         else:
             logger.info("No new holdings to add.")
+        return True
 
     except CsvSchemaValidationError as exc:
         logger.error("Error saving holdings: %s", exc)
     except Exception as exc:
         logger.error("Error saving holdings: %s", exc)
+    return False
 
 
 def clear_holdings_log(filename):

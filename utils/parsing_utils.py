@@ -419,11 +419,13 @@ def handle_complete_order(match, broker_name, broker_number):
 
         price = get_last_stock_price(stock)
         if price is None:
+            # A confirmed order must not be discarded because a quote lookup
+            # failed; record it with price 0.0 so the fill is still tracked.
             _log_order_failure(
-                "Price fetch failed",
-                f"{broker_name} {broker_number} {account_number} {action} {stock} {price}",
+                "Price fetch failed; recording order with price 0.0",
+                f"{broker_name} {broker_number} {account_number} {action} {stock}",
             )
-            return
+            price = 0.0
 
         date = datetime.now().strftime("%Y-%m-%d")
         # Prepare order data

@@ -343,6 +343,19 @@ def update_holdings_live_batch(holdings: list[dict[str, Any]], *, database=None)
     inserted_rows = 0
     account_id_cache: dict[tuple[str, str, str], int] = {}
 
+    # Resolve nicknames before opening the write transaction: the lookup can
+    # upsert an account mapping on its own connection, which would otherwise
+    # deadlock ("database is locked") against this connection's open write.
+    nicknames: dict[tuple[str, str, str], str] = {}
+    for item in holdings:
+        key = (
+            str(item.get("broker", "")).strip(),
+            str(item.get("broker_number", "")).strip(),
+            str(item.get("account_number", "")).strip(),
+        )
+        if key[0] and key[2] and key not in nicknames:
+            nicknames[key] = get_account_nickname_or_default(*key)
+
     with _get_db_connection(database) as conn:
         cursor = conn.cursor()
         rows_to_insert: list[tuple[int, str, float, float]] = []
@@ -366,8 +379,10 @@ def update_holdings_live_batch(holdings: list[dict[str, Any]], *, database=None)
             account_key = (broker, broker_number, account_number)
             account_id = account_id_cache.get(account_key)
             if account_id is None:
-                account_nickname = get_account_nickname_or_default(
-                    broker, broker_number, account_number
+                account_nickname = nicknames.get(account_key) or (
+                    get_account_nickname_or_default(
+                        broker, broker_number, account_number
+                    )
                 )
                 cursor.execute(
                     """

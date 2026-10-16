@@ -61,6 +61,14 @@ class HoldingsImporterTest(unittest.TestCase):
         self.save.side_effect = None
         self.assertEqual(hi.import_holdings_if_updated(self.path), 1)
 
+    def test_save_reporting_failure_is_not_acknowledged(self):
+        self.write([ENTRY])
+        self.save.return_value = False
+        self.assertEqual(hi.import_holdings_if_updated(self.path), 0)
+        self.assertIsNone(hi._last_import_fingerprint)
+        self.save.return_value = True
+        self.assertEqual(hi.import_holdings_if_updated(self.path), 1)
+
     def test_file_changed_during_read_rejected(self):
         self.write([ENTRY])
         real = hi._fingerprint
