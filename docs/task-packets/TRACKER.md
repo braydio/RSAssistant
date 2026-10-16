@@ -4,6 +4,31 @@ Live execution ledger for canonical RSAssistant task packets.
 
 Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 
+## 2026-10-16: RSAssistant + auto-rsa unification train
+
+**2026-10-16 baseline divergence:** GitHub main at authoring `221c21d` is behind operator-reported deployed local `83a6b00`; historical TP-20261013-001/002 statuses below describe the remote checkout, *not* the operator's locally completed work. TP-20261016-002 must reconcile history and update old statuses before successor execution. New packets are not permission for live trading; read `docs/architecture-overhaul-roadmap.md`.
+
+| Order | Packet ID | Workstream | Status | Priority | Prerequisite / gate | Target | Packet |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | TP-20261016-001 | Reproducible migration checkpoint and safe SQLite backup | Complete | P0 | None | main | [packet](completed/TP-20261016-001-migration-checkpoint.md) |
+| 2 | TP-20261016-002 | Reconcile deployed history and pin production sources | Blocked | P0 | 001 + local history | main | [packet](active/TP-20261016-002-baseline-reconciliation-and-deployment-lock.md) |
+| 3 | TP-20261016-003 | Verify and restore canonical holdings ingestion | Draft | P0 | 002 REFRESH | main | [packet](active/TP-20261016-003-holdings-single-writer-integrity.md) |
+| 4 | TP-20261016-004 | Recover order acknowledgement and broker fill provenance | Draft | P0 | 003 REFRESH | main | [packet](active/TP-20261016-004-order-receipts-and-fill-reconciliation.md) |
+| 5 | TP-20261016-005 | Canonical broker accounts with non-destructive alias resolution | Draft | P0 | 003,004 REFRESH | main | [packet](active/TP-20261016-005-canonical-account-identity.md) |
+| 6 | TP-20261016-006 | Broker connection health contract and incident registry | Draft | P1 | 005 | main | [packet](active/TP-20261016-006-broker-connection-health-incidents.md) |
+| 7 | TP-20261016-007 | Secure guided reauthentication and bounded recovery | Draft | P1 | 006 HUMAN gate | main | [packet](active/TP-20261016-007-guided-broker-reauth-and-recovery.md) |
+| 8 | TP-20261016-008 | Direct typed broker worker bridge and shadow orchestration | Draft | P0 | 004–007 REFRESH | main | [packet](active/TP-20261016-008-typed-broker-worker-ipc.md) |
+| 9 | TP-20261016-009 | Extract and shadow-validate the Fidelity broker adapter | Draft | P0 | 008 HUMAN gate | main | [packet](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
+| 10 | TP-20261016-010 | Migrate Fennel, Public and Robinhood through the typed worker | Draft | P1 | 009 REFRESH | main | [packet](active/TP-20261016-010-active-broker-adapters.md) |
+| 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | P1 | 010 HUMAN gate | main | [packet](active/TP-20261016-011-secondary-broker-adapters.md) |
+| 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | Draft | P1 | 005,008,010 REFRESH | main | [packet](active/TP-20261016-012-split-discovery-policy-provenance.md) |
+| 13 | TP-20261016-013 | Account-level split credits, cash-in-lieu and sale reconciliation | Draft | P0 | 004,005,008,012 REFRESH | main | [packet](active/TP-20261016-013-corporate-action-settlement-reconciliation.md) |
+| 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | Draft | P1 | 008,012,013 REFRESH | main | [packet](active/TP-20261016-014-unified-command-surface.md) |
+| 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | Draft | P2 | 004,005,013,014 REFRESH | main | [packet](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |
+| 16 | TP-20261016-016 | Retire redundant bots and dead code after verified migration | Draft | P0 | 002–015 HUMAN cutover | main | [packet](active/TP-20261016-016-legacy-retirement-and-cutover.md) |
+
+Execution is strictly gate-controlled: 001 repository implementation complete but **live backup/restore has not been run**; 002 is **Blocked** until local branches and credentials-safe backups are reconciled; 003–016 are **Draft** and require dependency review and promotion to Ready. Never assume one packet's completion promotes another automatically.
+
 ## Active packets
 
 | Packet ID | Title | Status | Priority | Depends on | Target | Last updated | Packet |
