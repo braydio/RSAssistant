@@ -1,7 +1,7 @@
 # TP-20261016-002: Reconcile deployed history and pin production sources
 
 **Packet ID:** TP-20261016-002  
-**Status:** Blocked  
+**Status:** In Progress  
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
@@ -75,3 +75,7 @@ Do not change trade strategy, submit orders, restart containers without a produc
 
 ## Handoff / completion report
 On verified completion move exactly this canonical file from `active/` to `completed/`, update `INDEX.md` and `TRACKER.md` atomically, and write `docs/task-packets/summaries/TP-20261016-002-SUMMARY.md` (Outcome, Validation, Process Feedback, Next Handoff). State next packet TP-20261016-003 and whether a fresh planning review is required; never claim production parity from mocks only.
+
+## Progress log (2026-10-16, local host)
+Done: merged `origin/main` (867cb72) into deployed local `main` with no history rewrite (221c21d, 83a6b00, 867cb72 all ancestors of HEAD); baseline tags `baseline/rsassistant-deployed-83a6b00` and `baseline/auto-rsa-deployed-110439c` (local, unpushed); real checkpoint `~/.rsa-backups/checkpoints/rsa-checkpoint-20261016T213903Z-68c12f4c.*` (mode 0600) verified and restored into a disposable dir (integrity ok; 4 `buying` split watches BTOC/FRGT/KNDI/OBAI preserved; 246 accounts, 1198 orders); AutoRSA-GUI.local tracked edits (chase/fennel/wellsfargo) preserved as patch + file copies in `~/.rsa-backups/gui-preserve-20261016/`; `scripts/safe_deploy.sh` rejects dirty tree / stale unverified backup, dry-run by default. Tests 224 OK, compileall OK, `docker compose config` OK.
+Remaining: encrypted `.env`/`creds` store (needs owner passphrase decision); image revision labels (`org.rsa.git-rev`) and `GIT_REV` build arg; pin auto-rsa via submodule/vendor and drop `./auto-rsa/src` bind mount after parity (production window); push of merged main (owner decision); checkpoint tool leaves stray `*.partial-shm/-wal` files; mark 002 Complete only after those.

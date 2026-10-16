@@ -11,7 +11,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | Order | Packet ID | Workstream | Status | Priority | Prerequisite / gate | Target | Packet |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | TP-20261016-001 | Reproducible migration checkpoint and safe SQLite backup | Complete | P0 | None | main | [packet](completed/TP-20261016-001-migration-checkpoint.md) |
-| 2 | TP-20261016-002 | Reconcile deployed history and pin production sources | Blocked | P0 | 001 + local history | main | [packet](active/TP-20261016-002-baseline-reconciliation-and-deployment-lock.md) |
+| 2 | TP-20261016-002 | Reconcile deployed history and pin production sources | In Progress | P0 | 001 + local history | main | [packet](active/TP-20261016-002-baseline-reconciliation-and-deployment-lock.md) |
 | 3 | TP-20261016-003 | Verify and restore canonical holdings ingestion | Draft | P0 | 002 REFRESH | main | [packet](active/TP-20261016-003-holdings-single-writer-integrity.md) |
 | 4 | TP-20261016-004 | Recover order acknowledgement and broker fill provenance | Draft | P0 | 003 REFRESH | main | [packet](active/TP-20261016-004-order-receipts-and-fill-reconciliation.md) |
 | 5 | TP-20261016-005 | Canonical broker accounts with non-destructive alias resolution | Draft | P0 | 003,004 REFRESH | main | [packet](active/TP-20261016-005-canonical-account-identity.md) |
