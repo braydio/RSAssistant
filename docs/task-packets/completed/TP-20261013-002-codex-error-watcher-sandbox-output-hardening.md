@@ -1,12 +1,12 @@
 # TP-20261013-002: Codex Error Watcher: Fail-Closed Diagnostics + Bounded State
 
 **Packet ID:** TP-20261013-002  
-**Status:** Ready  
+**Status:** Complete  
 **Created:** 2026-10-13  
-**Last updated:** 2026-10-13  
+**Last updated:** 2026-10-15  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261013-002-codex-error-watcher-sandbox-output-hardening.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261013-002-codex-error-watcher-sandbox-output-hardening.md`  
 **Workstream size:** One implementation packet  
 **Depends on:** None; coordinate log redaction with TP-20261010-005  
 **Priority:** High  

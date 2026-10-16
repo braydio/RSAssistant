@@ -57,11 +57,11 @@ Optional channels:
 - `DISCORD_HOLDINGS_CHANNEL` (auto-rsa holdings embeds)
 - `DISCORD_WATCHLIST_CHANNEL` (watchlist-only output)
 - `AUTO_BUY_WATCHLIST` (when `true`, `..all` queues `!rsa buy 1 <ticker> <broker> false` if a watched ticker is missing and no queued order exists)
-- `AUTO_RSA_ERROR_WATCHER_ENABLED` (when `true`, watches the primary channel for allowlisted error messages and runs read-only `codex exec`)
+- `AUTO_RSA_ERROR_WATCHER_ENABLED` (default `false`; when `true`, runs **read-only triage**: watches `DISCORD_PRIMARY_CHANNEL` for error messages from allowlisted senders and runs sandboxed `codex exec`. It fails closed unless the primary channel, sender allowlist, `AUTO_RSA_DIR` and a valid Codex command are all set, never edits files, and posts only a redacted, bounded status, never raw Codex output. `..watcherstatus` shows what needs attention)
 - `AUTO_RSA_ERROR_WATCHER_SENDER_IDS` (comma-separated Discord user or bot IDs permitted to trigger that watcher)
 - `TRUSTED_AUTORSA_BOT_ID` (exact bot ID permitted to invoke `..updatebot` and `..revertupdate`)
-- `CODEX_EXEC_COMMAND` (override command used by the watcher; defaults to `codex exec`)
-- `AUTO_RSA_DIR` (optional working directory used when invoking `codex exec`; typically your auto-rsa repo path)
+- `CODEX_EXEC_COMMAND` (must be `codex exec`, optionally an absolute path ending in `codex`, plus `--skip-git-repo-check` and `--model <name>`; any other executable or flag disables the watcher. `--sandbox read-only --ask-for-approval never` is always enforced)
+- `AUTO_RSA_DIR` (required for the error watcher: existing readable directory used as the `codex exec` working directory, typically your auto-rsa repo path; there is no fallback to the current directory)
 
 `ENABLED_PLUGINS` controls optional runtime modules (for example `ultma`).
 Plugin-specific keys are also read from `config/.env` / `ENV_FILE`.

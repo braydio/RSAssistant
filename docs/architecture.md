@@ -76,3 +76,18 @@ or interrupted schedule the event is `needs_reconciliation` and is never retried
 automatically. `split_monitor` stays ticker-keyed; archiving a completed watch
 keeps the intent history.
 
+## Error watcher trust boundary
+
+`rsassistant/bot/cogs/primary_channel_error_watcher.py` is optional, off by
+default and read-only. `rsassistant/services/error_triage.py` holds the pure
+pieces: `watcher_preflight` (fail closed on channel / sender allowlist /
+`AUTO_RSA_DIR` / Codex command, reporting key names only),
+`validate_codex_invocation` (fixed `codex exec` argv with non-overridable
+`--sandbox read-only --ask-for-approval never`, no shell), `redact` and
+`summarize_triage_result` (Discord only ever receives a bounded, redacted
+status; raw Codex stdout/stderr is never forwarded or logged) and `BoundedSeen`
+(1024 entries / 15 min TTL). One job runs at a time (`asyncio.Lock`) with a
+monotonic cooldown; on timeout the Codex process group is killed and reaped
+before the lock is released. Limitation: stdout/stderr are buffered in memory
+until the child exits, and redaction is pattern-based best effort.
+
