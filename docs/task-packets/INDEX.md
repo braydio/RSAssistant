@@ -6,6 +6,8 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 
 ## 2026-10-16: Unified overhaul (canonical consecutive train)
 
+**Planning refresh (2026-10-16):** user selected **RSAssistant-native broker API/adapters** as the long-term direction. See [native-brokerage-strategy](../native-brokerage-strategy.md). Two additional **Draft** packets were authored as TP-017 (SDK, run after 008 and before 009) and TP-018 (broker parity / legacy egress after 011 and before 016). **These planning changes are on an isolated branch** because the owner reports five unpushed local commits through `39c0e5b`; no existing statuses or deployments were changed.
+
 **2026-10-16 baseline divergence:** GitHub main at authoring `221c21d` is behind operator-reported deployed local `83a6b00`; historical TP-20261013-001/002 statuses below describe the remote checkout, *not* the operator's locally completed work. TP-20261016-002 must reconcile history and update old statuses before successor execution. New packets are not permission for live trading; read `docs/architecture-overhaul-roadmap.md`.
 
 | Order | Packet ID | Title | Status | Canonical packet |
@@ -18,14 +20,16 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 | 6 | TP-20261016-006 | Broker connection health contract and incident registry | Complete | [completed/TP-20261016-006-broker-connection-health-incidents.md](completed/TP-20261016-006-broker-connection-health-incidents.md) |
 | 7 | TP-20261016-007 | Secure guided reauthentication and bounded recovery | In Progress | [active/TP-20261016-007-guided-broker-reauth-and-recovery.md](active/TP-20261016-007-guided-broker-reauth-and-recovery.md) |
 | 8 | TP-20261016-008 | Direct typed broker worker bridge and shadow orchestration | Complete | [completed/TP-20261016-008-typed-broker-worker-ipc.md](completed/TP-20261016-008-typed-broker-worker-ipc.md) |
-| 9 | TP-20261016-009 | Extract and shadow-validate the Fidelity broker adapter | In Progress | [active/TP-20261016-009-fidelity-adapter-shadow-canary.md](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
-| 10 | TP-20261016-010 | Migrate Fennel, Public and Robinhood through the typed worker | In Progress | [active/TP-20261016-010-active-broker-adapters.md](active/TP-20261016-010-active-broker-adapters.md) |
-| 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | [active/TP-20261016-011-secondary-broker-adapters.md](active/TP-20261016-011-secondary-broker-adapters.md) |
+| 8A | TP-20261016-017 | Native brokerage adapter SDK, capability registry and safe routing | Draft | [active/TP-20261016-017-native-adapter-sdk-and-routing.md](active/TP-20261016-017-native-adapter-sdk-and-routing.md) |
+| 9 | TP-20261016-009 | Build native Fidelity adapter and independent parity | In Progress | [active/TP-20261016-009-fidelity-adapter-shadow-canary.md](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
+| 10 | TP-20261016-010 | Native Fennel, Public and Robinhood clients | In Progress | [active/TP-20261016-010-active-broker-adapters.md](active/TP-20261016-010-active-broker-adapters.md) |
+| 11 | TP-20261016-011 | Selectively migrate remaining native brokers | Draft | [active/TP-20261016-011-secondary-broker-adapters.md](active/TP-20261016-011-secondary-broker-adapters.md) |
+| 11A | TP-20261016-018 | Native brokerage parity, dispatch cutover and upstream retirement gate | Draft | [active/TP-20261016-018-native-parity-and-legacy-egress.md](active/TP-20261016-018-native-parity-and-legacy-egress.md) |
 | 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | In Progress | [active/TP-20261016-012-split-discovery-policy-provenance.md](active/TP-20261016-012-split-discovery-policy-provenance.md) |
 | 13 | TP-20261016-013 | Account-level split credits, cash-in-lieu and sale reconciliation | Draft | [active/TP-20261016-013-corporate-action-settlement-reconciliation.md](active/TP-20261016-013-corporate-action-settlement-reconciliation.md) |
 | 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | In Progress | [active/TP-20261016-014-unified-command-surface.md](active/TP-20261016-014-unified-command-surface.md) |
 | 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | In Progress | [active/TP-20261016-015-realized-pnl-and-exception-digests.md](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |
-| 16 | TP-20261016-016 | Retire redundant bots and dead code after verified migration | Draft | [active/TP-20261016-016-legacy-retirement-and-cutover.md](active/TP-20261016-016-legacy-retirement-and-cutover.md) |
+| 16 | TP-20261016-016 | Retire legacy runtime and dead code after native parity | Draft | [active/TP-20261016-016-legacy-retirement-and-cutover.md](active/TP-20261016-016-legacy-retirement-and-cutover.md) |
 
 ## Active
 

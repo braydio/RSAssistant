@@ -11,7 +11,7 @@
 **Priority:** P0  
 **Depends on:** TP-20261016-001; HUMAN local/remote history gate  
 **Authoring chat:** not-recorded  
-**Expected packet count / order:** 16 consecutive packets, TP-20261016-002 is #2; roadmap: `docs/architecture-overhaul-roadmap.md`.
+**Expected packet count / order:** 18 canonical packets; IDs 017/018 inserted at dependency gates into the original train, TP-20261016-002 is #2; roadmap: `docs/architecture-overhaul-roadmap.md`.
 
 ## Objective
 Reconcile deployed history and pin production sources. Preserve current production behavior unless the scoped acceptance criteria and required gates have been satisfied. Any live trading cutover is outside this packet unless explicitly specified.
@@ -79,3 +79,11 @@ On verified completion move exactly this canonical file from `active/` to `compl
 ## Progress log (2026-10-16, local host)
 Done: merged `origin/main` (867cb72) into deployed local `main` with no history rewrite (221c21d, 83a6b00, 867cb72 all ancestors of HEAD); baseline tags `baseline/rsassistant-deployed-83a6b00` and `baseline/auto-rsa-deployed-110439c` (local, unpushed); real checkpoint `~/.rsa-backups/checkpoints/rsa-checkpoint-20261016T213903Z-68c12f4c.*` (mode 0600) verified and restored into a disposable dir (integrity ok; 4 `buying` split watches BTOC/FRGT/KNDI/OBAI preserved; 246 accounts, 1198 orders); AutoRSA-GUI.local tracked edits (chase/fennel/wellsfargo) preserved as patch + file copies in `~/.rsa-backups/gui-preserve-20261016/`; `scripts/safe_deploy.sh` rejects dirty tree / stale unverified backup, dry-run by default. Tests 224 OK, compileall OK, `docker compose config` OK.
 Remaining: encrypted `.env`/`creds` store (needs owner passphrase decision); image revision labels (`org.rsa.git-rev`) and `GIT_REV` build arg; pin auto-rsa via submodule/vendor and drop `./auto-rsa/src` bind mount after parity (production window); push of merged main (owner decision); checkpoint tool leaves stray `*.partial-shm/-wal` files; mark 002 Complete only after those.
+
+## Architecture decision amendment (2026-10-16): temporary source pin, not permanent upstream dependency
+
+- The new target in `docs/native-brokerage-strategy.md` supersedes any implication that pinned auto-rsa remains the permanent runtime. Pin `auto-rsa@110439c` only as **temporary legacy compatibility** until native broker adapter parity is proved under TP-017/009/010/011/018.
+- Do NOT remove `auto-rsa/src` bind mount or the legacy broker runtime early merely to satisfy an architecture target. Replacing the bind mount must be part of a tested deployment window with rollback. Protect the archived GUI fork changes.
+- Owner reports five **unpushed** local commits ending `39c0e5b`. This packet cannot be declared Complete based on GitHub `main@7db0012` alone. Finish Restic installation/encrypted repository + password storage, restore test, and safe-deploy and dry-run liquidate/hold-enforcement gates before production migration.
+- No extra deploy or push is authorized by this documentation amendment.
+
