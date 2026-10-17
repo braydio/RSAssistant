@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-unknown}
     container_name: RSAssistant
     restart: unless-stopped
     env_file:

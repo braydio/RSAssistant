@@ -27,7 +27,7 @@ latest=$(find "$BACKUP_DIR" -maxdepth 1 -name 'rsa-checkpoint-*.json' -mmin "-$M
 backup="${latest%.json}.sqlite3"
 python scripts/migration_checkpoint.py verify --backup "$backup" >/dev/null || die "checkpoint failed verification: $backup"
 
-running=$(docker inspect rsassistant --format '{{index .Config.Labels "org.rsa.git-rev"}}' 2>/dev/null || true)
+running=$(docker inspect RSAssistant --format '{{index .Config.Labels "org.rsa.git-rev"}}' 2>/dev/null || true)
 echo "deploying commit : $head ($(git log -1 --format=%s))"
 echo "auto-rsa commit  : $(git -C auto-rsa rev-parse --short HEAD 2>/dev/null || echo n/a)"
 echo "verified backup  : $backup"

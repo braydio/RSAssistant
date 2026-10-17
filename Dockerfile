@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ---- runtime: slim image with only the installed packages and the app ----
 FROM python:${PYTHON_VERSION}-slim
+ARG GIT_REV=unknown
+LABEL org.rsa.git-rev="${GIT_REV}"
 WORKDIR /app
 
 # git is required at runtime for utils/update_utils.py (self-update).
