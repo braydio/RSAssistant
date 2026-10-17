@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from rsassistant.persistence import order_intents
 from rsassistant.persistence.db import connect_runtime_db
 from rsassistant.persistence.schema import run_migrations
 from utils.config_utils import SQL_DATABASE, VOLUMES_DIR
@@ -125,7 +126,7 @@ def record_sent_rsa_order(
 
     with _connect() as conn:
         _import_legacy_send_log(conn)
-        conn.execute(
+        cursor = conn.execute(
             """INSERT INTO rsa_order_send_log (
                    sent_at, command, channel_id, ticker, action, quantity, broker
                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -147,6 +148,22 @@ def record_sent_rsa_order(
                )""",
             (_MAX_ENTRIES,),
         )
+        send_id = cursor.lastrowid
+    try:
+        entry["intent_id"] = order_intents.create_intent_for_send(
+            send_id,
+            ticker=entry["ticker"],
+            action=entry["action"],
+            quantity=entry["quantity"],
+            broker=entry["broker"],
+            command=entry["command"],
+            channel_id=entry["channel_id"],
+            created_at=entry["sent_at"],
+            database=DATABASE_PATH,
+        )
+    except Exception:
+        # The command is already sent; intent bookkeeping must never raise.
+        _logger.exception("Could not record order intent for send %s.", send_id)
     return entry
 
 

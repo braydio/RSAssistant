@@ -22,6 +22,7 @@ from utils.config_utils import (
     load_account_mappings,
 )
 from rsassistant.persistence.orders import insert_order_event as insert_order_history
+from rsassistant.persistence import order_intents
 from utils.utility_utils import debug_order_data
 from utils.price_fetcher import get_last_stock_price
 
@@ -266,7 +267,48 @@ order_patterns = {
 
 
 # Complete Orders Main
-def parse_order_message(content):
+_RECEIPT_OUTCOMES = {
+    "complete": "accepted_reported",
+    "incomplete": "incomplete",
+    "failed": "rejected",
+}
+
+
+def _record_receipt_evidence(content, order_type, match, broker_name, message_id):
+    """Persist the bot message as order evidence; never raises.
+
+    A ``complete`` message is recorded as *reported* acceptance only. It is not
+    treated as a fill and does not change what is written to order history.
+    """
+    outcome = _RECEIPT_OUTCOMES.get(order_type)
+    if outcome is None:
+        return
+    ticker = action = quantity = last4 = None
+    try:
+        if order_type == "complete":
+            last4, action, quantity, ticker = parse_broker_data(
+                broker_name, match, "complete"
+            )
+            if action:
+                action = {"buying": "buy", "selling": "sell"}.get(
+                    action.lower(), action.lower()
+                )
+        order_intents.record_receipt(
+            outcome=outcome,
+            evidence=content,
+            discord_message_id=message_id,
+            broker=broker_name,
+            broker_group=match.group(2),
+            account_last4=str(last4) if last4 else None,
+            ticker=ticker,
+            action=action,
+            quantity=quantity,
+        )
+    except Exception:
+        logger.exception("Could not record order receipt evidence.")
+
+
+def parse_order_message(content, message_id=None):
     """Parse an order message and route it to the appropriate handler.
 
     This function merely dispatches to the underlying handler based on the
@@ -279,6 +321,9 @@ def parse_order_message(content):
             if match:
                 broker_name = match.group(1)
                 broker_number = match.group(2)
+                _record_receipt_evidence(
+                    content, order_type, match, broker_name, message_id
+                )
 
                 # Route to the correct handler based on the type
                 if order_type == "complete":

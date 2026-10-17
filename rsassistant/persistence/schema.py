@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 11
+LATEST_SCHEMA_VERSION = 12
 
 logger = logging.getLogger(__name__)
 
@@ -478,11 +478,90 @@ def _migration_11(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_12(conn: sqlite3.Connection) -> None:
+    """Add order intents, broker receipts and execution fills (additive).
+
+    ``order_intents`` records that a command was *dispatched*; it never implies
+    a fill. ``broker_order_receipts`` stores raw broker/bot text evidence (one
+    row per Discord message). ``execution_fills`` is populated only from
+    broker-sourced activity, and ``price`` may be NULL.
+
+    Rollback: drop ``execution_fills``, ``broker_order_receipts``,
+    ``order_intents`` (in that order) and ``PRAGMA user_version = 11``.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS order_intents (
+               intent_id TEXT PRIMARY KEY,
+               send_id INTEGER UNIQUE,
+               source TEXT NOT NULL CHECK(source IN ('live', 'send_log_backfill')),
+               created_at TEXT NOT NULL,
+               ticker TEXT NOT NULL,
+               action TEXT NOT NULL,
+               quantity REAL NOT NULL,
+               broker TEXT NOT NULL,
+               command TEXT,
+               channel_id TEXT,
+               state TEXT NOT NULL CHECK(state IN (
+                   'planned', 'queued', 'dispatched', 'broker_accepted',
+                   'partially_filled', 'filled', 'rejected', 'cancelled',
+                   'unknown', 'reconciled')),
+               evidence_grade TEXT NOT NULL CHECK(evidence_grade IN (
+                   'discord_send_only', 'legacy_text', 'broker_activity')),
+               needs_review INTEGER NOT NULL DEFAULT 0,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               FOREIGN KEY (send_id) REFERENCES rsa_order_send_log(send_id)
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_order_intents_ticker "
+        "ON order_intents(ticker, created_at)"
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS broker_order_receipts (
+               receipt_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               intent_id TEXT,
+               discord_message_id TEXT UNIQUE,
+               received_at TEXT NOT NULL,
+               outcome TEXT NOT NULL CHECK(outcome IN (
+                   'accepted_reported', 'incomplete', 'rejected', 'other')),
+               broker TEXT,
+               broker_group TEXT,
+               account_last4 TEXT,
+               ticker TEXT,
+               action TEXT,
+               quantity REAL,
+               evidence TEXT,
+               FOREIGN KEY (intent_id) REFERENCES order_intents(intent_id)
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_broker_receipts_intent "
+        "ON broker_order_receipts(intent_id)"
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS execution_fills (
+               fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               intent_id TEXT NOT NULL,
+               receipt_id INTEGER,
+               account_id INTEGER,
+               quantity REAL NOT NULL,
+               price REAL,
+               filled_at TEXT,
+               source TEXT NOT NULL,
+               idempotency_key TEXT NOT NULL UNIQUE,
+               FOREIGN KEY (intent_id) REFERENCES order_intents(intent_id),
+               FOREIGN KEY (receipt_id) REFERENCES broker_order_receipts(receipt_id),
+               FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+           )"""
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
     8: _migration_8, 9: _migration_9, 10: _migration_10,
-    11: _migration_11,
+    11: _migration_11, 12: _migration_12,
 }
 
 

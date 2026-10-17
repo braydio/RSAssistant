@@ -1,12 +1,12 @@
 # TP-20261016-004: Recover order acknowledgement and broker fill provenance
 
 **Packet ID:** TP-20261016-004  
-**Status:** Draft  
+**Status:** Complete
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261016-004-order-receipts-and-fill-reconciliation.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261016-004-order-receipts-and-fill-reconciliation.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P0  
 **Depends on:** TP-20261016-003  

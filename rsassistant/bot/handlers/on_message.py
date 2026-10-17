@@ -966,7 +966,9 @@ async def handle_primary_channel(bot, message):
             await response_channel.send(f"Added {count} tickers to watchlist.")
             logger.info(f"Added {count} tickers from bulk watchlist message.")
             return
-        await asyncio.to_thread(parse_order_message, message.content)
+        await asyncio.to_thread(
+            parse_order_message, message.content, getattr(message, "id", None)
+        )
 
 
 # Bound concurrent blocking network analyses (NASDAQ/SEC/LLM) run in worker threads.
