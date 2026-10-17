@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 13
+LATEST_SCHEMA_VERSION = 14
 
 logger = logging.getLogger(__name__)
 
@@ -611,12 +611,51 @@ def _migration_13(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_14(conn: sqlite3.Connection) -> None:
+    """Add the broker incident registry (additive).
+
+    Rollback: drop ``broker_incident_events``, ``broker_incidents`` and
+    ``PRAGMA user_version = 13``.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS broker_incidents (
+               incident_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               level TEXT NOT NULL CHECK(level IN ('infrastructure', 'adapter', 'account')),
+               profile TEXT NOT NULL,
+               error_class TEXT NOT NULL,
+               root_cause TEXT NOT NULL,
+               severity TEXT NOT NULL CHECK(severity IN ('info', 'warning', 'critical')),
+               status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
+               occurrences INTEGER NOT NULL DEFAULT 1,
+               opened_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               resolved_at TEXT
+           )"""
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_broker_incident_open "
+        "ON broker_incidents(profile, error_class, root_cause) WHERE status='open'"
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS broker_incident_events (
+               event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               incident_id INTEGER NOT NULL,
+               at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               kind TEXT NOT NULL,
+               affected_profile TEXT,
+               detail TEXT,
+               FOREIGN KEY (incident_id) REFERENCES broker_incidents(incident_id)
+           )"""
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
     8: _migration_8, 9: _migration_9, 10: _migration_10,
     11: _migration_11, 12: _migration_12,
-    13: _migration_13,
+    13: _migration_13, 14: _migration_14,
 }
 
 

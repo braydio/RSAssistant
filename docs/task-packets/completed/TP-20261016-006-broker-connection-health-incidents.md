@@ -1,12 +1,12 @@
 # TP-20261016-006: Broker connection health contract and incident registry
 
 **Packet ID:** TP-20261016-006  
-**Status:** Draft  
+**Status:** Complete
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261016-006-broker-connection-health-incidents.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261016-006-broker-connection-health-incidents.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P1  
 **Depends on:** TP-20261016-005  
