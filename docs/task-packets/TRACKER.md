@@ -14,7 +14,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | 2 | TP-20261016-002 | Reconcile deployed history and pin production sources | In Progress | P0 | 001 + local history | main | [packet](active/TP-20261016-002-baseline-reconciliation-and-deployment-lock.md) |
 | 3 | TP-20261016-003 | Verify and restore canonical holdings ingestion | Complete | P0 | 002 REFRESH | main | [packet](completed/TP-20261016-003-holdings-single-writer-integrity.md) |
 | 4 | TP-20261016-004 | Recover order acknowledgement and broker fill provenance | Complete | P0 | 003 REFRESH | main | [packet](completed/TP-20261016-004-order-receipts-and-fill-reconciliation.md) |
-| 5 | TP-20261016-005 | Canonical broker accounts with non-destructive alias resolution | Draft | P0 | 003,004 REFRESH | main | [packet](active/TP-20261016-005-canonical-account-identity.md) |
+| 5 | TP-20261016-005 | Canonical broker accounts with non-destructive alias resolution | Complete | P0 | 003,004 REFRESH | main | [packet](completed/TP-20261016-005-canonical-account-identity.md) |
 | 6 | TP-20261016-006 | Broker connection health contract and incident registry | Draft | P1 | 005 | main | [packet](active/TP-20261016-006-broker-connection-health-incidents.md) |
 | 7 | TP-20261016-007 | Secure guided reauthentication and bounded recovery | Draft | P1 | 006 HUMAN gate | main | [packet](active/TP-20261016-007-guided-broker-reauth-and-recovery.md) |
 | 8 | TP-20261016-008 | Direct typed broker worker bridge and shadow orchestration | Draft | P0 | 004–007 REFRESH | main | [packet](active/TP-20261016-008-typed-broker-worker-ipc.md) |

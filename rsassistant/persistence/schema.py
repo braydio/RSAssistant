@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 12
+LATEST_SCHEMA_VERSION = 13
 
 logger = logging.getLogger(__name__)
 
@@ -557,11 +557,66 @@ def _migration_12(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_13(conn: sqlite3.Connection) -> None:
+    """Add canonical account identities and non-destructive legacy mappings.
+
+    ``Accounts`` is untouched; every legacy ``account_id`` keeps working. The
+    new tables only *describe* which legacy rows appear to be the same account.
+
+    Rollback: drop ``account_aliases``, ``account_canonical_map``,
+    ``canonical_accounts`` and ``PRAGMA user_version = 12``.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS canonical_accounts (
+               canonical_account_id TEXT PRIMARY KEY,
+               broker_key TEXT NOT NULL,
+               group_key TEXT NOT NULL,
+               last4 TEXT NOT NULL,
+               full_number_hash TEXT,
+               status TEXT NOT NULL CHECK(status IN (
+                   'active', 'historical', 'dormant', 'fixture', 'ambiguous')),
+               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+           )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS account_canonical_map (
+               legacy_account_id INTEGER PRIMARY KEY,
+               canonical_account_id TEXT NOT NULL,
+               match_basis TEXT NOT NULL CHECK(match_basis IN (
+                   'exact', 'last4_compatible', 'ambiguous')),
+               verified INTEGER NOT NULL DEFAULT 0,
+               observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               FOREIGN KEY (legacy_account_id) REFERENCES Accounts(account_id),
+               FOREIGN KEY (canonical_account_id)
+                   REFERENCES canonical_accounts(canonical_account_id)
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_account_canonical_map_canon "
+        "ON account_canonical_map(canonical_account_id)"
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS account_aliases (
+               canonical_account_id TEXT NOT NULL,
+               normalized_label TEXT NOT NULL,
+               evidence_source TEXT NOT NULL,
+               verified INTEGER NOT NULL DEFAULT 0,
+               observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               PRIMARY KEY (canonical_account_id, normalized_label, evidence_source),
+               FOREIGN KEY (canonical_account_id)
+                   REFERENCES canonical_accounts(canonical_account_id)
+           )"""
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
     8: _migration_8, 9: _migration_9, 10: _migration_10,
     11: _migration_11, 12: _migration_12,
+    13: _migration_13,
 }
 
 

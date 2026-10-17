@@ -1,12 +1,12 @@
 # TP-20261016-005: Canonical broker accounts with non-destructive alias resolution
 
 **Packet ID:** TP-20261016-005  
-**Status:** Draft  
+**Status:** Complete
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261016-005-canonical-account-identity.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261016-005-canonical-account-identity.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P0  
 **Depends on:** TP-20261016-003 and -004  
