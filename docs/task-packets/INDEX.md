@@ -18,7 +18,7 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 | 6 | TP-20261016-006 | Broker connection health contract and incident registry | Complete | [completed/TP-20261016-006-broker-connection-health-incidents.md](completed/TP-20261016-006-broker-connection-health-incidents.md) |
 | 7 | TP-20261016-007 | Secure guided reauthentication and bounded recovery | In Progress | [active/TP-20261016-007-guided-broker-reauth-and-recovery.md](active/TP-20261016-007-guided-broker-reauth-and-recovery.md) |
 | 8 | TP-20261016-008 | Direct typed broker worker bridge and shadow orchestration | Complete | [completed/TP-20261016-008-typed-broker-worker-ipc.md](completed/TP-20261016-008-typed-broker-worker-ipc.md) |
-| 9 | TP-20261016-009 | Extract and shadow-validate the Fidelity broker adapter | Draft | [active/TP-20261016-009-fidelity-adapter-shadow-canary.md](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
+| 9 | TP-20261016-009 | Extract and shadow-validate the Fidelity broker adapter | In Progress | [active/TP-20261016-009-fidelity-adapter-shadow-canary.md](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
 | 10 | TP-20261016-010 | Migrate Fennel, Public and Robinhood through the typed worker | Draft | [active/TP-20261016-010-active-broker-adapters.md](active/TP-20261016-010-active-broker-adapters.md) |
 | 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | [active/TP-20261016-011-secondary-broker-adapters.md](active/TP-20261016-011-secondary-broker-adapters.md) |
 | 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | Draft | [active/TP-20261016-012-split-discovery-policy-provenance.md](active/TP-20261016-012-split-discovery-policy-provenance.md) |
