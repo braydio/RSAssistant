@@ -23,7 +23,7 @@ class HoldingsImportLogTest(unittest.TestCase):
         self._rec("a" * 64, "succeeded")
         self._rec("b" * 64, "failed", error="boom")
         self.assertEqual(repo.last_successful_import_sha(database=self.db), "a" * 64)
-        self.assertEqual(LATEST_SCHEMA_VERSION, 14)
+        self.assertEqual(LATEST_SCHEMA_VERSION, 15)
 
     def test_invalid_status_rejected(self):
         with self.assertRaises(ValueError):

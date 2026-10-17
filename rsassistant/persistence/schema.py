@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 14
+LATEST_SCHEMA_VERSION = 15
 
 logger = logging.getLogger(__name__)
 
@@ -650,12 +650,44 @@ def _migration_14(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_15(conn: sqlite3.Connection) -> None:
+    """Add per-event fractional-share policy evidence (additive).
+
+    Keyed by corporate-action identity ``(ticker, split_date)``; independent of
+    ``split_monitor`` and ``split_event_intents``. Rollback: drop
+    ``split_policy_evidence`` and ``PRAGMA user_version = 14``.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS split_policy_evidence (
+               evidence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               ticker TEXT NOT NULL,
+               split_date TEXT NOT NULL,
+               source_type TEXT NOT NULL CHECK(source_type IN (
+                   'sec_filing', 'issuer_release', 'nasdaq', 'discord_feed', 'llm')),
+               source_url TEXT,
+               source_fingerprint TEXT NOT NULL,
+               clause TEXT,
+               scope TEXT NOT NULL DEFAULT 'unspecified' CHECK(scope IN (
+                   'registered_holder', 'dtc_participant', 'beneficial_owner', 'unspecified')),
+               policy_label TEXT NOT NULL,
+               parser_version TEXT NOT NULL,
+               observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE (ticker, split_date, source_type, source_fingerprint, policy_label)
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_split_policy_evidence_event "
+        "ON split_policy_evidence(ticker, split_date)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
     8: _migration_8, 9: _migration_9, 10: _migration_10,
     11: _migration_11, 12: _migration_12,
-    13: _migration_13, 14: _migration_14,
+    13: _migration_13, 14: _migration_14, 15: _migration_15,
 }
 
 

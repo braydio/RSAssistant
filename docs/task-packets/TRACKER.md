@@ -21,7 +21,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | 9 | TP-20261016-009 | Extract and shadow-validate the Fidelity broker adapter | In Progress | P0 | 008 HUMAN gate | main | [packet](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
 | 10 | TP-20261016-010 | Migrate Fennel, Public and Robinhood through the typed worker | In Progress | P1 | 009 REFRESH | main | [packet](active/TP-20261016-010-active-broker-adapters.md) |
 | 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | P1 | 010 HUMAN gate | main | [packet](active/TP-20261016-011-secondary-broker-adapters.md) |
-| 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | Draft | P1 | 005,008,010 REFRESH | main | [packet](active/TP-20261016-012-split-discovery-policy-provenance.md) |
+| 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | In Progress | P1 | 005,008,010 REFRESH | main | [packet](active/TP-20261016-012-split-discovery-policy-provenance.md) |
 | 13 | TP-20261016-013 | Account-level split credits, cash-in-lieu and sale reconciliation | Draft | P0 | 004,005,008,012 REFRESH | main | [packet](active/TP-20261016-013-corporate-action-settlement-reconciliation.md) |
 | 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | Draft | P1 | 008,012,013 REFRESH | main | [packet](active/TP-20261016-014-unified-command-surface.md) |
 | 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | Draft | P2 | 004,005,013,014 REFRESH | main | [packet](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |

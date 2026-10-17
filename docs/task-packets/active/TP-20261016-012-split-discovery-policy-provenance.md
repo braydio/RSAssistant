@@ -1,7 +1,7 @@
 # TP-20261016-012: Unify split discovery and fractional-share evidence
 
 **Packet ID:** TP-20261016-012  
-**Status:** Draft  
+**Status:** In Progress
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
@@ -74,3 +74,8 @@ No automatic trade strategy expansion or live orders, no fabricated issuer discl
 
 ## Completion report and successor
 On verified completion: move only this packet to `docs/task-packets/completed/`; update `INDEX.md` and `TRACKER.md` atomically; write `docs/task-packets/summaries/TP-20261016-012-SUMMARY.md` in required Outcome / Validation / Process Feedback / Next Handoff format. Next packet: TP-20261016-013. State whether refreshed planning/owner review is required, and **do not** claim broker/live parity based on mocks alone.
+
+## Progress log (2026-10-16)
+Done (not wired into autobuy; "no new autobuys" respected): schema **v15** `split_policy_evidence` (keyed `(ticker, split_date)`, source type/URL/fingerprint, exact clause, holder scope, parser version; unique per source+label; rollback = drop table, `user_version=14`); pure `rsassistant/services/split_policy_classifier.py` (`Policy` ROUND_UP_UNCONDITIONAL / ROUND_TO_NEAREST / CASH_IN_LIEU / AGGREGATED_PARTICIPANT / ROUND_DOWN / CONFLICT / UNKNOWN; LLM/feed evidence advisory only and never overrides a contrary primary clause; auto-executable requires primary evidence + effective date; cross-feed dedupe key = issuer+ratio+effective date); `persistence/split_policy_evidence.py`; 8 tests.
+**Decision needed from owner (important):** the live `alert_processing.resolve_round_up_confirmation` returns True for `rounded_to_nearest_whole`, which is what currently authorises autobuy. Under nearest-whole a 1-share holder in a 1-for-10 reverse split receives 0 shares (0.1 rounds down), so that treatment can lose the position. The new classifier treats nearest-whole as NOT unconditional. I did not change the live function because it changes trading behaviour; switching autobuy to `classify(...).auto_executable` is a one-line policy change once approved.
+**Remaining:** scheduled NASDAQ/SEC discovery with backoff, multi-feed dedupe wiring, candidate/rejection-reason exposure. Status stays In Progress.
