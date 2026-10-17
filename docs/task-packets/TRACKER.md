@@ -23,8 +23,8 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | P1 | 010 HUMAN gate | main | [packet](active/TP-20261016-011-secondary-broker-adapters.md) |
 | 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | In Progress | P1 | 005,008,010 REFRESH | main | [packet](active/TP-20261016-012-split-discovery-policy-provenance.md) |
 | 13 | TP-20261016-013 | Account-level split credits, cash-in-lieu and sale reconciliation | Draft | P0 | 004,005,008,012 REFRESH | main | [packet](active/TP-20261016-013-corporate-action-settlement-reconciliation.md) |
-| 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | Draft | P1 | 008,012,013 REFRESH | main | [packet](active/TP-20261016-014-unified-command-surface.md) |
-| 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | Draft | P2 | 004,005,013,014 REFRESH | main | [packet](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |
+| 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | In Progress | P1 | 008,012,013 REFRESH | main | [packet](active/TP-20261016-014-unified-command-surface.md) |
+| 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | In Progress | P2 | 004,005,013,014 REFRESH | main | [packet](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |
 | 16 | TP-20261016-016 | Retire redundant bots and dead code after verified migration | Draft | P0 | 002–015 HUMAN cutover | main | [packet](active/TP-20261016-016-legacy-retirement-and-cutover.md) |
 
 Execution is strictly gate-controlled: 001 repository implementation complete but **live backup/restore has not been run**; 002 is **Blocked** until local branches and credentials-safe backups are reconciled; 003–016 are **Draft** and require dependency review and promotion to Ready. Never assume one packet's completion promotes another automatically.

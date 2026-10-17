@@ -1,7 +1,7 @@
 # TP-20261016-014: Replace scattered commands with one typed operator interface
 
 **Packet ID:** TP-20261016-014  
-**Status:** Draft  
+**Status:** In Progress
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
@@ -76,3 +76,7 @@ No UI-controlled implicit autobuys, no arbitrary SQL execution, no public API ex
 
 ## Completion report and successor
 On verified completion: move only this packet to `docs/task-packets/completed/`; update `INDEX.md` and `TRACKER.md` atomically; write `docs/task-packets/summaries/TP-20261016-014-SUMMARY.md` in required Outcome / Validation / Process Feedback / Next Handoff format. Next packet: TP-20261016-015. State whether refreshed planning/owner review is required, and **do not** claim broker/live parity based on mocks alone.
+
+## Progress log (2026-10-16)
+Done (read-only audit, no command changed or removed): `scripts/command_inventory.py` + generated `docs/command-inventory.md` — 40 commands from the cog sources via AST. Authorization audit: every trade/destructive command (`order`, `liquidate`, `remove`, `queue_run`, `restart`, `shutdown`, `patchautorsa`, `clear*`, `split*` mutators, etc.) carries a decorator check (`admin_only` or `has_permissions`); the 15 commands with no decorator are read-only reporting (`aliases, all, brokerlist, brokerwith, grouplist, history, lastorder, orders, ownersummary, performance, queue, splitlist, splitstatus, top, watchlist`). Note `queue` (list) is unchecked while `queue_run` is checked — verify intent.
+**Remaining (gated on a stable API + telemetry):** typed operator interface, alias retention, any removal. Status stays In Progress.

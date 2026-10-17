@@ -23,8 +23,8 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 | 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | [active/TP-20261016-011-secondary-broker-adapters.md](active/TP-20261016-011-secondary-broker-adapters.md) |
 | 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | In Progress | [active/TP-20261016-012-split-discovery-policy-provenance.md](active/TP-20261016-012-split-discovery-policy-provenance.md) |
 | 13 | TP-20261016-013 | Account-level split credits, cash-in-lieu and sale reconciliation | Draft | [active/TP-20261016-013-corporate-action-settlement-reconciliation.md](active/TP-20261016-013-corporate-action-settlement-reconciliation.md) |
-| 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | Draft | [active/TP-20261016-014-unified-command-surface.md](active/TP-20261016-014-unified-command-surface.md) |
-| 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | Draft | [active/TP-20261016-015-realized-pnl-and-exception-digests.md](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |
+| 14 | TP-20261016-014 | Replace scattered commands with one typed operator interface | In Progress | [active/TP-20261016-014-unified-command-surface.md](active/TP-20261016-014-unified-command-surface.md) |
+| 15 | TP-20261016-015 | Evidence-grade performance reporting and exception monitoring | In Progress | [active/TP-20261016-015-realized-pnl-and-exception-digests.md](active/TP-20261016-015-realized-pnl-and-exception-digests.md) |
 | 16 | TP-20261016-016 | Retire redundant bots and dead code after verified migration | Draft | [active/TP-20261016-016-legacy-retirement-and-cutover.md](active/TP-20261016-016-legacy-retirement-and-cutover.md) |
 
 ## Active

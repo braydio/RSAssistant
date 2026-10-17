@@ -1,7 +1,7 @@
 # TP-20261016-015: Evidence-grade performance reporting and exception monitoring
 
 **Packet ID:** TP-20261016-015  
-**Status:** Draft  
+**Status:** In Progress
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
@@ -72,3 +72,7 @@ No speculative P&L forecasts described as realized, no live trades, no bulk brok
 
 ## Completion report and successor
 On verified completion: move only this packet to `docs/task-packets/completed/`; update `INDEX.md` and `TRACKER.md` atomically; write `docs/task-packets/summaries/TP-20261016-015-SUMMARY.md` in required Outcome / Validation / Process Feedback / Next Handoff format. Next packet: TP-20261016-016. State whether refreshed planning/owner review is required, and **do not** claim broker/live parity based on mocks alone.
+
+## Progress log (2026-10-16)
+Done (exception-monitoring half only): `scripts/operator_status.py` — read-only one-screen status (schema version, per-broker holdings freshness, recent snapshot imports, open incidents, order intents lacking broker evidence, open split watches, newest OrderHistory row). Run against production (schema still v10 until redeploy): holdings fresh 2026-10-16 04:18 for all six live brokers; OrderHistory newest 2026-07-30; 4 split watches in `buying`.
+**Blocked / not started:** evidence-grade realized P&L — needs broker fills/fees/cash-flow (TP-004's `execution_fills` is intentionally empty until broker activity exists, TP-008–010 live adapters). No estimate may be presented as realized profit. Status stays In Progress.
