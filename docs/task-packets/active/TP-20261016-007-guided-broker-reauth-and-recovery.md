@@ -1,7 +1,7 @@
 # TP-20261016-007: Secure guided reauthentication and bounded recovery
 
 **Packet ID:** TP-20261016-007  
-**Status:** Draft  
+**Status:** In Progress
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
@@ -70,3 +70,7 @@ No bypass of brokerage MFA, no scraping stored OTPs or account passwords, no aut
 
 ## Handoff / completion report
 On verified completion move exactly this canonical file from `active/` to `completed/`, update `INDEX.md` and `TRACKER.md` atomically, and write `docs/task-packets/summaries/TP-20261016-007-SUMMARY.md` (Outcome, Validation, Process Feedback, Next Handoff). State next packet TP-20261016-008 and whether a fresh planning review is required; never claim production parity from mocks only.
+
+## Progress log (2026-10-16)
+Done (no live behaviour change): `rsassistant/services/broker_recovery.py` — bounded `plan_recovery` per typed failure (one browser restart, Retry-After backoff, cooldown, operator challenge, reauth, code-regression escalation, never-retry for ambiguous execution), `SingleFlight` per login profile, `ChallengeStore` (opaque single-use, expiring handles; no OTP stored), `clean_stale_chromium_lock` (refuses active PIDs and foreign-host locks), `may_submit_orders` circuit breaker; 8 tests in `unittests/broker_recovery_test.py`.
+**Remaining, HUMAN-gated:** the operator-authenticated local-only recovery endpoint/UI (CSRF, session expiry; extraction from `scripts/env_gui.py`), the Discord deep-link alert, executor enforcement of `may_submit_orders`, per-broker MFA flow confirmation, and sandboxed sanitized-fixture capture for code regressions. Status stays In Progress until the owner decides the UI/authentication design.
