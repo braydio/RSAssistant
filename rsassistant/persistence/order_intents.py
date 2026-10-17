@@ -177,3 +177,63 @@ def unverified_report(
          "with_receipt_text": rc}
         for b, st, n, lo, hi, rc in rows
     ]
+
+
+def create_planned_intent(
+    *,
+    ticker: str,
+    action: str,
+    quantity: float,
+    broker: str,
+    command: str | None = None,
+    database: str | PathLike[str] | None = None,
+) -> str:
+    """Write-ahead intent for the typed-bridge path (no Discord send involved)."""
+
+    intent_id = str(uuid.uuid4())
+    with _connect(database) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """INSERT INTO order_intents
+               (intent_id, send_id, source, created_at, ticker, action, quantity,
+                broker, command, state, evidence_grade)
+               VALUES (?,NULL,'live',?,?,?,?,?,?,'planned','discord_send_only')""",
+            (intent_id, _now(), ticker.upper(), action.lower(), quantity, broker, command),
+        )
+    return intent_id
+
+
+def claim_for_dispatch(
+    intent_id: str, *, database: str | PathLike[str] | None = None
+) -> bool:
+    """Atomically move planned/queued -> dispatched; True for exactly one caller."""
+
+    with _connect(database) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            """UPDATE order_intents SET state='dispatched',
+                   updated_at=CURRENT_TIMESTAMP
+               WHERE intent_id=? AND state IN ('planned','queued')""",
+            (intent_id,),
+        )
+        return cur.rowcount == 1
+
+
+def set_intent_state(
+    intent_id: str,
+    state: str,
+    *,
+    needs_review: bool | None = None,
+    database: str | PathLike[str] | None = None,
+) -> None:
+    """Record a transport/broker outcome. ``filled`` is not settable here."""
+
+    if state == "filled":
+        raise ValueError("fills require broker activity evidence (execution_fills)")
+    with _connect(database) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """UPDATE order_intents SET state=?, updated_at=CURRENT_TIMESTAMP,
+                   needs_review=COALESCE(?, needs_review) WHERE intent_id=?""",
+            (state, None if needs_review is None else int(needs_review), intent_id),
+        )
