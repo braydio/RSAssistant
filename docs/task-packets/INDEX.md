@@ -12,7 +12,7 @@ See [README.md](README.md) for naming, lifecycle, persistence, and authoring rul
 | --- | --- | --- | --- | --- |
 | 1 | TP-20261016-001 | Reproducible migration checkpoint and safe SQLite backup | Complete | [completed/TP-20261016-001-migration-checkpoint.md](completed/TP-20261016-001-migration-checkpoint.md) |
 | 2 | TP-20261016-002 | Reconcile deployed history and pin production sources | In Progress | [active/TP-20261016-002-baseline-reconciliation-and-deployment-lock.md](active/TP-20261016-002-baseline-reconciliation-and-deployment-lock.md) |
-| 3 | TP-20261016-003 | Verify and restore canonical holdings ingestion | Draft | [active/TP-20261016-003-holdings-single-writer-integrity.md](active/TP-20261016-003-holdings-single-writer-integrity.md) |
+| 3 | TP-20261016-003 | Verify and restore canonical holdings ingestion | Complete | [completed/TP-20261016-003-holdings-single-writer-integrity.md](completed/TP-20261016-003-holdings-single-writer-integrity.md) |
 | 4 | TP-20261016-004 | Recover order acknowledgement and broker fill provenance | Draft | [active/TP-20261016-004-order-receipts-and-fill-reconciliation.md](active/TP-20261016-004-order-receipts-and-fill-reconciliation.md) |
 | 5 | TP-20261016-005 | Canonical broker accounts with non-destructive alias resolution | Draft | [active/TP-20261016-005-canonical-account-identity.md](active/TP-20261016-005-canonical-account-identity.md) |
 | 6 | TP-20261016-006 | Broker connection health contract and incident registry | Draft | [active/TP-20261016-006-broker-connection-health-incidents.md](active/TP-20261016-006-broker-connection-health-incidents.md) |

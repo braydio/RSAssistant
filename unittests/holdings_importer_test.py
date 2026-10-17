@@ -24,11 +24,37 @@ class HoldingsImporterTest(unittest.TestCase):
         s = mock.patch.object(hi, "save_holdings_to_csv")
         self.save = s.start()
         self.addCleanup(s.stop)
+        r = mock.patch.object(hi.holdings_repo, "record_holdings_import")
+        self.record = r.start()
+        self.addCleanup(r.stop)
+        hi._last_recorded_failure = None
 
     def write(self, payload, mtime_ns=None):
         self.path.write_text(json.dumps(payload))
         if mtime_ns is not None:
             os.utime(self.path, ns=(mtime_ns, mtime_ns))
+
+    def test_outcomes_recorded_with_identity(self):
+        self.write([ENTRY])
+        hi.import_holdings_if_updated(self.path)
+        kw = self.record.call_args.kwargs
+        self.assertEqual(kw["status"], "succeeded")
+        self.assertEqual(kw["record_count"], 1)
+        self.assertEqual(kw["account_count"], 1)
+        self.assertEqual(len(kw["source_sha256"]), 64)
+
+    def test_failed_save_recorded_once_per_identical_failure(self):
+        self.write([ENTRY])
+        self.save.return_value = False
+        hi.import_holdings_if_updated(self.path)
+        hi.import_holdings_if_updated(self.path)
+        failed = [c for c in self.record.call_args_list if c.kwargs["status"] == "failed"]
+        self.assertEqual(len(failed), 1)
+
+    def test_bookkeeping_error_does_not_fail_import(self):
+        self.record.side_effect = RuntimeError("db gone")
+        self.write([ENTRY])
+        self.assertEqual(hi.import_holdings_if_updated(self.path), 1)
 
     def test_unchanged_snapshot_not_reimported(self):
         self.write([ENTRY])

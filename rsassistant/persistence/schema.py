@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 
-LATEST_SCHEMA_VERSION = 10
+LATEST_SCHEMA_VERSION = 11
 
 logger = logging.getLogger(__name__)
 
@@ -452,10 +452,37 @@ def _migration_10(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_11(conn: sqlite3.Connection) -> None:
+    """Record the identity and outcome of every holdings snapshot import.
+
+    Additive only. Rollback: ``DROP TABLE holdings_import_log`` and
+    ``PRAGMA user_version = 10``; no other table depends on it.
+    """
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS holdings_import_log (
+               import_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               source_path TEXT NOT NULL,
+               source_sha256 TEXT,
+               source_mtime TEXT,
+               record_count INTEGER NOT NULL DEFAULT 0,
+               account_count INTEGER NOT NULL DEFAULT 0,
+               status TEXT NOT NULL CHECK(status IN ('succeeded', 'failed')),
+               error TEXT,
+               attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+           )"""
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_holdings_import_log_sha "
+        "ON holdings_import_log(source_sha256, status)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migration_1, 2: _migration_2, 3: _migration_3,
     4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7,
     8: _migration_8, 9: _migration_9, 10: _migration_10,
+    11: _migration_11,
 }
 
 

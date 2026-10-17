@@ -1,12 +1,12 @@
 # TP-20261016-003: Verify and restore canonical holdings ingestion
 
 **Packet ID:** TP-20261016-003  
-**Status:** Draft  
+**Status:** Complete
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
 **Target branch:** main  
-**Canonical path:** `docs/task-packets/active/TP-20261016-003-holdings-single-writer-integrity.md`  
+**Canonical path:** `docs/task-packets/completed/TP-20261016-003-holdings-single-writer-integrity.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P0  
 **Depends on:** TP-20261016-002  

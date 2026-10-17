@@ -455,3 +455,44 @@ def update_historical_holdings(target_date: str | None = None, *, database=None)
         except sqlite3.Error as e:
             logger.error(f"Error updating historical holdings: {e}")
             raise
+
+
+def record_holdings_import(
+    *,
+    source_path: str,
+    source_sha256: str | None,
+    source_mtime: str | None,
+    record_count: int,
+    account_count: int,
+    status: str,
+    error: str | None = None,
+    database: str | PathLike[str] | None = None,
+) -> int:
+    """Append one durable snapshot-import attempt (identity + outcome)."""
+
+    if status not in ("succeeded", "failed"):
+        raise ValueError(f"invalid import status: {status}")
+    with _connect(database) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            """INSERT INTO holdings_import_log
+               (source_path, source_sha256, source_mtime, record_count,
+                account_count, status, error)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (source_path, source_sha256, source_mtime, int(record_count),
+             int(account_count), status, error),
+        )
+        return int(cur.lastrowid)
+
+
+def last_successful_import_sha(
+    *, database: str | PathLike[str] | None = None
+) -> str | None:
+    """Return the hash of the newest snapshot that was fully activated."""
+
+    with _connect(database) as conn:
+        row = conn.execute(
+            "SELECT source_sha256 FROM holdings_import_log "
+            "WHERE status='succeeded' ORDER BY import_id DESC LIMIT 1"
+        ).fetchone()
+    return row[0] if row else None

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from utils.config_utils import AUTO_RSA_HOLDINGS_FILE, AUTO_RSA_HOLDINGS_ENABLED
+from rsassistant.persistence import holdings as holdings_repo
 from utils.csv_utils import save_holdings_to_csv
 from utils.logging_setup import logger
 from utils.performance_metrics import timed_call
@@ -109,6 +112,47 @@ def _fingerprint(file_path: Path) -> Fingerprint:
     return (stat.st_mtime_ns, stat.st_size)
 
 
+_last_recorded_failure: tuple[str, str] | None = None
+
+
+def _record_import(
+    file_path: Path,
+    sha256: str | None,
+    fingerprint: Fingerprint | None,
+    entries: list[dict[str, Any]],
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Persist snapshot identity/outcome; never lets bookkeeping break imports."""
+    global _last_recorded_failure
+    if status == "failed":
+        key = (sha256 or "", error or "")
+        if key == _last_recorded_failure:
+            return
+        _last_recorded_failure = key
+    else:
+        _last_recorded_failure = None
+    mtime = (
+        datetime.fromtimestamp(fingerprint[0] / 1e9, timezone.utc).isoformat()
+        if fingerprint
+        else None
+    )
+    try:
+        holdings_repo.record_holdings_import(
+            source_path=str(file_path),
+            source_sha256=sha256,
+            source_mtime=mtime,
+            record_count=len(entries),
+            account_count=len(
+                {(e["broker"], e["group"], e["account"]) for e in entries}
+            ),
+            status=status,
+            error=error,
+        )
+    except Exception as exc:  # bookkeeping only
+        logger.warning("Could not record holdings import outcome: %s", exc)
+
+
 def _import_snapshot(file_path: Path) -> tuple[str, int, Fingerprint | None]:
     """Import one snapshot. Returns ``(outcome, imported_count, fingerprint)``.
 
@@ -127,12 +171,15 @@ def _import_snapshot(file_path: Path) -> tuple[str, int, Fingerprint | None]:
         logger.warning("Holdings file changed during read; will retry: %s", file_path)
         return OUTCOME_FAILED, 0, None
 
+    sha256 = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
+
     # Re-warn about the same unchanged bad snapshot only at DEBUG.
     warn = logger.debug if before == _last_failure_fingerprint else logger.warning
     try:
         payload = json.loads(text)
     except ValueError as exc:
         warn("Failed to parse holdings file %s: %s", file_path, exc)
+        _record_import(file_path, sha256, before, [], "failed", f"parse error: {exc}")
         return OUTCOME_FAILED, 0, before
 
     normalized = []
@@ -143,6 +190,7 @@ def _import_snapshot(file_path: Path) -> tuple[str, int, Fingerprint | None]:
 
     if not normalized:
         warn("No valid holdings entries found in %s", file_path)
+        _record_import(file_path, sha256, before, [], "failed", "no valid entries")
         return OUTCOME_FAILED, 0, before
 
     for holding in normalized:
@@ -154,10 +202,15 @@ def _import_snapshot(file_path: Path) -> tuple[str, int, Fingerprint | None]:
         saved = save_holdings_to_csv(normalized, use_refresh_target=False)
     except (OSError, ValueError, sqlite3.Error) as exc:
         warn("Failed to persist holdings from %s: %s", file_path, exc)
+        _record_import(file_path, sha256, before, normalized, "failed", str(exc))
         return OUTCOME_FAILED, 0, before
     if saved is False:
         warn("Holdings from %s were not persisted (see save error above)", file_path)
+        _record_import(
+            file_path, sha256, before, normalized, "failed", "save_holdings_to_csv returned False"
+        )
         return OUTCOME_FAILED, 0, before
+    _record_import(file_path, sha256, before, normalized, "succeeded")
     logger.info("Imported %d holdings entries from %s", len(normalized), file_path)
     return OUTCOME_CHANGED, len(normalized), before
 
