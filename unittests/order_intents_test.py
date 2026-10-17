@@ -116,3 +116,22 @@ class OrderIntentsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnmatchedFailureTest(unittest.TestCase):
+    def test_fennel_429_becomes_rejected_receipt_and_rate_limit_incident(self):
+        msg = ("Fennel 1 Account 5: Error placing order: Order Request failed with "
+               'status code 429: {"detail": "Request was throttled"}')
+        with patch("utils.parsing_utils.order_intents.record_receipt") as rec, \
+             patch("utils.parsing_utils.broker_incidents.report_failure") as inc:
+            parsing_utils.parse_order_message(msg, 5)
+        self.assertEqual(rec.call_args.kwargs["outcome"], "rejected")
+        self.assertEqual(rec.call_args.kwargs["broker"], "Fennel")
+        self.assertEqual(inc.call_args.args[0], "fennel:1")
+        from rsassistant.services.broker_health import classify_error
+        self.assertEqual(classify_error(inc.call_args.args[1]).error_class, "rate_limited")
+
+    def test_unrelated_text_is_ignored(self):
+        with patch("utils.parsing_utils.order_intents.record_receipt") as rec:
+            parsing_utils.parse_order_message("hello world", 1)
+        rec.assert_not_called()

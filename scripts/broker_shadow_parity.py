@@ -8,8 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from rsassistant.integrations.brokers.fidelity.adapter import (  # noqa: E402
-    FidelitySnapshotAdapter, compare_positions)
+from rsassistant.integrations.brokers.snapshot import (  # noqa: E402
+    SnapshotBrokerAdapter, compare_positions)
 from rsassistant.persistence.account_identity import account_forms, normalize_group  # noqa: E402
 from rsassistant.services.broker_protocol import Operation, Request  # noqa: E402
 
@@ -18,8 +18,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", required=True, type=Path)
     ap.add_argument("--snapshot", required=True, type=Path)
+    ap.add_argument("--broker", default="fidelity")
     args = ap.parse_args(argv)
-    adapter = FidelitySnapshotAdapter(args.snapshot)
+    adapter = SnapshotBrokerAdapter(args.snapshot, broker_name=args.broker)
     shadow = adapter.handle(Request(Operation.POSITIONS, "parity"))["positions"]
     norm = lambda g, a: (normalize_group(g), account_forms(a)[0])  # noqa: E731
     a = [{"group": norm(p["group"], p["account"])[0], "account": norm(p["group"], p["account"])[1],
@@ -29,7 +30,7 @@ def main(argv=None) -> int:
         rows = conn.execute(
             "SELECT a.broker_number, a.account_number, h.ticker, h.quantity "
             "FROM holdings_current h JOIN Accounts a USING(account_id) "
-            "WHERE lower(a.broker)='fidelity'").fetchall()
+            "WHERE lower(a.broker)=?", (args.broker.lower(),)).fetchall()
     finally:
         conn.close()
     b = [{"group": normalize_group(g), "account": account_forms(n)[0],

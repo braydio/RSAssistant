@@ -19,7 +19,7 @@ Controlled statuses and lifecycle rules are defined in [README.md](README.md).
 | 7 | TP-20261016-007 | Secure guided reauthentication and bounded recovery | In Progress | P1 | 006 HUMAN gate | main | [packet](active/TP-20261016-007-guided-broker-reauth-and-recovery.md) |
 | 8 | TP-20261016-008 | Direct typed broker worker bridge and shadow orchestration | Complete | P0 | 004–007 REFRESH | main | [packet](completed/TP-20261016-008-typed-broker-worker-ipc.md) |
 | 9 | TP-20261016-009 | Extract and shadow-validate the Fidelity broker adapter | In Progress | P0 | 008 HUMAN gate | main | [packet](active/TP-20261016-009-fidelity-adapter-shadow-canary.md) |
-| 10 | TP-20261016-010 | Migrate Fennel, Public and Robinhood through the typed worker | Draft | P1 | 009 REFRESH | main | [packet](active/TP-20261016-010-active-broker-adapters.md) |
+| 10 | TP-20261016-010 | Migrate Fennel, Public and Robinhood through the typed worker | In Progress | P1 | 009 REFRESH | main | [packet](active/TP-20261016-010-active-broker-adapters.md) |
 | 11 | TP-20261016-011 | Preserve and selectively migrate remaining broker connections | Draft | P1 | 010 HUMAN gate | main | [packet](active/TP-20261016-011-secondary-broker-adapters.md) |
 | 12 | TP-20261016-012 | Unify split discovery and fractional-share evidence | Draft | P1 | 005,008,010 REFRESH | main | [packet](active/TP-20261016-012-split-discovery-policy-provenance.md) |
 | 13 | TP-20261016-013 | Account-level split credits, cash-in-lieu and sale reconciliation | Draft | P0 | 004,005,008,012 REFRESH | main | [packet](active/TP-20261016-013-corporate-action-settlement-reconciliation.md) |

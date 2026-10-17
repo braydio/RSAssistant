@@ -22,7 +22,7 @@ from utils.config_utils import (
     load_account_mappings,
 )
 from rsassistant.persistence.orders import insert_order_event as insert_order_history
-from rsassistant.persistence import order_intents
+from rsassistant.persistence import broker_incidents, order_intents
 from utils.utility_utils import debug_order_data
 from utils.price_fetcher import get_last_stock_price
 
@@ -308,6 +308,34 @@ def _record_receipt_evidence(content, order_type, match, broker_name, message_id
         logger.exception("Could not record order receipt evidence.")
 
 
+_UNMATCHED_FAILURE = re.compile(
+    r"^(?P<broker>[A-Za-z]+)\s(?P<group>\d+)\s(?:account\s)?(?P<acct>\S+?):\s"
+    r"(?P<msg>.*(?:error|failed|status code).*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _record_unmatched_failure(content, message_id):
+    """Keep broker-reported errors that no order pattern matched (e.g. HTTP 429).
+
+    Stored as rejected-receipt evidence and fed to the incident registry so a
+    rate limit shows up as a rate-limit incident instead of a bare log line.
+    Never raises and never touches order history.
+    """
+    try:
+        m = _UNMATCHED_FAILURE.match(str(content or "").strip())
+        if not m:
+            return
+        broker, group = m.group("broker"), m.group("group")
+        order_intents.record_receipt(
+            outcome="rejected", evidence=content, discord_message_id=message_id,
+            broker=broker, broker_group=group,
+        )
+        broker_incidents.report_failure(f"{broker.lower()}:{group}", m.group("msg"))
+    except Exception:
+        logger.exception("Could not record unmatched broker failure.")
+
+
 def parse_order_message(content, message_id=None):
     """Parse an order message and route it to the appropriate handler.
 
@@ -337,6 +365,7 @@ def parse_order_message(content, message_id=None):
                     handle_notification(match, broker_name, broker_number)
                 return  # Exit once a match is found
 
+    _record_unmatched_failure(content, message_id)
     logger.error(f"No match found for message: {content}")
 
 

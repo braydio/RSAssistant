@@ -1,7 +1,7 @@
 # TP-20261016-010: Migrate Fennel, Public and Robinhood through the typed worker
 
 **Packet ID:** TP-20261016-010  
-**Status:** Draft  
+**Status:** In Progress
 **Created:** 2026-10-16  
 **Last updated:** 2026-10-16  
 **Repository:** braydio/RSAssistant  
@@ -73,3 +73,8 @@ No mass cutover, no broker order frequency change, no assumptions about quote av
 
 ## Completion report and successor
 On verified completion: move only this packet to `docs/task-packets/completed/`; update `INDEX.md` and `TRACKER.md` atomically; write `docs/task-packets/summaries/TP-20261016-010-SUMMARY.md` in required Outcome / Validation / Process Feedback / Next Handoff format. Next packet: TP-20261016-011. State whether refreshed planning/owner review is required, and **do not** claim broker/live parity based on mocks alone.
+
+## Progress log (2026-10-16)
+Done (read-only): generic `SnapshotBrokerAdapter` (`rsassistant/integrations/brokers/snapshot.py`; Fidelity adapter now a thin subclass) and `scripts/broker_shadow_parity.py --broker X`. Live parity vs `holdings_current` at 2026-10-16: fidelity 114/114, fennel 110/110, public 114/114, robinhood 185/185, vanguard 5/5, wellsfargo 17/17 positions — zero only-in-either, zero quantity mismatches.
+Findings that refresh this packet: (1) **Public "empty holdings" contradiction resolved** — earlier "empty" came from CLI (non-docker) runs; live data has 2 Public accounts / 114 positions. (2) **Fennel 429** is a broker rejection arriving as chat text (`Fennel 1 Account N: Error placing order: ... status code 429`) that matched no order pattern and was only logged as "No match found"; `fennel_api.py` has no rate-limit/Retry-After handling at all. Now parsed into a `rejected` receipt + `rate_limited` incident (`parsing_utils._record_unmatched_failure`). (3) Robinhood HTTP 400 quote failures: not reproducible from current logs (container logs were reset on rebuild); needs a fresh capture.
+**Remaining:** real adapters for Fennel/Public/Robinhood through the worker, Retry-After honouring in the Fennel path, per-broker cutover — all need live sessions and owner approval. Status stays In Progress.
