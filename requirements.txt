@@ -6,7 +6,7 @@ exchange-calendars>=4.13.2,<5
 keyboard==0.13.5
 matplotlib==3.11.2
 numpy==2.5.4
-pandas==2.2.3
+pandas==3.0.6
 python-dotenv==1.2.4
 PyYAML==6.0.3
 Requests==2.34.2
