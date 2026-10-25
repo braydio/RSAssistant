@@ -1,0 +1,97 @@
+# Patch-only Dependabot auto-merge. This uses pull_request_target to access a
+# write-capable GITHUB_TOKEN, but never checks out or executes PR-controlled code.
+name: Dependabot patch auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot-patch:
+    if: >-
+      github.repository == 'braydio/RSAssistant' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main' &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify main has enforced CI protection
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import fnmatch
+          import json
+          import os
+          import subprocess
+
+          repo = os.environ['GITHUB_REPOSITORY']
+
+          def get(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+          branch = get(f'repos/{repo}/branches/main')
+          if not branch.get('protected'):
+              print('::notice::Auto-merge inactive: main is not protected.')
+              raise SystemExit(0)
+
+          def matches_main(pattern):
+              return pattern == '~DEFAULT_BRANCH' or fnmatch.fnmatchcase('refs/heads/main', pattern)
+
+          configured = False
+          for item in get(f'repos/{repo}/rulesets'):
+              if item.get('enforcement') != 'active' or item.get('target') != 'branch':
+                  continue
+              ruleset = get(f'repos/{repo}/rulesets/{item["id"]}')
+              refs = ruleset.get('conditions', {}).get('ref_name', {})
+              if not any(matches_main(p) for p in refs.get('include', [])):
+                  continue
+              if any(matches_main(p) for p in refs.get('exclude', [])):
+                  continue
+              rules = ruleset.get('rules', [])
+              kinds = {rule['type'] for rule in rules}
+              required_ci = any(
+                  rule['type'] == 'required_status_checks'
+                  and rule.get('parameters', {}).get('strict_required_status_checks_policy') is True
+                  and any(
+                      c.get('context') == 'test'
+                      for c in rule.get('parameters', {}).get('required_status_checks', [])
+                  )
+                  for rule in rules
+              )
+              if required_ci and {'pull_request', 'non_fast_forward', 'deletion'} <= kinds:
+                  configured = True
+                  break
+
+          if not configured:
+              print('::notice::Auto-merge inactive: create an active main ruleset '
+                    'with required test check (strict), pull requests, '
+                    'force-push and deletion protections.')
+              raise SystemExit(0)
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('enabled=true\n')
+          PY
+
+      - name: Read Dependabot update classification
+        id: metadata
+        if: steps.guard.outputs.enabled == 'true'
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Auto-merge patch-only updates after required checks
+        if: >-
+          steps.guard.outputs.enabled == 'true' &&
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: gh pr merge --auto --squash --match-head-commit "$EXPECTED_HEAD" "$PR_URL"
