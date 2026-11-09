@@ -11,7 +11,7 @@
 **Priority:** P1  
 **Depends on:** TP-20261016-006  
 **Authoring chat:** not-recorded  
-**Expected packet count / order:** 16 consecutive packets, TP-20261016-007 is #7; roadmap: `docs/architecture-overhaul-roadmap.md`.
+**Expected packet count / order:** 18 canonical packets; IDs 017/018 inserted at dependency gates into the original train, TP-20261016-007 is #7; roadmap: `docs/architecture-overhaul-roadmap.md`.
 
 ## Objective
 Secure guided reauthentication and bounded recovery. Preserve current production behavior unless the scoped acceptance criteria and required gates have been satisfied. Any live trading cutover is outside this packet unless explicitly specified.
@@ -74,3 +74,12 @@ On verified completion move exactly this canonical file from `active/` to `compl
 ## Progress log (2026-10-16)
 Done (no live behaviour change): `rsassistant/services/broker_recovery.py` — bounded `plan_recovery` per typed failure (one browser restart, Retry-After backoff, cooldown, operator challenge, reauth, code-regression escalation, never-retry for ambiguous execution), `SingleFlight` per login profile, `ChallengeStore` (opaque single-use, expiring handles; no OTP stored), `clean_stale_chromium_lock` (refuses active PIDs and foreign-host locks), `may_submit_orders` circuit breaker; 8 tests in `unittests/broker_recovery_test.py`.
 **Remaining, HUMAN-gated:** the operator-authenticated local-only recovery endpoint/UI (CSRF, session expiry; extraction from `scripts/env_gui.py`), the Discord deep-link alert, executor enforcement of `may_submit_orders`, per-broker MFA flow confirmation, and sandboxed sanitized-fixture capture for code regressions. Status stays In Progress until the owner decides the UI/authentication design.
+
+## Architecture decision amendment (2026-10-16): recovery applies to both native and legacy worker
+
+- TP-017 defines an owned `NativeBrokerAdapter` SDK; TP-007 must provide one protected local recovery workflow for **both** native and temporarily pinned legacy broker sessions, keyed by canonical login-profile ID. Avoid duplicating MFA/session handling in each Discord cog.
+- Reuse the operator-reported local-only `rsassistant/web/recovery_ui.py` and `scripts/recovery_ui.py` (not on GitHub main at this point); reconcile before editing. Do not assume production integration is complete because the login page exists.
+- Enforce `may_submit_orders` / ambiguous-execution holds at every real submission boundary, including direct `!rsa`, queued legacy commands and the new native worker. An unknown execution must not be automatically retried via a different adapter, even after successful reauthentication.
+- No OTP in Discord, logs or stored HTML; login must be verified by safe read-only broker operations, not a live test order.
+- Add a direct dependency review with TP-017 before executing TP-009/010 or TP-018. Do not make a newer UI a prerequisite to preparing a read-only SDK fixture.
+

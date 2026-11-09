@@ -9,9 +9,9 @@
 **Canonical path:** `docs/task-packets/active/TP-20261016-009-fidelity-adapter-shadow-canary.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P0  
-**Depends on:** TP-20261016-008  
+**Depends on:** TP-20261016-008, TP-20261016-017 (remaining live native work)  
 **Authoring chat:** not-recorded  
-**Expected packet count / order:** 16 consecutive packets, TP-20261016-009 is #9; roadmap: `docs/architecture-overhaul-roadmap.md`.
+**Expected packet count / order:** 18 canonical packets; IDs 017/018 inserted at dependency gates into the original train, TP-20261016-009 is #9; roadmap: `docs/architecture-overhaul-roadmap.md`.
 
 ## Objective
 Extract and shadow-validate the Fidelity broker adapter. This is a scoped executable brief **only after refreshing from Draft to Ready** and verifying the dependencies; writing this packet does not authorize any live trading or deployment.
@@ -76,3 +76,17 @@ On verified completion: move only this packet to `docs/task-packets/completed/`;
 ## Progress log (2026-10-16)
 Done (read-only, no live broker contact): typed errors (`integrations/brokers/fidelity/errors.py`, aligned with `broker_health` classes); `FidelitySnapshotAdapter` (capabilities list_accounts/positions/health; submit/get_order/activities explicitly unsupported — no success is ever inferred from a click); `compare_positions` with account redaction; `scripts/broker_shadow_parity.py`; `PROVENANCE.md` (fork pinned at `110439c`, **GPL-3.0** — no code copied, extraction is an owner licensing decision). Live shadow result: adapter vs `holdings_current` for Fidelity, 114/114 positions, 0 only-in-either, 0 quantity mismatches (21 accounts), 2026-10-16.
 **Remaining, HUMAN-gated:** live Zendriver-backed adapter extraction (licensing + reviewed source), protected order-history/activity observations for reconciling ambiguous trades, any trade canary (explicit approval, exposure limit, paper validation). Status stays In Progress.
+
+## Architecture decision amendment (2026-10-16): native Fidelity implementation
+
+**This section supersedes “extract auto-rsa Fidelity module” as the implementation goal.** The goal is an independently maintained **native RSAssistant Fidelity adapter**, not a direct import or copy of `auto-rsa/src/brokerages/fidelity_api.py` into the MIT tree.
+
+- **New dependency:** TP-017 (native SDK, routing registry, provenance), executed before the remaining live work in this packet. TP-008 typed IPC and the snapshot adapter remain valid and completed; do not reopen them.
+- Existing `rsassistant/integrations/brokers/fidelity/adapter.py::FidelitySnapshotAdapter`, `rsassistant/integrations/brokers/snapshot.py`, `scripts/broker_shadow_parity.py`, and `rsassistant/integrations/brokers/fidelity/PROVENANCE.md` are **read-only baseline tools**, not live brokerage client implementations. Reported 114/114 position parity is JSON-to-SQL parity only.
+- First examine the availability/scope/terms of an official Fidelity brokerage API or permitted SDK. If required capabilities are unavailable, design original native browser integration with typed failure stages and adequate ongoing regression fixtures. Prefer using authorized access and independently authored code; do not copy NelsonDane source (or private session material) without documented license review.
+- Work in canonical package paths `rsassistant/integrations/brokers/fidelity/`, NOT the speculative `src/rsassistant/...` location in the original brief. Keep the original pinned GPL worker as a fallback behind IPC until live adapter parity is proven.
+- Required native capabilities: account discovery, read-only complete positions, protected session health/recovery, order status, brokerage activity / fills. If order history is not technically available, report `unsupported` and keep **submissions disabled**.
+- Verify Docker mode/Xvfb/sandbox behavior with actual deployment flags; compare native broker-fetched data, not the same legacy JSON copied twice. Hold `fidelity:1` and any other profile with ambiguous executions at *actual* dispatcher/worker boundaries.
+- **Human refresh gate:** Resolve or explicitly quarantine historical Fidelity ambiguous trades via broker-originated records and obtain owner approval for each live authentication session. No order canary or autotrade authorized.
+- Extend tests for real adapter vs snapshot, auth-required, driver/no-sandbox, inaccessible history, profile hold, source/provenance and rollback.
+

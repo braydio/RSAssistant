@@ -9,9 +9,9 @@
 **Canonical path:** `docs/task-packets/active/TP-20261016-011-secondary-broker-adapters.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P1  
-**Depends on:** TP-20261016-010  
+**Depends on:** TP-20261016-010, TP-20261016-017  
 **Authoring chat:** not-recorded  
-**Expected packet count / order:** 16 consecutive packets, TP-20261016-011 is #11; roadmap: `docs/architecture-overhaul-roadmap.md`.
+**Expected packet count / order:** 18 canonical packets; IDs 017/018 inserted at dependency gates into the original train, TP-20261016-011 is #11; roadmap: `docs/architecture-overhaul-roadmap.md`.
 
 ## Objective
 Preserve and selectively migrate remaining broker connections. This is a scoped executable brief **only after refreshing from Draft to Ready** and verifying the dependencies; writing this packet does not authorize any live trading or deployment.
@@ -74,3 +74,13 @@ No requirement to make all 16 brokers functional; no automatic MFA bypass or cre
 
 ## Completion report and successor
 On verified completion: move only this packet to `docs/task-packets/completed/`; update `INDEX.md` and `TRACKER.md` atomically; write `docs/task-packets/summaries/TP-20261016-011-SUMMARY.md` in required Outcome / Validation / Process Feedback / Next Handoff format. Next packet: TP-20261016-012. State whether refreshed planning/owner review is required, and **do not** claim broker/live parity based on mocks alone.
+
+## Architecture decision amendment (2026-10-16): prioritize native broker support, not all-16 port
+
+- **New dependency:** TP-017's owned SDK and TP-009/010 acceptance evidence. Implement `rsassistant/integrations/brokers/{wellsfargo,schwab,chase,sofi,webull,vanguard}/` selectively in the existing package (not speculative `src/rsassistant/...`).
+- Preserve and review the locally modified `AutoRSA-GUI.local` Chase/Fennel/Wells Fargo files before deleting copies. Their functionality may inform independent requirements and tests; **do not copy GPL implementation** without legal/licensing review.
+- Prefer documented official broker API/access or reviewed maintained SDK, then independently developed browser client where needed. Do not claim undocumented endpoints are stable or bypass MFA.
+- Prioritize Wells Fargo with guided device approval, then Schwab/Chase/SoFi/Webull according to confirmed active usage; Vanguard stays interactive. Keep unsupported low-usage legacy broker behind a pinned separately isolated worker or explicitly disable it, do not spend effort recreating all 16.
+- Create a per-broker capability/maintenance matrix: read accounts/positions/orders/activities, order submission only if authorized, auth/recovery method, last successful independent broker session, source/SDK version/license, current operational value, fallback choice. Deliver matrix to TP-018.
+- Read-only shadow parity and profile hold must be proven before changing actual routing for any one broker.
+

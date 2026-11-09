@@ -1,7 +1,15 @@
 # RSAssistant + auto-rsa unification: implementation roadmap (2026-10-16)
 
 **Canonical plan:** `docs/task-packets/INDEX.md` / `TRACKER.md` govern execution. This is a sequencing overview, not an executable packet.
-**Target:** one application, one operator surface, canonical SQLite state, a separately isolatable brokerage worker, typed broker events instead of Discord text/JSON side channels. Preserve the existing GPLv3 auto-rsa notices and assess compatibility before redistributing unified code.
+**Target:** one application, canonical SQLite, a typed local worker boundary, **RSAssistant-native broker integration SDK and owned adapters**, and a staged retirement of auto-rsa's broker execution dependency. Preserve GPLv3/vendor attributions and assess compatibility before redistribution.
+
+## Current decision (2026-10-16): native broker integrations
+
+**End state:** RSAssistant-owned `BrokerAdapter` SDK, native per-broker implementations using supported official interfaces, reviewed SDKs or independently authored browser clients as necessary. NelsonDane auto-rsa remains a **pinned legacy bridge only** until each required broker is independently migrated and TP-018 verifies that all order, position, activity, recovery and rollback capabilities can operate without it. Details: [native brokerage strategy](native-brokerage-strategy.md).
+
+**Deployment facts:** GitHub `main@7db0012` at authoring; user reports five later **local-only** commits through `39c0e5b` not pushed or deployed. Current live schema remains v10 and old image per user. These packet amendments are staged on a planning branch, NOT automatically merged into main and do not authorize a production window. Locally completed Restic/policy/hold fixes must be reconciled before implementation of new packets.
+
+**Prior completed work preserved:** TP-008 typed IPC, TP-003 holdings, TP-004 order intents, TP-005 identities and TP-006 connection health are foundations, not work to repeat. Native snapshot adapters do not count as live broker APIs. The goal does not require rewriting all 16 listed brokers; prioritize used accounts and explicitly disable or retain narrow legacy fallback for others.
 
 ## Evidence and baseline
 
@@ -23,37 +31,41 @@
 7. **No trading side effects from tests, healthchecks, data migration, status commands or backfill.** Paper/offline fixtures first; live canary requires human approval.
 8. **Preserve third-party licenses** (auto-rsa GPLv3; RSAssistant MIT; separate vendor licenses) and original attributions.
 
-## Consecutive task-packet train
+## Updated execution train (18 immutable packet IDs)
 
-| Order | Packet | Outcome | Status at authoring | Mandatory handoff / refresh gate |
-|---|---|---|---|---|
-| 1 | TP-20261016-001 | WAL-consistent backup and read-only preflight | Complete (code + isolated tests; no live execution) | Run on production before any migration |
-| 2 | TP-20261016-002 | Reconcile local deployed history, freeze inputs and pin deployment | Blocked | **HUMAN LOCAL GATE**: import unpushed commits, account for nested fork/GUI edits; recut downstream against resulting main |
-| 3 | TP-20261016-003 | Restore one trustworthy holdings ingest | Draft | **REFRESH** importer seams/production snapshots after 002; prove fresh Fidelity import |
-| 4 | TP-20261016-004 | Order acknowledgement/fill reconciliation | Draft | **REFRESH** against local `83a6b00` fix and broker activity; no replay of historical sends |
-| 5 | TP-20261016-005 | Canonical account identity and alias mapping | Draft | **REFRESH** after 003/004 account evidence stabilized |
-| 6 | TP-20261016-006 | Connection incident registry + broker health contract | Draft | 005 identities required; scoped read-only checks |
-| 7 | TP-20261016-007 | Guided authentication and self-recovery | Draft | **REFRESH** MFA requirements/secure UI controls; no codes in Discord |
-| 8 | TP-20261016-008 | Typed worker IPC and order dispatcher contract | Draft | **REFRESH** 004/006 correctness; dual path shadow mode only |
-| 9 | TP-20261016-009 | Fidelity adapter canary | Draft | **HUMAN GATE** broker-order history, user approval for any live canary |
-| 10 | TP-20261016-010 | Fennel, Public, Robinhood migration | Draft | **REFRESH** 009 interface; account/429/empty holdings evidence |
-| 11 | TP-20261016-011 | Wells Fargo, Schwab, Chase, SoFi, Webull and other brokers | Draft | **REFRESH** actual broker priorities, preserved GUI edits and driver tests |
-| 12 | TP-20261016-012 | Consolidated split-policy provenance and discovery | Draft | 004/005/008 event identity & account capabilities; no nearest-whole-as-up |
-| 13 | TP-20261016-013 | Corporate action credit and sell reconciliation | Draft | **REFRESH** real broker activity/cash-in-lieu evidence |
-| 14 | TP-20261016-014 | Unified `/rs` commands and dashboard service | Draft | 008/012/013 APIs stabilized; aliases cannot trade on deprecated paths |
-| 15 | TP-20261016-015 | Realized P&L, historical backfill, exception digests | Draft | **REFRESH** source completeness; unknown ≠ zero |
-| 16 | TP-20261016-016 | Legacy deletion, cutover, deployment and rollback | Draft | **HUMAN CUTOVER GATE** all brokers reconciled and recovery/rollback rehearsed |
+The numeric ID records creation order; **TP-017 executes before TP-009** and **TP-018 executes after TP-011**, because both were authored after the original 16 packets. Treat the following as dependency order, not permission to execute `Draft` or `In Progress` packets without their human/refresh gates. Status reflects GitHub `main@7db0012` at this planning refresh, not the user's unpushed host work.
 
-**Execution rule:** Packet N is not authorized merely because packet N-1 completed. Every successor checks its named acceptance criteria; a REFRESH or HUMAN gate must be recorded in tracker and packet before changing production behavior. Never execute Draft or Blocked packets without refreshing to Ready. `TP-20261003-012` remains a separate historical Draft; reconcile overlap with the final cleanup packet.
+| Order | Packet | Workstream | Status | Gate / dependency |
+| --- | --- | --- | --- | --- |
+| 01 | TP-20261016-001 | Safe SQLite backup tooling | Complete | Operational Restic + restore still pending |
+| 02 | TP-20261016-002 | Encrypted backup, pinned legacy source, guarded deploy | In Progress | Restic, local 39c0e5b reconcile, safe liquidate and execution hold |
+| 03 | TP-20261016-003 | Holdings import and parity | Complete | Live parity verified in operator's report |
+| 04 | TP-20261016-004 | Order intents, receipts and fills | Complete | Historical unknowns remain for broker reconciliation |
+| 05 | TP-20261016-005 | Canonical account identities | Complete | Alias mapping preserved |
+| 06 | TP-20261016-006 | Broker health / incident registry | Complete | No live broker changes |
+| 07 | TP-20261016-007 | Guided secure reauthentication | In Progress | Live integration, profile-level enforcement / user review |
+| 08 | TP-20261016-008 | Typed broker worker IPC and shadow mode | Complete | Reuse contract unchanged |
+| **08A** | **TP-20261016-017** | **Native Adapter SDK, capability registry, source routing** | **Draft** | **REFRESH after 002/007 local code and 008 interface; no live orders** |
+| 09 | TP-20261016-009 | Native Fidelity adapter, read-only parity & activity | In Progress | 017; broker sessions and historical execution hold review |
+| 10 | TP-20261016-010 | Native Fennel, Public and Robinhood adapters | In Progress | 017/009; Fennel 429, Public historic sells, session parity |
+| 11 | TP-20261016-011 | Native other brokers by proven use | Draft | 010 + native SDK; preserve GUI patches |
+| **11A** | **TP-20261016-018** | **Broker-by-broker native cutover, rollback, upstream egress** | **Draft** | **002/007/009/010/011/017; HUMAN live-canary and broker-evidence gates** |
+| 12 | TP-20261016-012 | Strict split-policy evidence / discovery | In Progress | New policy applied local-only per operator; no auto-trading expansion |
+| 13 | TP-20261016-013 | Corporate action credit/sale reconciliation | Draft | Broker-originated activity / fills from 004/009/010/012 |
+| 14 | TP-20261016-014 | Unified `/rs` operator commands | In Progress | Canonical service contracts; no old direct trade side effects |
+| 15 | TP-20261016-015 | Evidence-backed net P&L and exceptions | In Progress | Missing fills stay unknown, not zero |
+| 16 | TP-20261016-016 | Final legacy retirement and dead-code cleanup | Draft | **018 plus existing packet gates and explicit owner cutover** |
+
+TP-012–015 can advance alongside native adapters wherever they depend only on proven canonical data services, but must not imply broker activity is available when adapters still report UNSUPPORTED. Keep original canonical statuses unless an implementation summary verifies completion.
 
 ## Release strategy
 
 - Phase 0 safety: packet 001 then local-state/histories gate 002.
 - Phase 1 correctness: packets 003–005. Keep existing live bot, preserve position/order history.
 - Phase 2 broker reliability: 006–007. Structured health/incident records, read-only recovery first.
-- Phase 3 integration: 008–011. Worker adapters, dual-read/shadow, one broker at a time.
+- Phase 3 integration: 008 Complete; 017 foundation (Draft) before 009/010/011 native broker clients, owned API + isolated legacy fallback. TP-018 validates phased cutover and removes each broker's upstream path only after proven parity.
 - Phase 4 product: 012–015. Complete action lifecycle, evidence-backed operator UX/reporting.
-- Phase 5 removal: 016. Disable old paths only after rollback test and per-broker parity.
+- Phase 5 removal: 016 only after 018, broker activity reconciliation, rollback rehearsal and explicit owner cutover. Remaining optional brokers may stay in a documented, separately pinned legacy compatibility worker; do not falsely claim zero dependency.
 - At every milestone: backup + verify, run focused and full CI, record DB schema/data parity and exceptions, pause automated **new** trading where outcome is ambiguous without suppressing reconciliation.
 
 ## Known stop conditions
@@ -67,3 +79,10 @@ Missing/unknown broker order ID for an apparently sent order; inability to recon
 - Repo rules: `AGENTS.md`
 - Implementation summaries: `docs/task-packets/summaries/TP-*-SUMMARY.md`
 - First preflight utility: `scripts/migration_checkpoint.py`
+
+## Native adapter decision acceptance
+
+- Maintain **one local API and capability registry** even when upstream broker remote interfaces differ. Prefer official APIs; independently develop native clients where permitted and technically necessary. No requirement to clone NelsonDane's implementation.
+- Each required broker must offer independently observed positions and order/activity evidence, not merely JSON-to-SQL shadow parity; unknown fill means order remains blocked and unverified.
+- Do not copy GPL auto-rsa source into MIT RSAssistant without licensing review; IPC alone does not guarantee license separation.
+- Respect user-described rollout gates: local Restic encrypted backup and restore, safe bare-liquidate preview, ambiguous-order dispatch hold, pinned source, existing old production unaffected, and explicit future deployment authorization.

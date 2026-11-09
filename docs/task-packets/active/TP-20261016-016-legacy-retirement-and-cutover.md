@@ -9,9 +9,9 @@
 **Canonical path:** `docs/task-packets/active/TP-20261016-016-legacy-retirement-and-cutover.md`  
 **Workstream size:** One independently testable implementation packet  
 **Priority:** P0  
-**Depends on:** TP-20261016-002 through -015 all completed with validated summaries  
+**Depends on:** TP-20261016-002 through -015 plus TP-20261016-017 and -018 with validated summaries  
 **Authoring chat:** not-recorded  
-**Expected packet count / order:** 16 consecutive packets, TP-20261016-016 is #16; roadmap: `docs/architecture-overhaul-roadmap.md`.
+**Expected packet count / order:** 18 canonical packets; IDs 017/018 inserted at dependency gates into the original train, TP-20261016-016 is #16; roadmap: `docs/architecture-overhaul-roadmap.md`.
 
 ## Objective
 Retire redundant bots and dead code after verified migration. This is a scoped executable brief **only after refreshing from Draft to Ready** and verifying the dependencies; writing this packet does not authorize any live trading or deployment.
@@ -87,3 +87,13 @@ On verified completion: move only this packet to `docs/task-packets/completed/`;
 
 ## Progress log (2026-10-16)
 Not started — HUMAN CUTOVER gate. Nothing may be retired while unknown executions exist (209 sends are `unknown`/`discord_send_only` after backfill, Fidelity "confirmation not detected" orders unreconciled), no live typed-broker adapter exists, and `auto-rsa` (GPL-3.0) is still bind-mounted from an untracked nested clone.
+
+## Architecture decision amendment (2026-10-16): zero auto-rsa runtime dependence is the target
+
+- **New hard dependency:** TP-017 native SDK plus **TP-018 native-to-legacy parity, phased route cutover and rollback** must be completed and reviewed before this final retirement packet. Required broker adapters under 009/010/011 must be ready for every **active required** account.
+- Retire `!rsa` Discord dispatch/regex confirmation and the auto-rsa JSON holdings handoff only for a broker that TP-018 has explicitly migrated. No blanket deletion of a still-required fallback worker merely to satisfy project naming.
+- Complete removal of the legacy process is gated on verified native source for account positions, order status, fills, corporate-action activity and secure recovery for all required live accounts. If any required broker lacks parity, record residual legacy dependency, keep pin/isolation, and do not mark full runtime independence.
+- Preserve historical data, license notices and the pristine pinned legacy implementation for rollback; rollback **never** resends unknown orders. Testing must prove unavailable broker/SDK does not silently select a live legacy fallback.
+- Update `README.md` and `docs/architecture.md` with end-state package and worker; ensure GitHub/license/provenance review of any imported third-party code or SDK.
+- Existing TP-012 through TP-015 depend on canonical domain services and may progress without waiting for entire upstream removal. Operational deployment still requires Restic restore, safe default liquidate, execution holds and explicit owner window approval.
+
